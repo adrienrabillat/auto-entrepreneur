@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "./form";
 import { Badge } from "@/components/ui/card";
+import { ReconnectGmailButton } from "./reconnect-gmail";
 
 export const dynamic = "force-dynamic";
 
@@ -23,16 +24,28 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <div className="surface p-4 flex items-center justify-between gap-4">
-        <div>
-          <div className="text-small text-ink-500">Gmail connecté</div>
-          <div className="text-body text-ink-800">{profile.gmail_connected_email ?? "Non connecté"}</div>
+      <div className="surface p-4 space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-small text-ink-500">Gmail connecté</div>
+            <div className="text-body text-ink-800">
+              {profile.gmail_connected_email ?? "Non connecté"}
+            </div>
+          </div>
+          {profile.gmail_refresh_token ? (
+            <Badge tone="success">Actif</Badge>
+          ) : (
+            <Badge tone="warn">Non connecté</Badge>
+          )}
         </div>
-        {profile.gmail_refresh_token ? (
-          <Badge tone="success">Actif</Badge>
-        ) : (
-          <Badge tone="warn">Non connecté</Badge>
-        )}
+        <div className="flex items-center justify-between gap-4 pt-2 border-t border-ink-200">
+          <p className="text-small text-ink-500">
+            Si l&apos;envoi d&apos;email échoue avec une erreur de permission,
+            reconnecte Gmail en cochant bien &laquo;&nbsp;Envoyer des e-mails en
+            votre nom&nbsp;&raquo; sur l&apos;écran Google.
+          </p>
+          <ReconnectGmailButton />
+        </div>
       </div>
 
       <SettingsForm

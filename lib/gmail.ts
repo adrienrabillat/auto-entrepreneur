@@ -41,6 +41,14 @@ export async function sendGmail(input: GmailSendInput): Promise<{ messageId: str
   });
   if (!res.ok) {
     const body = await res.text();
+    // 403 with ACCESS_TOKEN_SCOPE_INSUFFICIENT means the stored refresh token
+    // was issued without gmail.send — the user needs to reconnect Gmail with
+    // the right permission checked on the Google consent screen.
+    if (res.status === 403 && body.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) {
+      throw new Error(
+        "GMAIL_SCOPE_MISSING: ton compte Google n'a pas autorisé l'envoi de mails. Va dans Profil → Reconnecter Gmail et coche « Envoyer des e-mails en votre nom » sur l'écran Google."
+      );
+    }
     throw new Error(`Gmail send failed (${res.status}): ${body.slice(0, 500)}`);
   }
   const data = (await res.json()) as { id?: string };
