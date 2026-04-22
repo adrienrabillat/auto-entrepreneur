@@ -1,0 +1,28 @@
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { MobileHeader, Sidebar } from "@/components/ui/nav";
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name, email, onboarded")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const displayName = profile?.display_name || user.email?.split("@")[0] || "Moi";
+  const email = profile?.email || user.email || "";
+
+  return (
+    <div className="min-h-dvh flex flex-col md:flex-row bg-ink-50">
+      <Sidebar displayName={displayName} email={email} />
+      <MobileHeader displayName={displayName} />
+      <main className="flex-1 min-w-0">
+        <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">{children}</div>
+      </main>
+    </div>
+  );
+}

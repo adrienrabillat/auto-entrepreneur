@@ -1,0 +1,223 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/browser";
+
+type Values = {
+  display_name: string;
+  business_name: string;
+  legal_form: "EI" | "EURL" | "SASU" | "Autre";
+  metier: string;
+  siren: string;
+  siret: string;
+  ape_naf: string;
+  address_line1: string;
+  address_line2: string;
+  postal_code: string;
+  city: string;
+  iban: string;
+  bic: string;
+};
+
+export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
+  const router = useRouter();
+  const [v, setV] = useState<Values>(defaultValues);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function onSiretChange(raw: string) {
+    const digits = raw.replace(/\D/g, "").slice(0, 14);
+    const auto = digits.length >= 9 ? digits.slice(0, 9) : v.siren;
+    setV({ ...v, siret: digits, siren: /^\d{9}$/.test(auto) ? auto : v.siren });
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+
+    const cleanSiren = v.siren.replace(/\s/g, "");
+    const cleanSiret = v.siret.replace(/\s/g, "");
+    if (!/^\d{9}$/.test(cleanSiren)) return fail("SIREN : 9 chiffres attendus.");
+    if (!/^\d{14}$/.test(cleanSiret)) return fail("SIRET : 14 chiffres attendus.");
+    if (!cleanSiret.startsWith(cleanSiren)) return fail("Le SIRET doit commencer par le SIREN.");
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return fail("Session expirée");
+    const { error } = await supabase
+      .from("profiles")
+      .update({ ...v, siren: cleanSiren, siret: cleanSiret, onboarded: true })
+      .eq("id", user.id);
+    if (error) return fail(error.message);
+    router.replace("/dashboard");
+
+    function fail(msg: string) {
+      setError(msg);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit}>
+      <Card className="space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2">
+            <Label htmlFor="display_name">Nom & prénom</Label>
+            <Input
+              id="display_name"
+              required
+              value={v.display_name}
+              onChange={(e) => setV({ ...v, display_name: e.target.value })}
+              placeholder="Jeanne Dupont"
+            />
+          </div>
+          <div>
+            <Label htmlFor="legal_form">Forme juridique</Label>
+            <select
+              id="legal_form"
+              value={v.legal_form}
+              onChange={(e) => setV({ ...v, legal_form: e.target.value as Values["legal_form"] })}
+              className="h-10 w-full rounded-md bg-white px-3 text-body shadow-hair focus:outline-none focus:ring-2 focus:ring-ink-400/70"
+            >
+              <option value="EI">EI (Entrepreneur Individuel)</option>
+              <option value="EURL">EURL</option>
+              <option value="SASU">SASU</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="business_name" hint="optionnel">Nom commercial</Label>
+          <Input
+            id="business_name"
+            value={v.business_name}
+            onChange={(e) => setV({ ...v, business_name: e.target.value })}
+            placeholder="Dupont Sophrologie"
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="metier">Activité</Label>
+          <Input
+            id="metier"
+            required
+            value={v.metier}
+            onChange={(e) => setV({ ...v, metier: e.target.value })}
+            placeholder="Sophrologue, Manutention, …"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="siret" hint="14 chiffres">SIRET</Label>
+            <Input
+              id="siret"
+              required
+              inputMode="numeric"
+              value={v.siret}
+              onChange={(e) => onSiretChange(e.target.value)}
+              placeholder="12345678900010"
+            />
+          </div>
+          <div>
+            <Label htmlFor="siren" hint="9 premiers chiffres du SIRET">SIREN</Label>
+            <Input
+              id="siren"
+              required
+              inputMode="numeric"
+              value={v.siren}
+              onChange={(e) => setV({ ...v, siren: e.target.value.replace(/\D/g, "").slice(0, 9) })}
+              placeholder="123456789"
+            />
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="ape_naf" hint="optionnel">Code APE / NAF</Label>
+          <Input
+            id="ape_naf"
+            value={v.ape_naf}
+            onChange={(e) => setV({ ...v, ape_naf: e.target.value })}
+            placeholder="8690F"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2">
+            <Label htmlFor="address_line1">Adresse</Label>
+            <Input
+              id="address_line1"
+              required
+              value={v.address_line1}
+              onChange={(e) => setV({ ...v, address_line1: e.target.value })}
+              placeholder="12 rue des Lilas"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <Input
+              aria-label="Complément d'adresse"
+              value={v.address_line2}
+              onChange={(e) => setV({ ...v, address_line2: e.target.value })}
+              placeholder="Complément (optionnel)"
+            />
+          </div>
+          <div>
+            <Label htmlFor="postal_code">Code postal</Label>
+            <Input
+              id="postal_code"
+              required
+              value={v.postal_code}
+              onChange={(e) => setV({ ...v, postal_code: e.target.value })}
+              placeholder="75011"
+            />
+          </div>
+          <div>
+            <Label htmlFor="city">Ville</Label>
+            <Input
+              id="city"
+              required
+              value={v.city}
+              onChange={(e) => setV({ ...v, city: e.target.value })}
+              placeholder="Paris"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="iban" hint="optionnel">IBAN</Label>
+            <Input
+              id="iban"
+              value={v.iban}
+              onChange={(e) => setV({ ...v, iban: e.target.value })}
+              placeholder="FR76 1234 …"
+            />
+          </div>
+          <div>
+            <Label htmlFor="bic" hint="optionnel">BIC</Label>
+            <Input
+              id="bic"
+              value={v.bic}
+              onChange={(e) => setV({ ...v, bic: e.target.value })}
+              placeholder="BNPAFRPPXXX"
+            />
+          </div>
+        </div>
+
+        {error ? <p className="text-small text-danger-600">{error}</p> : null}
+
+        <div className="flex justify-end pt-2">
+          <Button type="submit" disabled={saving}>
+            {saving ? "Enregistrement…" : "Continuer"}
+          </Button>
+        </div>
+      </Card>
+    </form>
+  );
+}

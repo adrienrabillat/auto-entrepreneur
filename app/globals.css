@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  html,
+  body {
+    @apply bg-ink-50 text-ink-700 antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  }
+  body {
+    @apply font-sans text-body;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { @apply text-h1; }
+  h2 { @apply text-h2; }
+  h3 { @apply text-h3; }
+  ::selection {
+    background: rgba(55, 53, 47, 0.15);
+  }
+}
+
+@layer components {
+  /* Notion-style "card" surface */
+  .surface {
+    @apply bg-white rounded-xl shadow-hair;
+  }
+  /* Hairline divider like Notion's lists */
+  .divider {
+    @apply border-t border-ink-200;
+  }
+  /* Subtle hover surface used on list rows */
+  .row-hover {
+    @apply hover:bg-ink-100/60 transition-colors;
+  }
+}
