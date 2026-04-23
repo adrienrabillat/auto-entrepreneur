@@ -11,3 +11,4 @@ dist
 tsconfig.tsbuildinfo
 .git-zombie
 probe.ts
+test-pdf.*

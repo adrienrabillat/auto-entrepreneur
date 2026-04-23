@@ -2,18 +2,23 @@ import { PDFDocument, PDFName, PDFString, PDFHexString, StandardFonts, rgb } fro
 import { buildFacturxMinimumXml } from "@/lib/facturx";
 
 /**
- * Générateur PDF facture — version sobre, pro, noir + bleu foncé.
+ * Générateur PDF facture — refonte minimaliste.
+ *
+ * Inspiration : le modèle "INVOICE #1024" proposé par l'utilisateur
+ * (typographie claire, aucune barre colorée, beaucoup de blanc) + la
+ * facture Picapot pour les mentions légales françaises.
  *
  * Objectifs :
- *  - Design lisible et professionnel : pas de violet/rose, beaucoup de blanc,
- *    une barre sombre en tête et un bandeau total navy pour l'accent visuel.
- *  - Conforme aux obligations légales françaises pour un auto-entrepreneur / EI
- *    (Loi du 14 février 2022 "EI", mentions franchise en base TVA art. 293 B,
- *    pénalités L441-10, SIREN + SIRET, nature de l'opération, etc.).
- *  - Prêt pour la facturation électronique (obligation progressive Sept 2026 → 2027)
- *    via un Factur-X MINIMUM CII XML embarqué (AFRelationship = Alternative)
- *    — une Plateforme Agréée (PDP) peut ainsi extraire les données structurées
- *    directement depuis le PDF/A-3.
+ *  - Lisibilité maximale, typographie sobre, zéro fioriture.
+ *  - Conforme aux mentions obligatoires auto-entrepreneur (URSSAF) :
+ *    nom + EI, nom commercial, adresse, téléphone, email, site,
+ *    SIRET, RCS/RM, raison sociale + adresse client, numéro de facture
+ *    chronologique, qté + PU + total HT, date d'émission, date de
+ *    règlement, date d'exécution, « TVA non applicable, art. 293 B du
+ *    CGI », taux pénalités de retard, indemnité forfaitaire 40 €,
+ *    conditions d'escompte (« Néant » par défaut), assurance pro.
+ *  - Prêt pour la facturation électronique (Sept 2026) via un
+ *    Factur-X MINIMUM CII XML embarqué (AFRelationship = Alternative).
  */
 
 export type OperationType = "service" | "vente" | "mixte";
@@ -21,52 +26,61 @@ export type OperationType = "service" | "vente" | "mixte";
 export type InvoicePdfData = {
   number: string;
   issuedOn: string;              // ISO date (YYYY-MM-DD)
-  dueOn?: string;                // optional ISO date
+  dueOn?: string;                // optional ISO date — date de règlement
+  executionDate?: string;        // ISO date — date de réalisation / livraison
   description: string;
-  amountCents: number;
+  quantity: number;
+  unitPriceCents: number;
+  amountCents: number;           // total HT = qty × PU
   currency: string;              // "EUR"
   operationType: OperationType;
   deliveryAddress?: string;
+  paymentTerms?: string;         // "Paiement à réception", "30 jours..."
+  discountTerms?: string;        // default: "Néant"
   seller: {
-    displayName: string;         // "Jeanne Dupont"
-    businessName?: string;       // nom commercial (optional)
+    displayName: string;
+    businessName?: string;
     legalForm: string;           // "EI"
     metier: string;
-    siren: string;               // 9 digits
-    siret: string;               // 14 digits
+    siren: string;
+    siret: string;
     apeNaf?: string;
     addressLine1: string;
     addressLine2?: string;
     postalCode: string;
     city: string;
-    country: string;             // "France"
+    country: string;
+    phone?: string;
+    website?: string;
     email: string;
-    iban?: string;
-    bic?: string;
+    iban: string;                // obligatoire
+    bic: string;                 // obligatoire
+    rcsNumber?: string;
+    rcsCity?: string;
+    rmNumber?: string;
+    rmDepartment?: string;
+    insuranceName?: string;
+    insuranceCoverage?: string;
   };
   client: {
     name?: string;
     email: string;
-    siren?: string;              // B2B only
-    address?: string;            // free-text, optional
+    siren?: string;
+    address?: string;
   };
 };
 
 // ---------------------------------------------------------------------------
-// Palette PDF — cohérente avec le thème app (noir + bleu foncé).
+// Palette — noir + navy très discrets, beaucoup de gris neutres.
 // ---------------------------------------------------------------------------
-const C_INK         = rgb(0.059, 0.090, 0.165); // #0F172A — slate-900 (titres, totaux)
-const C_INK_DEEP    = rgb(0.016, 0.027, 0.059); // #040710 — noir (bandeau)
-const C_NAVY        = rgb(0.118, 0.227, 0.541); // #1E3A8A — bleu foncé (accent)
-const C_NAVY_DEEP   = rgb(0.090, 0.145, 0.329); // #172554 — navy profond
-const C_INK_800     = rgb(0.118, 0.161, 0.231); // #1E293B
-const C_INK_600     = rgb(0.278, 0.333, 0.412); // #475569
-const C_MUTED       = rgb(0.392, 0.455, 0.545); // #64748B
-const C_SOFT        = rgb(0.580, 0.639, 0.722); // #94A3B8
-const C_LINE        = rgb(0.882, 0.910, 0.941); // #E2E8F0
-const C_SURFACE     = rgb(0.972, 0.980, 0.988); // #F8FAFC
-const C_TINT        = rgb(0.945, 0.961, 0.984); // #F1F5FB — brand-50 navy-tint
-const C_WHITE       = rgb(1, 1, 1);
+const C_INK      = rgb(0.059, 0.090, 0.165); // #0F172A
+const C_INK_900  = rgb(0.016, 0.027, 0.059); // #040710
+const C_NAVY     = rgb(0.118, 0.227, 0.541); // #1E3A8A (accent fin)
+const C_INK_700  = rgb(0.196, 0.255, 0.329); // #334155
+const C_INK_500  = rgb(0.392, 0.455, 0.545); // #64748B
+const C_INK_400  = rgb(0.580, 0.639, 0.722); // #94A3B8
+const C_LINE     = rgb(0.882, 0.910, 0.941); // #E2E8F0
+const C_LINE_SOFT= rgb(0.941, 0.953, 0.969); // #F1F5F9
 
 export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -78,16 +92,19 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   pdf.setCreationDate(new Date());
 
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
+  const bold    = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const italic  = await pdf.embedFont(StandardFonts.HelveticaOblique);
 
-  const page = pdf.addPage([595.28, 841.89]); // A4 en points
+  const page = pdf.addPage([595.28, 841.89]); // A4
   const { width, height } = page.getSize();
-  const marginX = 48;
+  const marginX = 56;
   const rightX = width - marginX;
   const innerW = rightX - marginX;
 
-  const text = (
+  // ----------------------------------------------------------------
+  // Primitive de dessin texte
+  // ----------------------------------------------------------------
+  const draw = (
     t: string,
     x: number,
     y: number,
@@ -96,389 +113,258 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
       font?: typeof regular;
       color?: typeof C_INK;
       align?: "left" | "right" | "center";
+      tracking?: number; // letter-spacing simulé en insérant des espaces fines (uniquement pour labels all-caps)
     } = {}
   ) => {
     const size = opts.size ?? 10;
     const font = opts.font ?? regular;
     const color = opts.color ?? C_INK;
-    const tw = font.widthOfTextAtSize(t, size);
+    const txt = opts.tracking && opts.tracking > 0 ? spreadLetters(t ?? "") : (t ?? "");
+    const tw = font.widthOfTextAtSize(txt, size);
     let xx = x;
     if (opts.align === "right") xx = x - tw;
     else if (opts.align === "center") xx = x - tw / 2;
-    page.drawText(t, { x: xx, y, size, font, color });
+    page.drawText(txt, { x: xx, y, size, font, color });
     return tw;
   };
 
-  // -----------------------------------------------------------------------
-  // EN-TÊTE — barre sombre fine qui porte juste "FACTURE" + numéro.
-  // Sobre, lisible, tout de suite pro.
-  // -----------------------------------------------------------------------
-  const heroH = 64;
-  const heroY = height - heroH;
-  page.drawRectangle({ x: 0, y: heroY, width, height: heroH, color: C_INK_DEEP });
-  // accent bleu foncé sur le côté droit — un simple rectangle fin
-  page.drawRectangle({
-    x: rightX - 90,
-    y: heroY,
-    width: 90,
-    height: heroH,
-    color: C_NAVY,
-    opacity: 0.55,
-  });
+  const line = (x1: number, y1: number, x2: number, y2: number, color = C_LINE, thickness = 0.6) =>
+    page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, color, thickness });
 
-  text("FACTURE", marginX, height - 30, {
-    size: 14,
-    font: bold,
-    color: C_WHITE,
-  });
-  text(`N° ${data.number}`, marginX, height - 48, {
-    size: 10,
-    color: C_SOFT,
-  });
-  text(formatCurrency(data.amountCents, data.currency), rightX - 14, height - 38, {
-    size: 18,
-    font: bold,
-    color: C_WHITE,
+  // Cursor vertical (on descend depuis le haut)
+  let y = height - 64;
+
+  // ----------------------------------------------------------------
+  // TITRE — "FACTURE" à gauche, numéro à droite
+  // ----------------------------------------------------------------
+  draw("FACTURE", marginX, y, { size: 28, font: bold, color: C_INK_900 });
+  draw(`#${data.number}`, rightX, y + 6, {
+    size: 13,
+    font: regular,
+    color: C_INK_500,
     align: "right",
   });
 
-  // -----------------------------------------------------------------------
-  // Blocs parties — ÉMETTEUR (à gauche) + FACTURÉ À (à droite)
-  // Fond blanc + fines bordures, mention "EI Prénom Nom" bien en évidence.
-  // -----------------------------------------------------------------------
-  let y = heroY - 28;
-  const gap = 16;
-  const colW = (innerW - gap) / 2;
-  const cardH = Math.max(cardHeightSeller(data), cardHeightClient(data));
+  y -= 36;
 
-  // Émetteur
-  page.drawRectangle({
-    x: marginX,
-    y: y - cardH,
-    width: colW,
-    height: cardH,
-    color: C_WHITE,
-    borderColor: C_LINE,
-    borderWidth: 0.8,
-  });
-  drawLeftBorder(page, marginX, y - cardH, cardH, C_INK_DEEP);
-  text("ÉMETTEUR", marginX + 14, y - 18, { size: 8, font: bold, color: C_MUTED });
-
-  // Ligne légale : "EI Prénom Nom" (ou "EI Prénom Nom — Nom Commercial")
-  const emitterLegalLine = sellerLegalLabel(data);
-  text(emitterLegalLine, marginX + 14, y - 36, {
-    size: 12,
-    font: bold,
-    color: C_INK,
-  });
-  let sy = y - 52;
-  if (data.seller.businessName && data.seller.businessName !== data.seller.displayName) {
-    text(`Nom commercial : ${data.seller.businessName}`, marginX + 14, sy, {
-      size: 9,
-      color: C_INK_600,
-    });
-    sy -= 12;
-  }
-  if (data.seller.metier) {
-    text(data.seller.metier, marginX + 14, sy, {
-      size: 9,
-      font: italic,
-      color: C_INK_600,
-    });
-    sy -= 12;
-  }
-  sy -= 2;
-  const sellerInfoLines = [
-    data.seller.addressLine1,
-    data.seller.addressLine2 || null,
-    `${data.seller.postalCode} ${data.seller.city}`,
-    data.seller.country && data.seller.country !== "France" ? data.seller.country : null,
-    data.seller.email,
-  ].filter(Boolean) as string[];
-  sellerInfoLines.forEach((line) => {
-    text(line, marginX + 14, sy, { size: 9.5, color: C_INK_600 });
-    sy -= 12;
-  });
-  sy -= 4;
-  text(`SIREN ${formatSiren(data.seller.siren)}`, marginX + 14, sy, {
-    size: 9,
-    color: C_MUTED,
-  });
-  sy -= 11;
-  text(`SIRET ${formatSiret(data.seller.siret)}`, marginX + 14, sy, {
-    size: 9,
-    color: C_MUTED,
-  });
-  if (data.seller.apeNaf) {
-    sy -= 11;
-    text(`APE ${data.seller.apeNaf}`, marginX + 14, sy, { size: 9, color: C_MUTED });
-  }
-
-  // Client
-  const clientX = marginX + colW + gap;
-  page.drawRectangle({
-    x: clientX,
-    y: y - cardH,
-    width: colW,
-    height: cardH,
-    color: C_WHITE,
-    borderColor: C_LINE,
-    borderWidth: 0.8,
-  });
-  drawLeftBorder(page, clientX, y - cardH, cardH, C_NAVY);
-  text("FACTURÉ À", clientX + 14, y - 18, { size: 8, font: bold, color: C_MUTED });
-  const clientHeader = data.client.name || data.client.email;
-  text(clientHeader, clientX + 14, y - 36, { size: 12, font: bold, color: C_INK });
-  let cy = y - 52;
-  if (data.client.address) {
-    data.client.address.split(/\r?\n/).forEach((line) => {
-      text(line, clientX + 14, cy, { size: 9.5, color: C_INK_600 });
-      cy -= 12;
-    });
-  }
-  if (data.client.name) {
-    text(data.client.email, clientX + 14, cy, { size: 9.5, color: C_MUTED });
-    cy -= 12;
-  }
-  if (data.client.siren) {
-    cy -= 2;
-    text(`SIREN ${formatSiren(data.client.siren)}`, clientX + 14, cy, {
-      size: 9,
-      color: C_MUTED,
-    });
-  }
-
-  y -= cardH + 22;
-
-  // -----------------------------------------------------------------------
-  // Méta — dates + nature de l'opération sous forme d'une ligne d'étiquettes
-  // -----------------------------------------------------------------------
-  const metaBoxH = 42;
-  page.drawRectangle({
-    x: marginX,
-    y: y - metaBoxH,
-    width: innerW,
-    height: metaBoxH,
-    color: C_TINT,
-    borderColor: C_TINT,
-    borderWidth: 0,
-  });
-
-  const metaColW = innerW / 3;
-  drawMeta(page, marginX + 14,            y - 14, "Émise le", formatFr(data.issuedOn), regular, bold);
-  if (data.dueOn) {
-    drawMeta(page, marginX + metaColW + 14, y - 14, "Échéance", formatFr(data.dueOn), regular, bold);
-  }
-  const opLabel =
-    data.operationType === "vente"
-      ? "Vente de biens"
-      : data.operationType === "mixte"
-      ? "Vente + prestation"
-      : "Prestation de services";
-  drawMeta(page, marginX + 2 * metaColW + 14, y - 14, "Nature", opLabel, regular, bold);
-
-  if (data.deliveryAddress && data.operationType !== "service") {
-    text(`Livraison : ${data.deliveryAddress}`, rightX - 14, y - 34, {
-      size: 8.5,
-      color: C_MUTED,
-      align: "right",
-    });
-  }
-
-  y -= metaBoxH + 22;
-
-  // -----------------------------------------------------------------------
-  // Table — description / montant
-  // -----------------------------------------------------------------------
-  const tableHeaderH = 30;
-  page.drawRectangle({
-    x: marginX,
-    y: y - tableHeaderH,
-    width: innerW,
-    height: tableHeaderH,
-    color: C_INK,
-  });
-  text("DESCRIPTION", marginX + 16, y - 20, {
-    size: 9,
-    font: bold,
-    color: C_WHITE,
-  });
-  text("MONTANT", rightX - 16, y - 20, {
-    size: 9,
-    font: bold,
-    color: C_WHITE,
-    align: "right",
-  });
-  y -= tableHeaderH;
-
-  const wrapped = wrap(data.description, 62);
-  const rowH = Math.max(42, wrapped.length * 14 + 22);
-  page.drawRectangle({
-    x: marginX,
-    y: y - rowH,
-    width: innerW,
-    height: rowH,
-    color: C_WHITE,
-    borderColor: C_LINE,
-    borderWidth: 0.8,
-  });
-  wrapped.forEach((line, i) => {
-    text(line, marginX + 16, y - 20 - i * 14, {
-      size: 11,
-      color: C_INK_800,
-      font: regular,
-    });
-  });
-  text(formatCurrency(data.amountCents, data.currency), rightX - 16, y - 22, {
-    size: 12,
-    font: bold,
-    color: C_INK,
-    align: "right",
-  });
-  y -= rowH + 16;
-
-  // -----------------------------------------------------------------------
-  // Bandeau TOTAL — plein largeur, navy profond
-  // -----------------------------------------------------------------------
-  const totalH = 64;
-  page.drawRectangle({
-    x: marginX,
-    y: y - totalH,
-    width: innerW,
-    height: totalH,
-    color: C_INK_DEEP,
-  });
-  // Surcharge navy à droite pour un accent subtil
-  page.drawRectangle({
-    x: rightX - 120,
-    y: y - totalH,
-    width: 120,
-    height: totalH,
-    color: C_NAVY,
-    opacity: 0.35,
-  });
-  text("TOTAL NET À PAYER", marginX + 18, y - 24, {
-    size: 10,
-    font: bold,
-    color: C_WHITE,
-  });
-  text("TVA non applicable — art. 293 B du CGI", marginX + 18, y - 42, {
-    size: 8.5,
-    font: italic,
-    color: C_SOFT,
-  });
-  text(formatCurrency(data.amountCents, data.currency), rightX - 18, y - 38, {
-    size: 22,
-    font: bold,
-    color: C_WHITE,
-    align: "right",
-  });
-  y -= totalH + 20;
-
-  // -----------------------------------------------------------------------
-  // RIB / Règlement — toujours affiché, même sans IBAN renseigné, pour
-  // que la facture soit explicite côté client.
-  // -----------------------------------------------------------------------
-  const hasIban = Boolean(data.seller.iban);
-  const bankH = hasIban ? 86 : 58;
-  page.drawRectangle({
-    x: marginX,
-    y: y - bankH,
-    width: innerW,
-    height: bankH,
-    color: C_SURFACE,
-    borderColor: C_LINE,
-    borderWidth: 0.8,
-  });
-  drawLeftBorder(page, marginX, y - bankH, bankH, C_NAVY_DEEP);
-  text("RÈGLEMENT PAR VIREMENT BANCAIRE", marginX + 16, y - 18, {
-    size: 9,
-    font: bold,
-    color: C_NAVY_DEEP,
-  });
-
-  if (hasIban) {
-    text(`Bénéficiaire`, marginX + 16, y - 36, { size: 8, color: C_MUTED });
-    text(data.seller.displayName, marginX + 16, y - 48, {
-      size: 10.5,
-      font: bold,
-      color: C_INK,
-    });
-    text(`IBAN`, marginX + 16, y - 64, { size: 8, color: C_MUTED });
-    text(formatIban(data.seller.iban!), marginX + 16, y - 76, {
-      size: 10.5,
-      font: bold,
-      color: C_INK,
-    });
-    if (data.seller.bic) {
-      text(`BIC`, marginX + 260, y - 64, { size: 8, color: C_MUTED });
-      text(data.seller.bic, marginX + 260, y - 76, {
-        size: 10.5,
-        font: bold,
-        color: C_INK,
-      });
-    }
-    text(`Référence à rappeler : ${data.number}`, rightX - 16, y - 48, {
-      size: 9,
-      color: C_INK_600,
-      align: "right",
-    });
-  } else {
-    text(
-      "IBAN non renseigné — va dans Profil → Coordonnées bancaires pour l'ajouter.",
-      marginX + 16,
-      y - 38,
-      { size: 9.5, color: C_MUTED, font: italic }
-    );
-    text(`Référence à rappeler : ${data.number}`, marginX + 16, y - 52, {
-      size: 9,
-      color: C_INK_600,
-    });
-  }
-  y -= bankH + 18;
-
-  // -----------------------------------------------------------------------
-  // Mentions légales — petit texte sobre en bas de page
-  // -----------------------------------------------------------------------
-  const legal = [
-    "TVA non applicable, art. 293 B du CGI.",
-    "Dispensé d'immatriculation au registre du commerce et des sociétés (RCS) et au répertoire des métiers (RM).",
-    "Paiement à réception sauf mention contraire. En cas de retard : indemnité forfaitaire de 40 € (art. L441-10 du",
-    "Code de commerce) et pénalités au taux de la BCE majoré de 10 points. Pas d'escompte pour paiement anticipé.",
-    `Mention « ${data.seller.legalForm} » apposée conformément à l'article L526-22 du Code de commerce.`,
+  // ----------------------------------------------------------------
+  // Ligne méta : Date d'émission / Date de règlement / Date d'exécution
+  // ----------------------------------------------------------------
+  const metaCols = [
+    { label: "DATE D'ÉMISSION", value: formatFr(data.issuedOn) },
+    data.dueOn
+      ? { label: "DATE DE RÈGLEMENT", value: formatFr(data.dueOn) }
+      : { label: "RÈGLEMENT", value: data.paymentTerms || "À réception" },
+    data.executionDate
+      ? { label: "DATE D'EXÉCUTION", value: formatFr(data.executionDate) }
+      : { label: "NATURE", value: operationLabel(data.operationType) },
   ];
 
-  const footerTop = 72 + legal.length * 10 + 8;
-  page.drawLine({
-    start: { x: marginX, y: footerTop },
-    end: { x: rightX, y: footerTop },
-    color: C_LINE,
-    thickness: 0.6,
+  const metaColW = innerW / metaCols.length;
+  metaCols.forEach((m, i) => {
+    const x = marginX + i * metaColW;
+    draw(m.label, x, y, { size: 7.5, font: bold, color: C_INK_400 });
+    draw(m.value, x, y - 15, { size: 11, font: regular, color: C_INK });
   });
-  legal.forEach((line, i) =>
-    text(line, marginX, 72 + (legal.length - 1 - i) * 10, {
-      size: 8,
-      color: C_MUTED,
-    })
-  );
 
-  // Bas de page — ligne contact
-  text(
-    `${sellerLegalLabel(data)} · ${data.seller.email} · SIREN ${formatSiren(data.seller.siren)}`,
+  y -= 34;
+  line(marginX, y, rightX, y);
+  y -= 28;
+
+  // ----------------------------------------------------------------
+  // Blocs parties : ÉMETTEUR (gauche) + FACTURÉ À (droite)
+  // Pas de cadre, pas de fond — juste deux colonnes de texte.
+  // ----------------------------------------------------------------
+  const blockTop = y;
+  const colGap = 24;
+  const colW = (innerW - colGap) / 2;
+
+  // Émetteur
+  draw("ÉMETTEUR", marginX, blockTop, { size: 7.5, font: bold, color: C_INK_400 });
+  let sy = blockTop - 18;
+  draw(sellerLegalLabel(data), marginX, sy, { size: 13, font: bold, color: C_INK_900 });
+  sy -= 16;
+  if (data.seller.businessName && data.seller.businessName !== data.seller.displayName) {
+    draw(data.seller.businessName, marginX, sy, { size: 10, font: italic, color: C_INK_700 });
+    sy -= 13;
+  }
+  if (data.seller.metier) {
+    draw(data.seller.metier, marginX, sy, { size: 10, color: C_INK_500 });
+    sy -= 13;
+  }
+  sy -= 4;
+  for (const line of sellerAddressLines(data)) {
+    draw(line, marginX, sy, { size: 10, color: C_INK_700 });
+    sy -= 13;
+  }
+  sy -= 2;
+  draw(`SIRET ${formatSiret(data.seller.siret)}`, marginX, sy, { size: 9.5, color: C_INK_500 });
+  sy -= 12;
+  if (data.seller.apeNaf) {
+    draw(`APE ${data.seller.apeNaf}`, marginX, sy, { size: 9.5, color: C_INK_500 });
+    sy -= 12;
+  }
+  const sellerBottom = sy;
+
+  // Facturé à
+  const clientX = marginX + colW + colGap;
+  draw("FACTURÉ À", clientX, blockTop, { size: 7.5, font: bold, color: C_INK_400 });
+  let cy = blockTop - 18;
+  const clientHeader = data.client.name || data.client.email;
+  draw(clientHeader, clientX, cy, { size: 13, font: bold, color: C_INK_900 });
+  cy -= 16;
+  if (data.client.address) {
+    for (const ln of data.client.address.split(/\r?\n/)) {
+      draw(ln, clientX, cy, { size: 10, color: C_INK_700 });
+      cy -= 13;
+    }
+    cy -= 2;
+  }
+  if (data.client.name) {
+    draw(data.client.email, clientX, cy, { size: 10, color: C_INK_500 });
+    cy -= 13;
+  }
+  if (data.client.siren) {
+    draw(`SIREN ${formatSiren(data.client.siren)}`, clientX, cy, { size: 9.5, color: C_INK_500 });
+    cy -= 12;
+  }
+  const clientBottom = cy;
+
+  y = Math.min(sellerBottom, clientBottom) - 18;
+
+  // ----------------------------------------------------------------
+  // Tableau : Description | Qté | Prix unitaire HT | Total HT
+  // Très épuré : pas de header coloré, juste un filet en haut et en bas.
+  // ----------------------------------------------------------------
+  const qtyX    = rightX - 230;
+  const unitX   = rightX - 130;
+  const totalX  = rightX;
+
+  // Entête
+  line(marginX, y + 18, rightX, y + 18);
+  draw("DESCRIPTION", marginX, y, { size: 8, font: bold, color: C_INK_400 });
+  draw("QTÉ", qtyX, y, { size: 8, font: bold, color: C_INK_400, align: "right" });
+  draw("PU HT", unitX, y, { size: 8, font: bold, color: C_INK_400, align: "right" });
+  draw("TOTAL HT", totalX, y, { size: 8, font: bold, color: C_INK_400, align: "right" });
+  y -= 10;
+  line(marginX, y, rightX, y);
+  y -= 22;
+
+  // Ligne produit
+  const wrapped = wrap(data.description, 60);
+  wrapped.forEach((l, i) =>
+    draw(l, marginX, y - i * 14, { size: 11, color: C_INK_900, font: regular })
+  );
+  draw(formatQuantity(data.quantity), qtyX, y, {
+    size: 11, font: regular, color: C_INK_900, align: "right",
+  });
+  draw(formatCurrency(data.unitPriceCents, data.currency), unitX, y, {
+    size: 11, font: regular, color: C_INK_900, align: "right",
+  });
+  draw(formatCurrency(data.amountCents, data.currency), totalX, y, {
+    size: 11, font: bold, color: C_INK_900, align: "right",
+  });
+  y -= Math.max(26, wrapped.length * 14 + 10);
+
+  line(marginX, y, rightX, y);
+  y -= 26;
+
+  // ----------------------------------------------------------------
+  // Totaux (alignés à droite, toujours sur la même colonne)
+  // ----------------------------------------------------------------
+  const totalsLeft = rightX - 260;
+  draw("Sous-total HT", totalsLeft, y, { size: 10, color: C_INK_500 });
+  draw(formatCurrency(data.amountCents, data.currency), totalX, y, {
+    size: 10, color: C_INK_900, align: "right",
+  });
+  y -= 16;
+
+  draw("TVA (non applicable, art. 293 B du CGI)", totalsLeft, y, {
+    size: 10, color: C_INK_500,
+  });
+  draw(formatCurrency(0, data.currency), totalX, y, {
+    size: 10, color: C_INK_500, align: "right",
+  });
+  y -= 22;
+
+  line(totalsLeft, y + 6, rightX, y + 6, C_LINE, 0.6);
+
+  draw("TOTAL", totalsLeft, y - 8, { size: 12, font: bold, color: C_INK_900 });
+  draw(formatCurrency(data.amountCents, data.currency), totalX, y - 8, {
+    size: 16, font: bold, color: C_INK_900, align: "right",
+  });
+
+  y -= 40;
+
+  // ----------------------------------------------------------------
+  // Bloc "PAY TO" / RIB — toujours en bas de la partie haute
+  // ----------------------------------------------------------------
+  y -= 6;
+  draw("RÈGLEMENT PAR VIREMENT BANCAIRE", marginX, y, {
+    size: 7.5, font: bold, color: C_INK_400,
+  });
+  y -= 16;
+
+  const payCol1X = marginX;
+  const payCol2X = marginX + 280;
+
+  draw("Bénéficiaire", payCol1X, y, { size: 9, color: C_INK_500 });
+  draw(data.seller.displayName, payCol1X, y - 13, {
+    size: 11, font: bold, color: C_INK_900,
+  });
+
+  draw("BIC", payCol2X, y, { size: 9, color: C_INK_500 });
+  draw(data.seller.bic.toUpperCase(), payCol2X, y - 13, {
+    size: 11, font: bold, color: C_INK_900,
+  });
+
+  y -= 32;
+
+  draw("IBAN", payCol1X, y, { size: 9, color: C_INK_500 });
+  draw(formatIban(data.seller.iban), payCol1X, y - 13, {
+    size: 11, font: bold, color: C_INK_900,
+  });
+
+  draw("Référence à rappeler", payCol2X, y, { size: 9, color: C_INK_500 });
+  draw(data.number, payCol2X, y - 13, {
+    size: 11, font: bold, color: C_INK_900,
+  });
+
+  y -= 36;
+
+  // Accent navy discret : un petit trait sous le bloc règlement
+  page.drawRectangle({ x: marginX, y: y + 2, width: 32, height: 2, color: C_NAVY });
+  y -= 18;
+
+  // ----------------------------------------------------------------
+  // Mentions légales URSSAF — pied de page, petit corps
+  // ----------------------------------------------------------------
+  const legal = buildLegalFooter(data);
+  const footerLineH = 10;
+  const footerBottom = 56;
+  const footerTop = footerBottom + legal.length * footerLineH + 10;
+
+  // Filet au-dessus du pied de page légal
+  line(marginX, footerTop, rightX, footerTop);
+
+  legal.forEach((ln, i) => {
+    draw(ln, marginX, footerBottom + (legal.length - 1 - i) * footerLineH, {
+      size: 7.5, color: C_INK_500, font: regular,
+    });
+  });
+
+  // Tout en bas : contact + pagination
+  draw(
+    `${sellerLegalLabel(data)} — ${data.seller.email}${data.seller.phone ? " — " + data.seller.phone : ""}`,
     width / 2,
-    40,
-    { size: 8, color: C_SOFT, align: "center" }
+    38,
+    { size: 7.5, color: C_INK_400, align: "center" }
   );
-  text(`1 / 1`, rightX, 40, { size: 8, color: C_SOFT, align: "right" });
+  draw("1 / 1", rightX, 38, { size: 7.5, color: C_INK_400, align: "right" });
 
-  // Petit marqueur navy discret en bas à gauche
-  page.drawCircle({ x: marginX + 4, y: 42, size: 3, color: C_NAVY });
-
-  // -----------------------------------------------------------------------
-  // Factur-X MINIMUM — XML CII attaché, AFRelationship = Alternative.
-  // Ce qui rend le PDF "lisible" par les Plateformes Agréées (PDP) du
-  // dispositif de facturation électronique 2026-2027.
-  // -----------------------------------------------------------------------
+  // ----------------------------------------------------------------
+  // Factur-X MINIMUM — XML CII attaché (facturation électronique 2026)
+  // ----------------------------------------------------------------
   const xml = buildFacturxMinimumXml({
     number: data.number,
     issuedOnIso: data.issuedOn,
@@ -497,86 +383,94 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
       siren: data.client.siren,
     },
   });
-
   await embedFacturxXml(pdf, xml);
 
   return await pdf.save();
 }
 
 // ---------------------------------------------------------------------------
+// Pied de page légal — toutes les mentions obligatoires URSSAF en petit.
+// ---------------------------------------------------------------------------
+function buildLegalFooter(data: InvoicePdfData): string[] {
+  const lines: string[] = [];
+
+  // TVA
+  lines.push("TVA non applicable, art. 293 B du CGI.");
+
+  // Retards de paiement + indemnité forfaitaire
+  lines.push(
+    "En cas de retard de paiement : pénalités au taux de la BCE majoré de 10 points et indemnité forfaitaire de 40 € " +
+      "pour frais de recouvrement (art. L441-10 du Code de commerce)."
+  );
+
+  // Escompte
+  const escompte = (data.discountTerms || "Néant").trim();
+  lines.push(`Escompte pour paiement anticipé : ${escompte}.`);
+
+  // RCS / RM selon ce qui est renseigné — sinon mention "dispensé"
+  const regs: string[] = [];
+  if (data.seller.rcsNumber) {
+    regs.push(`RCS ${data.seller.rcsCity ? data.seller.rcsCity + " " : ""}${formatSiren(data.seller.rcsNumber)}`);
+  }
+  if (data.seller.rmNumber) {
+    regs.push(`RM ${formatSiren(data.seller.rmNumber)}${data.seller.rmDepartment ? " / " + data.seller.rmDepartment : ""}`);
+  }
+  if (regs.length) {
+    lines.push("Immatriculation : " + regs.join(" — ") + ".");
+  } else {
+    lines.push(
+      "Dispensé d'immatriculation au registre du commerce et des sociétés (RCS) et au répertoire des métiers (RM)."
+    );
+  }
+
+  // Assurance pro
+  if (data.seller.insuranceName) {
+    const cov = data.seller.insuranceCoverage ? ` — couverture : ${data.seller.insuranceCoverage}` : "";
+    lines.push(`Assurance responsabilité civile professionnelle : ${data.seller.insuranceName}${cov}.`);
+  }
+
+  // Mention EI (Loi 14 fév. 2022, L526-22)
+  lines.push(
+    `Mention « ${data.seller.legalForm} » apposée conformément à l'article L526-22 du Code de commerce.`
+  );
+
+  // Contact / site
+  const contactBits: string[] = [];
+  if (data.seller.website) contactBits.push(data.seller.website);
+  if (data.seller.phone) contactBits.push(data.seller.phone);
+  if (contactBits.length) lines.push(contactBits.join(" — "));
+
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Libellé légal "EI Prénom Nom" (ou EURL / SASU etc. selon legalForm).
-// Respecte la Loi du 14 février 2022 qui impose d'adjoindre la mention
-// "EI" ou "Entrepreneur Individuel" au nom de l'entrepreneur sur tous les
-// documents professionnels.
 function sellerLegalLabel(data: InvoicePdfData): string {
   const form = (data.seller.legalForm || "EI").trim();
   return `${form} ${data.seller.displayName}`.trim();
 }
 
-// Approximation de la hauteur nécessaire pour la carte "émetteur".
-function cardHeightSeller(data: InvoicePdfData): number {
-  let lines = 1;                              // titre "EI Prénom Nom"
-  if (data.seller.businessName) lines += 1;   // nom commercial éventuel
-  if (data.seller.metier) lines += 1;         // métier
-  lines += 1;                                 // adresse ligne 1
-  if (data.seller.addressLine2) lines += 1;
-  lines += 1;                                 // CP + ville
-  if (data.seller.country && data.seller.country !== "France") lines += 1;
-  lines += 1;                                 // email
-  lines += 2;                                 // SIREN + SIRET
-  if (data.seller.apeNaf) lines += 1;
-  return 20 + 28 + lines * 12 + 14;
+function sellerAddressLines(data: InvoicePdfData): string[] {
+  const arr: string[] = [];
+  arr.push(data.seller.addressLine1);
+  if (data.seller.addressLine2) arr.push(data.seller.addressLine2);
+  arr.push(`${data.seller.postalCode} ${data.seller.city}`);
+  if (data.seller.country && data.seller.country !== "France") arr.push(data.seller.country);
+  arr.push(data.seller.email);
+  if (data.seller.phone) arr.push(data.seller.phone);
+  return arr.filter(Boolean);
 }
 
-function cardHeightClient(data: InvoicePdfData): number {
-  let lines = 1;                              // nom / email principal
-  if (data.client.address) lines += data.client.address.split(/\r?\n/).length;
-  if (data.client.name) lines += 1;           // email secondaire
-  if (data.client.siren) lines += 1;
-  return 20 + 28 + lines * 12 + 14;
+function operationLabel(o: OperationType): string {
+  return o === "vente"
+    ? "Vente de biens"
+    : o === "mixte"
+    ? "Vente + prestation"
+    : "Prestation de services";
 }
 
-function drawLeftBorder(
-  page: import("pdf-lib").PDFPage,
-  x: number,
-  y: number,
-  h: number,
-  color: ReturnType<typeof rgb>
-) {
-  page.drawRectangle({ x, y, width: 3, height: h, color });
-}
-
-function drawMeta(
-  page: import("pdf-lib").PDFPage,
-  x: number,
-  y: number,
-  label: string,
-  value: string,
-  regular: import("pdf-lib").PDFFont,
-  bold: import("pdf-lib").PDFFont
-) {
-  page.drawText(label.toUpperCase(), {
-    x,
-    y: y - 4,
-    size: 7.5,
-    font: bold,
-    color: C_MUTED,
-  });
-  page.drawText(value, {
-    x,
-    y: y - 18,
-    size: 11,
-    font: regular,
-    color: C_INK,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Factur-X attachment — AFRelationship "Alternative" (primary structured data).
-// ---------------------------------------------------------------------------
 async function embedFacturxXml(pdf: PDFDocument, xml: string) {
   const xmlBytes = new TextEncoder().encode(xml);
   await pdf.attach(xmlBytes, "factur-x.xml", {
@@ -633,6 +527,10 @@ function formatCurrency(cents: number, currency: string) {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency }).format(cents / 100);
 }
 
+function formatQuantity(q: number): string {
+  return Number.isInteger(q) ? String(q) : q.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+}
+
 function formatSiren(s: string) {
   const d = (s || "").replace(/\D/g, "");
   return d.length === 9 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)}` : s;
@@ -643,8 +541,16 @@ function formatSiret(s: string) {
   return d.length === 14 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)} ${d.slice(9, 14)}` : s;
 }
 
-// IBAN groupé en blocs de 4 caractères, sans espaces indésirables.
 function formatIban(raw: string): string {
-  const compact = raw.replace(/\s+/g, "").toUpperCase();
+  const compact = (raw || "").replace(/\s+/g, "").toUpperCase();
   return compact.replace(/(.{4})/g, "$1 ").trim();
+}
+
+// Espacement typographique simulé : n'applique qu'aux chaines all-caps
+// (labels « DESCRIPTION », « FACTURE »…). On ajoute un caractère espace
+// standard entre chaque lettre — les polices StandardFonts de pdf-lib
+// n'acceptent que le jeu WinAnsi, donc pas de thin space Unicode ici.
+function spreadLetters(s: string): string {
+  if (!s) return s;
+  return s.split("").join(" ");
 }

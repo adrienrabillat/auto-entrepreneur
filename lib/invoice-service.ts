@@ -19,8 +19,16 @@ type Profile = {
   postal_code: string | null;
   city: string | null;
   country: string;
+  phone: string | null;
+  website: string | null;
   iban: string | null;
   bic: string | null;
+  rcs_number: string | null;
+  rcs_city: string | null;
+  rm_number: string | null;
+  rm_department: string | null;
+  insurance_name: string | null;
+  insurance_coverage: string | null;
   gmail_refresh_token: string | null;
   gmail_connected_email: string | null;
 };
@@ -30,11 +38,17 @@ type InvoiceRow = {
   number: string;
   issued_on: string;
   due_on: string | null;
+  execution_date: string | null;
   description: string;
+  quantity: number | string;
+  unit_price_cents: number | null;
   amount_cents: number;
   currency: string;
   operation_type: OperationType;
   delivery_address: string | null;
+  payment_terms: string | null;
+  discount_terms: string | null;
+  client_id: string | null;
   client_email: string;
   client_name: string | null;
   client_siren: string | null;
@@ -53,29 +67,44 @@ export async function createInvoiceRow(
   input: {
     description: string;
     amount_cents: number;
+    quantity?: number;
+    unit_price_cents?: number | null;
     client_email: string;
     client_name?: string | null;
     client_siren?: string | null;
     client_address?: string | null;
+    client_id?: string | null;
     operation_type?: OperationType;
     delivery_address?: string | null;
+    execution_date?: string | null;
+    payment_terms?: string | null;
+    discount_terms?: string | null;
     due_on?: string | null;
   }
 ) {
   const number = await nextInvoiceNumber(supabase, userId);
+  const quantity = input.quantity && input.quantity > 0 ? input.quantity : 1;
+  const unit_price_cents =
+    input.unit_price_cents ?? Math.round(input.amount_cents / quantity);
   const { data, error } = await supabase
     .from("invoices")
     .insert({
       user_id: userId,
       number,
       description: input.description,
+      quantity,
+      unit_price_cents,
       amount_cents: input.amount_cents,
+      client_id: input.client_id ?? null,
       client_email: input.client_email,
       client_name: input.client_name ?? null,
       client_siren: input.client_siren ?? null,
       client_address: input.client_address ?? null,
       operation_type: input.operation_type ?? "service",
+      execution_date: input.execution_date ?? null,
       delivery_address: input.delivery_address ?? null,
+      payment_terms: input.payment_terms ?? null,
+      discount_terms: input.discount_terms ?? "Néant",
       due_on: input.due_on ?? null,
       status: "draft",
     })
@@ -87,15 +116,22 @@ export async function createInvoiceRow(
 
 export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): InvoicePdfData {
   assertProfileReady(profile);
+  const qty = Number(invoice.quantity) || 1;
+  const unit = invoice.unit_price_cents ?? Math.round(invoice.amount_cents / qty);
   return {
     number: invoice.number,
     issuedOn: invoice.issued_on,
     dueOn: invoice.due_on ?? undefined,
+    executionDate: invoice.execution_date ?? undefined,
     description: invoice.description,
+    quantity: qty,
+    unitPriceCents: unit,
     amountCents: invoice.amount_cents,
     currency: invoice.currency || "EUR",
     operationType: invoice.operation_type,
     deliveryAddress: invoice.delivery_address ?? undefined,
+    paymentTerms: invoice.payment_terms ?? undefined,
+    discountTerms: invoice.discount_terms ?? "Néant",
     seller: {
       displayName: profile.display_name!,
       businessName: profile.business_name ?? undefined,
@@ -109,9 +145,17 @@ export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): Invoi
       postalCode: profile.postal_code!,
       city: profile.city!,
       country: profile.country || "France",
+      phone: profile.phone ?? undefined,
+      website: profile.website ?? undefined,
       email: profile.gmail_connected_email ?? profile.email,
-      iban: profile.iban ?? undefined,
-      bic: profile.bic ?? undefined,
+      iban: profile.iban!,
+      bic: profile.bic!,
+      rcsNumber: profile.rcs_number ?? undefined,
+      rcsCity: profile.rcs_city ?? undefined,
+      rmNumber: profile.rm_number ?? undefined,
+      rmDepartment: profile.rm_department ?? undefined,
+      insuranceName: profile.insurance_name ?? undefined,
+      insuranceCoverage: profile.insurance_coverage ?? undefined,
     },
     client: {
       name: invoice.client_name ?? undefined,
@@ -200,6 +244,8 @@ function assertProfileReady(p: Profile) {
   if (!p.address_line1) missing.push("adresse");
   if (!p.postal_code) missing.push("code postal");
   if (!p.city) missing.push("ville");
+  if (!p.iban || p.iban.replace(/\s/g, "").length < 15) missing.push("IBAN");
+  if (!p.bic || p.bic.replace(/\s/g, "").length < 8) missing.push("BIC");
   if (missing.length) {
     throw new Error(`Profil incomplet (${missing.join(", ")}). Va dans Profil pour compléter.`);
   }

@@ -71,8 +71,16 @@ export default async function SettingsPage() {
           address_line2: profile.address_line2 ?? "",
           postal_code: profile.postal_code ?? "",
           city: profile.city ?? "",
+          phone: profile.phone ?? "",
+          website: profile.website ?? "",
           iban: profile.iban ?? "",
           bic: profile.bic ?? "",
+          rcs_number: profile.rcs_number ?? "",
+          rcs_city: profile.rcs_city ?? "",
+          rm_number: profile.rm_number ?? "",
+          rm_department: profile.rm_department ?? "",
+          insurance_name: profile.insurance_name ?? "",
+          insurance_coverage: profile.insurance_coverage ?? "",
           urssaf_declaration_day: profile.urssaf_declaration_day ?? 3,
         }}
       />

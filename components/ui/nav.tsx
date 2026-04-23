@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { FileText, LayoutDashboard, Receipt, Settings, LogOut, Sparkles } from "lucide-react";
+import { FileText, LayoutDashboard, Receipt, Settings, LogOut, Users } from "lucide-react";
 
 const items = [
   { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
   { href: "/invoices", label: "Factures", icon: FileText },
+  { href: "/clients", label: "Clients", icon: Users },
   { href: "/declarations", label: "URSSAF", icon: Receipt },
   { href: "/settings", label: "Profil", icon: Settings },
 ];
@@ -21,13 +22,6 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
   const initial = (displayName?.[0] ?? "?").toUpperCase();
   return (
     <aside className="hidden md:flex md:w-64 shrink-0 flex-col border-r border-ink-200 bg-white/80 backdrop-blur px-4 py-5">
-      <div className="flex items-center gap-2 px-1 pb-5">
-        <div className="grid h-8 w-8 place-items-center rounded-xl bg-brand-gradient text-white shadow-pop">
-          <Sparkles size={16} />
-        </div>
-        <div className="text-h3 font-bold tracking-tight text-ink-900">AutoEntre</div>
-      </div>
-
       <div className="mb-4 flex items-center gap-3 rounded-2xl bg-brand-gradient-subtle p-3">
         <div className="grid h-10 w-10 place-items-center rounded-full bg-brand-gradient text-white font-bold">
           {initial}
@@ -73,33 +67,6 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
 }
 
 /**
- * Mobile header (sticky top). Brand + user initial only — real navigation
- * is the bottom-nav below.
- */
-export function MobileHeader({ displayName }: { displayName: string }) {
-  const initial = (displayName?.[0] ?? "?").toUpperCase();
-  return (
-    <header className="md:hidden sticky top-0 z-20 border-b border-ink-200 bg-white/80 backdrop-blur px-4 py-3 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <div className="grid h-8 w-8 place-items-center rounded-xl bg-brand-gradient text-white shadow-pop">
-          <Sparkles size={14} />
-        </div>
-        <div className="text-h3 font-bold tracking-tight text-ink-900">AutoEntre</div>
-      </div>
-      <form action="/auth/signout" method="post">
-        <button
-          type="submit"
-          aria-label="Se déconnecter"
-          className="grid h-9 w-9 place-items-center rounded-full bg-brand-gradient-subtle text-brand-700 font-bold"
-        >
-          {initial}
-        </button>
-      </form>
-    </header>
-  );
-}
-
-/**
  * Mobile bottom navigation (≤ md). Large touch targets with brand highlight
  * on the active tab. Respects iOS safe-area inset.
  */
@@ -110,7 +77,7 @@ export function MobileBottomNav() {
       className="md:hidden fixed bottom-0 inset-x-0 z-20 border-t border-ink-200 bg-white/95 backdrop-blur"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-5">
         {items.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (

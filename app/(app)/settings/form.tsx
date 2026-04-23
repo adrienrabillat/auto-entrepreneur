@@ -19,8 +19,16 @@ type Values = {
   address_line2: string;
   postal_code: string;
   city: string;
+  phone: string;
+  website: string;
   iban: string;
   bic: string;
+  rcs_number: string;
+  rcs_city: string;
+  rm_number: string;
+  rm_department: string;
+  insurance_name: string;
+  insurance_coverage: string;
   urssaf_declaration_day: number;
 };
 
@@ -44,9 +52,18 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
     const day = Math.min(28, Math.max(1, Number(v.urssaf_declaration_day) || 3));
     const cleanSiren = v.siren.replace(/\s/g, "");
     const cleanSiret = v.siret.replace(/\s/g, "");
+    const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
+    const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
     const { error } = await supabase
       .from("profiles")
-      .update({ ...v, siren: cleanSiren, siret: cleanSiret, urssaf_declaration_day: day })
+      .update({
+        ...v,
+        siren: cleanSiren,
+        siret: cleanSiret,
+        iban: cleanIban,
+        bic: cleanBic,
+        urssaf_declaration_day: day,
+      })
       .eq("id", user.id);
     if (error) {
       setError(error.message);
@@ -59,8 +76,9 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
   }
 
   return (
-    <form onSubmit={onSubmit}>
+    <form onSubmit={onSubmit} className="space-y-6">
       <Card className="space-y-5">
+        <h2 className="text-h3 text-ink-900">Identité</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
             <Label htmlFor="display_name">Nom & prénom</Label>
@@ -118,6 +136,10 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
           <Label htmlFor="ape_naf" hint="optionnel">Code APE / NAF</Label>
           <Input id="ape_naf" value={v.ape_naf} onChange={(e) => setV({ ...v, ape_naf: e.target.value })} />
         </div>
+      </Card>
+
+      <Card className="space-y-5">
+        <h2 className="text-h3 text-ink-900">Coordonnées</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <Label htmlFor="address_line1">Adresse</Label>
@@ -137,14 +159,77 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="iban" hint="optionnel">IBAN</Label>
-            <Input id="iban" value={v.iban} onChange={(e) => setV({ ...v, iban: e.target.value })} />
+            <Label htmlFor="phone" hint="optionnel">Téléphone pro</Label>
+            <Input id="phone" value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} placeholder="06 12 34 56 78" />
           </div>
           <div>
-            <Label htmlFor="bic" hint="optionnel">BIC</Label>
-            <Input id="bic" value={v.bic} onChange={(e) => setV({ ...v, bic: e.target.value })} />
+            <Label htmlFor="website" hint="optionnel">Site web</Label>
+            <Input id="website" value={v.website} onChange={(e) => setV({ ...v, website: e.target.value })} placeholder="https://monsite.fr" />
           </div>
         </div>
+      </Card>
+
+      <Card className="space-y-5">
+        <h2 className="text-h3 text-ink-900">Coordonnées bancaires</h2>
+        <p className="text-small text-ink-500">
+          Obligatoires pour émettre une facture. Elles apparaissent sur le PDF dans le bloc &laquo;&nbsp;Règlement&nbsp;&raquo;.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="iban">IBAN</Label>
+            <Input id="iban" required value={v.iban} onChange={(e) => setV({ ...v, iban: e.target.value })} placeholder="FR76 1234 5678 9012 3456 7890 123" />
+          </div>
+          <div>
+            <Label htmlFor="bic">BIC</Label>
+            <Input id="bic" required value={v.bic} onChange={(e) => setV({ ...v, bic: e.target.value })} placeholder="BNPAFRPP" />
+          </div>
+        </div>
+      </Card>
+
+      <Card className="space-y-5">
+        <h2 className="text-h3 text-ink-900">Registres pros (RCS / RM)</h2>
+        <p className="text-small text-ink-500">
+          Obligatoire pour les <strong>commerçants</strong> (RCS) et les <strong>artisans</strong> (RM). Laisse vide si ton activité est libérale pure.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="rcs_number" hint="commerçants — souvent = SIREN">Numéro RCS</Label>
+            <Input id="rcs_number" value={v.rcs_number} onChange={(e) => setV({ ...v, rcs_number: e.target.value })} placeholder="123 456 789" />
+          </div>
+          <div>
+            <Label htmlFor="rcs_city" hint="ville du greffe">Ville RCS</Label>
+            <Input id="rcs_city" value={v.rcs_city} onChange={(e) => setV({ ...v, rcs_city: e.target.value })} placeholder="Paris" />
+          </div>
+          <div>
+            <Label htmlFor="rm_number" hint="artisans">Numéro RM</Label>
+            <Input id="rm_number" value={v.rm_number} onChange={(e) => setV({ ...v, rm_number: e.target.value })} placeholder="123 456 789" />
+          </div>
+          <div>
+            <Label htmlFor="rm_department" hint="département">Département RM</Label>
+            <Input id="rm_department" value={v.rm_department} onChange={(e) => setV({ ...v, rm_department: e.target.value })} placeholder="75" />
+          </div>
+        </div>
+      </Card>
+
+      <Card className="space-y-5">
+        <h2 className="text-h3 text-ink-900">Assurance professionnelle</h2>
+        <p className="text-small text-ink-500">
+          Mention URSSAF obligatoire quand ton activité y est soumise (artisanat bâtiment, conseil, santé, etc.).
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="insurance_name" hint="optionnel">Assureur</Label>
+            <Input id="insurance_name" value={v.insurance_name} onChange={(e) => setV({ ...v, insurance_name: e.target.value })} placeholder="MAIF" />
+          </div>
+          <div>
+            <Label htmlFor="insurance_coverage" hint="couverture géographique">Couverture</Label>
+            <Input id="insurance_coverage" value={v.insurance_coverage} onChange={(e) => setV({ ...v, insurance_coverage: e.target.value })} placeholder="France métropolitaine" />
+          </div>
+        </div>
+      </Card>
+
+      <Card className="space-y-5">
+        <h2 className="text-h3 text-ink-900">URSSAF</h2>
         <div>
           <Label htmlFor="urssaf_declaration_day" hint="entre 1 et 28">Jour de la déclaration URSSAF</Label>
           <Input
