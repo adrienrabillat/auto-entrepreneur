@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "./form";
 import { Badge } from "@/components/ui/card";
 import { ReconnectGmailButton } from "./reconnect-gmail";
-import { Mail } from "lucide-react";
+import { Mail, LogOut } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +76,16 @@ export default async function SettingsPage() {
           urssaf_declaration_day: profile.urssaf_declaration_day ?? 3,
         }}
       />
+
+      <form action="/auth/signout" method="post" className="pt-2">
+        <button
+          type="submit"
+          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-small font-semibold text-ink-600 ring-1 ring-inset ring-ink-200 hover:bg-ink-50 hover:text-ink-900"
+        >
+          <LogOut size={16} />
+          Se déconnecter
+        </button>
+      </form>
     </div>
   );
 }

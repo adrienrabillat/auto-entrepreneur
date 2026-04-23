@@ -1,12 +1,10 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Modern, vibrant design system. We swapped the warm-cream Notion palette
- * for a crisp slate + a saturated violet brand. The `ink` scale name is
- * kept (so we don't have to rename class usages across the codebase) but
- * its values are now a cool slate instead of the old warm browns.
- *
- * `brand` is the new accent used for CTAs, active nav states, highlights.
+ * Sobre + pro : palette noir + bleu foncé.
+ * On conserve les noms de tokens (`brand-*`, `pink-*`, `accent-*`) pour ne pas
+ * avoir à renommer des classes à travers tout le code — mais leurs valeurs
+ * pointent désormais vers une famille navy / quasi-noir.
  */
 const config: Config = {
   content: [
@@ -31,7 +29,7 @@ const config: Config = {
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
-        // Neutral = cool slate (keeps the `ink-*` class names used across the app)
+        // Neutre : slate froid (on garde les classes `ink-*` partout dans le code)
         ink: {
           50: "#F8FAFC",
           100: "#F1F5F9",
@@ -44,31 +42,31 @@ const config: Config = {
           800: "#1E293B",
           900: "#0F172A",
         },
-        // Vibrant violet / indigo brand
+        // Marque : navy → noir. Fini le violet.
         brand: {
-          50: "#EEF0FF",
-          100: "#DEE1FF",
-          200: "#C3C8FF",
-          300: "#9AA1FF",
-          400: "#7A7DFF",
-          500: "#5B47FF",
-          600: "#4636E0",
-          700: "#372BB2",
-          800: "#2A218A",
-          900: "#1E1866",
+          50:  "#F1F5FB",
+          100: "#E1E8F4",
+          200: "#C4D0E6",
+          300: "#8AA1CC",
+          400: "#4E6DA5",
+          500: "#1E3A8A",   // bleu foncé principal
+          600: "#172554",   // navy profond
+          700: "#0F172A",   // slate-900
+          800: "#0A0F1C",
+          900: "#04070F",   // quasi-noir
         },
-        // Pink accent (gradient second stop)
+        // Anciennement "rose" → remappé sur la même famille navy pour que les
+        // classes `bg-pink-*` utilisées côté PDF / gradients ne cassent rien.
         pink: {
-          400: "#FF6AD5",
-          500: "#F13FAF",
+          400: "#1E3A8A",
+          500: "#172554",
         },
-        // Legacy alias so older code still compiles.
         accent: {
-          50: "#EEF0FF",
-          100: "#DEE1FF",
-          500: "#5B47FF",
-          600: "#4636E0",
-          700: "#372BB2",
+          50:  "#F1F5FB",
+          100: "#E1E8F4",
+          500: "#1E3A8A",
+          600: "#172554",
+          700: "#0F172A",
         },
         success: { 50: "#ECFDF5", 100: "#D1FAE5", 500: "#10B981", 600: "#059669" },
         warn:    { 50: "#FFFBEB", 100: "#FEF3C7", 500: "#F59E0B", 600: "#B45309" },
@@ -94,14 +92,15 @@ const config: Config = {
       boxShadow: {
         hair: "inset 0 0 0 1px rgb(226 232 240 / 1)",
         soft: "0 1px 2px rgb(15 23 42 / 0.04), 0 2px 10px rgb(15 23 42 / 0.04)",
-        pop: "0 10px 30px -10px rgb(91 71 255 / 0.25), 0 6px 14px -6px rgb(15 23 42 / 0.10)",
-        glow: "0 0 0 1px rgb(91 71 255 / 0.15), 0 12px 32px -8px rgb(91 71 255 / 0.35)",
+        pop: "0 10px 30px -10px rgb(15 23 42 / 0.45), 0 6px 14px -6px rgb(15 23 42 / 0.15)",
+        glow: "0 0 0 1px rgb(30 58 138 / 0.25), 0 12px 32px -8px rgb(15 23 42 / 0.45)",
       },
       backgroundImage: {
-        "brand-gradient": "linear-gradient(135deg,#5B47FF 0%,#8B5FFF 50%,#FF6AD5 100%)",
-        "brand-gradient-subtle": "linear-gradient(135deg,#EEF0FF 0%,#FCE8F6 100%)",
+        // Dégradé sobre : quasi-noir → bleu nuit
+        "brand-gradient": "linear-gradient(135deg,#0F172A 0%,#1E3A8A 100%)",
+        "brand-gradient-subtle": "linear-gradient(135deg,#F1F5FB 0%,#E1E8F4 100%)",
         "page-aurora":
-          "radial-gradient(1200px 400px at 80% -10%, rgba(91,71,255,0.12), transparent 60%), radial-gradient(900px 300px at -10% 10%, rgba(255,106,213,0.10), transparent 60%)",
+          "radial-gradient(1200px 400px at 80% -10%, rgba(30,58,138,0.08), transparent 60%), radial-gradient(900px 300px at -10% 10%, rgba(15,23,42,0.06), transparent 60%)",
       },
       keyframes: {
         "fade-in-up": {

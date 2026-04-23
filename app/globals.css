@@ -13,13 +13,11 @@
   }
   body {
     @apply font-sans text-body;
-    /* Luminous aurora background. It lives behind all pages and gives the app
-       a bit of depth without affecting readability (the bright blobs are in
-       the top corners and fade to transparent quickly). */
+    /* Fond neutre slate très pâle — pas d'aurora colorée. */
     background-color: #F8FAFC;
     background-image:
-      radial-gradient(1000px 400px at 85% -10%, rgba(91,71,255,0.10), transparent 60%),
-      radial-gradient(800px 300px at -5% 5%, rgba(255,106,213,0.08), transparent 60%);
+      radial-gradient(1100px 420px at 85% -10%, rgba(30,58,138,0.06), transparent 60%),
+      radial-gradient(800px 300px at -5% 5%, rgba(15,23,42,0.05), transparent 60%);
     background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
   }
@@ -27,29 +25,24 @@
   h2 { @apply text-h2 text-ink-900; }
   h3 { @apply text-h3 text-ink-900; }
   ::selection {
-    background: rgba(91, 71, 255, 0.18);
+    background: rgba(30, 58, 138, 0.18);
   }
 }
 
 @layer components {
-  /* Elevated white card — the default container for content. */
+  /* Carte blanche surélevée — conteneur par défaut. */
   .surface {
     @apply bg-white rounded-2xl shadow-soft;
   }
-  /* Hairline divider */
   .divider {
     @apply border-t border-ink-200;
   }
-  /* Subtle row hover for list items */
   .row-hover {
     @apply hover:bg-ink-50 transition-colors;
   }
-  /* Gradient text for headlines / brand moments */
+  /* "Gradient" texte pour les titres — désormais simple navy, pas de dégradé coloré. */
   .text-gradient-brand {
-    background: linear-gradient(135deg, #5B47FF 0%, #8B5FFF 55%, #FF6AD5 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: #0F172A;
   }
 }
 

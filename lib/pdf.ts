@@ -2,19 +2,18 @@ import { PDFDocument, PDFName, PDFString, PDFHexString, StandardFonts, rgb } fro
 import { buildFacturxMinimumXml } from "@/lib/facturx";
 
 /**
- * Invoice PDF generator — modern, vibrant layout.
+ * Générateur PDF facture — version sobre, pro, noir + bleu foncé.
  *
- * Produces an A4 invoice that is:
- *  - Visually modern (inspired by Qonto / Pennylane / Stripe invoices) with a
- *    brand-colored hero band, a clean parties block, a full-width total strip
- *    and minimal legal footer.
- *  - Legally compliant for an EI / auto-entrepreneur in France (SIREN + SIRET,
- *    "EI" mention, franchise-en-base TVA notice, nature de l'opération,
- *    mandatory penalty / late-payment clauses, etc.)
- *  - Forward-compatible with the "facturation électronique" mandate of
- *    Sept 2026–27: the full Factur-X MINIMUM-profile CII XML is embedded as
- *    an AF (Associated File) relationship "Alternative". A Plateforme Agréée
- *    (PDP) can therefore extract the structured data directly from the PDF.
+ * Objectifs :
+ *  - Design lisible et professionnel : pas de violet/rose, beaucoup de blanc,
+ *    une barre sombre en tête et un bandeau total navy pour l'accent visuel.
+ *  - Conforme aux obligations légales françaises pour un auto-entrepreneur / EI
+ *    (Loi du 14 février 2022 "EI", mentions franchise en base TVA art. 293 B,
+ *    pénalités L441-10, SIREN + SIRET, nature de l'opération, etc.).
+ *  - Prêt pour la facturation électronique (obligation progressive Sept 2026 → 2027)
+ *    via un Factur-X MINIMUM CII XML embarqué (AFRelationship = Alternative)
+ *    — une Plateforme Agréée (PDP) peut ainsi extraire les données structurées
+ *    directement depuis le PDF/A-3.
  */
 
 export type OperationType = "service" | "vente" | "mixte";
@@ -53,26 +52,27 @@ export type InvoicePdfData = {
   };
 };
 
-// Modern brand palette — mirrors tailwind.config.ts
-const C_BRAND       = rgb(0.357, 0.278, 1);     // #5B47FF
-const C_BRAND_DARK  = rgb(0.216, 0.169, 0.698); // #372BB2
-const C_PINK        = rgb(1.000, 0.416, 0.835); // #FF6AD5
-const C_INK         = rgb(0.059, 0.090, 0.165); // #0F172A
+// ---------------------------------------------------------------------------
+// Palette PDF — cohérente avec le thème app (noir + bleu foncé).
+// ---------------------------------------------------------------------------
+const C_INK         = rgb(0.059, 0.090, 0.165); // #0F172A — slate-900 (titres, totaux)
+const C_INK_DEEP    = rgb(0.016, 0.027, 0.059); // #040710 — noir (bandeau)
+const C_NAVY        = rgb(0.118, 0.227, 0.541); // #1E3A8A — bleu foncé (accent)
+const C_NAVY_DEEP   = rgb(0.090, 0.145, 0.329); // #172554 — navy profond
 const C_INK_800     = rgb(0.118, 0.161, 0.231); // #1E293B
 const C_INK_600     = rgb(0.278, 0.333, 0.412); // #475569
 const C_MUTED       = rgb(0.392, 0.455, 0.545); // #64748B
 const C_SOFT        = rgb(0.580, 0.639, 0.722); // #94A3B8
 const C_LINE        = rgb(0.882, 0.910, 0.941); // #E2E8F0
-const C_SURFACE     = rgb(0.972, 0.980, 0.988); // near ink-50
-const C_TINT        = rgb(0.933, 0.937, 1.000); // #EEF0FF brand-tint
-const C_TINT_PINK   = rgb(0.988, 0.910, 0.965); // #FCE8F6
+const C_SURFACE     = rgb(0.972, 0.980, 0.988); // #F8FAFC
+const C_TINT        = rgb(0.945, 0.961, 0.984); // #F1F5FB — brand-50 navy-tint
 const C_WHITE       = rgb(1, 1, 1);
 
 export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Facture ${data.number}`);
-  pdf.setAuthor(data.seller.displayName);
-  pdf.setSubject(`Facture ${data.number} — ${data.seller.displayName}`);
+  pdf.setAuthor(sellerLegalLabel(data));
+  pdf.setSubject(`Facture ${data.number} — ${sellerLegalLabel(data)}`);
   pdf.setProducer("auto-entrepreneur app");
   pdf.setCreator("auto-entrepreneur app");
   pdf.setCreationDate(new Date());
@@ -81,7 +81,7 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
 
-  const page = pdf.addPage([595.28, 841.89]); // A4 in points
+  const page = pdf.addPage([595.28, 841.89]); // A4 en points
   const { width, height } = page.getSize();
   const marginX = 48;
   const rightX = width - marginX;
@@ -110,112 +110,84 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   };
 
   // -----------------------------------------------------------------------
-  // HERO — vibrant brand band with rounded bottom-corners fake via a second
-  // lighter rectangle. pdf-lib has no native gradient so we use a stacked
-  // two-color bar (brand + pink accent strip) to feel vibrant and modern.
+  // EN-TÊTE — barre sombre fine qui porte juste "FACTURE" + numéro.
+  // Sobre, lisible, tout de suite pro.
   // -----------------------------------------------------------------------
-  const heroH = 150;
+  const heroH = 64;
   const heroY = height - heroH;
-
-  page.drawRectangle({ x: 0, y: heroY, width, height: heroH, color: C_BRAND });
-  // Accent diagonal-ish pink stripe (a tall rectangle on the right)
+  page.drawRectangle({ x: 0, y: heroY, width, height: heroH, color: C_INK_DEEP });
+  // accent bleu foncé sur le côté droit — un simple rectangle fin
   page.drawRectangle({
-    x: width - 140,
-    y: heroY - 10,
-    width: 140,
-    height: heroH + 10,
-    color: C_PINK,
-    opacity: 0.25,
-  });
-  // Deeper brand slash near left for a bit of depth
-  page.drawRectangle({
-    x: -30,
-    y: heroY - 20,
-    width: 220,
-    height: heroH + 20,
-    color: C_BRAND_DARK,
-    opacity: 0.35,
+    x: rightX - 90,
+    y: heroY,
+    width: 90,
+    height: heroH,
+    color: C_NAVY,
+    opacity: 0.55,
   });
 
-  // Top-left: label + business name
-  text("FACTURE", marginX, height - 44, { size: 11, font: bold, color: C_WHITE });
-  const nameLine = data.seller.businessName || data.seller.displayName;
-  text(nameLine, marginX, height - 78, {
-    size: 26,
+  text("FACTURE", marginX, height - 30, {
+    size: 14,
     font: bold,
     color: C_WHITE,
   });
-  const subtitle = data.seller.businessName
-    ? `${data.seller.displayName} · ${data.seller.legalForm}`
-    : data.seller.legalForm;
-  text(subtitle, marginX, height - 96, { size: 10, color: C_WHITE, font: regular });
-  if (data.seller.metier) {
-    text(data.seller.metier, marginX, height - 112, {
-      size: 9,
-      color: C_WHITE,
-      font: italic,
-    });
-  }
-
-  // Top-right: N° + date + amount teaser
-  text(`N° ${data.number}`, rightX, height - 44, {
+  text(`N° ${data.number}`, marginX, height - 48, {
     size: 10,
-    font: bold,
-    color: C_WHITE,
-    align: "right",
+    color: C_SOFT,
   });
-  text(`Émise le ${formatFr(data.issuedOn)}`, rightX, height - 60, {
-    size: 9,
-    color: C_WHITE,
-    align: "right",
-  });
-  if (data.dueOn) {
-    text(`Échéance ${formatFr(data.dueOn)}`, rightX, height - 74, {
-      size: 9,
-      color: C_WHITE,
-      align: "right",
-    });
-  }
-  // Total chip in hero
-  text("TOTAL À PAYER", rightX, height - 100, {
-    size: 8,
-    font: bold,
-    color: C_WHITE,
-    align: "right",
-  });
-  text(formatCurrency(data.amountCents, data.currency), rightX, height - 124, {
-    size: 22,
+  text(formatCurrency(data.amountCents, data.currency), rightX - 14, height - 38, {
+    size: 18,
     font: bold,
     color: C_WHITE,
     align: "right",
   });
 
   // -----------------------------------------------------------------------
-  // Parties cards — Émetteur (tinted) + Client (white ring)
+  // Blocs parties — ÉMETTEUR (à gauche) + FACTURÉ À (à droite)
+  // Fond blanc + fines bordures, mention "EI Prénom Nom" bien en évidence.
   // -----------------------------------------------------------------------
   let y = heroY - 28;
-  const gap = 14;
+  const gap = 16;
   const colW = (innerW - gap) / 2;
+  const cardH = Math.max(cardHeightSeller(data), cardHeightClient(data));
 
-  // Émetteur card (brand tint)
-  const cardH = cardHeightSeller(data);
+  // Émetteur
   page.drawRectangle({
     x: marginX,
     y: y - cardH,
     width: colW,
     height: cardH,
-    color: C_TINT,
-    borderColor: C_TINT,
-    borderWidth: 0,
+    color: C_WHITE,
+    borderColor: C_LINE,
+    borderWidth: 0.8,
   });
-  drawLeftBorder(page, marginX, y - cardH, cardH, C_BRAND);
-  text("ÉMETTEUR", marginX + 14, y - 18, { size: 8, font: bold, color: C_BRAND });
-  text(`${data.seller.displayName} · ${data.seller.legalForm}`, marginX + 14, y - 34, {
-    size: 11,
+  drawLeftBorder(page, marginX, y - cardH, cardH, C_INK_DEEP);
+  text("ÉMETTEUR", marginX + 14, y - 18, { size: 8, font: bold, color: C_MUTED });
+
+  // Ligne légale : "EI Prénom Nom" (ou "EI Prénom Nom — Nom Commercial")
+  const emitterLegalLine = sellerLegalLabel(data);
+  text(emitterLegalLine, marginX + 14, y - 36, {
+    size: 12,
     font: bold,
     color: C_INK,
   });
-  let sy = y - 50;
+  let sy = y - 52;
+  if (data.seller.businessName && data.seller.businessName !== data.seller.displayName) {
+    text(`Nom commercial : ${data.seller.businessName}`, marginX + 14, sy, {
+      size: 9,
+      color: C_INK_600,
+    });
+    sy -= 12;
+  }
+  if (data.seller.metier) {
+    text(data.seller.metier, marginX + 14, sy, {
+      size: 9,
+      font: italic,
+      color: C_INK_600,
+    });
+    sy -= 12;
+  }
+  sy -= 2;
   const sellerInfoLines = [
     data.seller.addressLine1,
     data.seller.addressLine2 || null,
@@ -242,7 +214,7 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     text(`APE ${data.seller.apeNaf}`, marginX + 14, sy, { size: 9, color: C_MUTED });
   }
 
-  // Client card (white ring)
+  // Client
   const clientX = marginX + colW + gap;
   page.drawRectangle({
     x: clientX,
@@ -253,11 +225,11 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     borderColor: C_LINE,
     borderWidth: 0.8,
   });
-  drawLeftBorder(page, clientX, y - cardH, cardH, C_PINK);
-  text("FACTURÉ À", clientX + 14, y - 18, { size: 8, font: bold, color: C_PINK });
+  drawLeftBorder(page, clientX, y - cardH, cardH, C_NAVY);
+  text("FACTURÉ À", clientX + 14, y - 18, { size: 8, font: bold, color: C_MUTED });
   const clientHeader = data.client.name || data.client.email;
-  text(clientHeader, clientX + 14, y - 34, { size: 11, font: bold, color: C_INK });
-  let cy = y - 50;
+  text(clientHeader, clientX + 14, y - 36, { size: 12, font: bold, color: C_INK });
+  let cy = y - 52;
   if (data.client.address) {
     data.client.address.split(/\r?\n/).forEach((line) => {
       text(line, clientX + 14, cy, { size: 9.5, color: C_INK_600 });
@@ -276,34 +248,49 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     });
   }
 
-  y -= cardH + 26;
+  y -= cardH + 22;
 
   // -----------------------------------------------------------------------
-  // Meta row — operation type + delivery
+  // Méta — dates + nature de l'opération sous forme d'une ligne d'étiquettes
   // -----------------------------------------------------------------------
+  const metaBoxH = 42;
+  page.drawRectangle({
+    x: marginX,
+    y: y - metaBoxH,
+    width: innerW,
+    height: metaBoxH,
+    color: C_TINT,
+    borderColor: C_TINT,
+    borderWidth: 0,
+  });
+
+  const metaColW = innerW / 3;
+  drawMeta(page, marginX + 14,            y - 14, "Émise le", formatFr(data.issuedOn), regular, bold);
+  if (data.dueOn) {
+    drawMeta(page, marginX + metaColW + 14, y - 14, "Échéance", formatFr(data.dueOn), regular, bold);
+  }
   const opLabel =
     data.operationType === "vente"
       ? "Vente de biens"
       : data.operationType === "mixte"
-      ? "Vente + prestation de services"
+      ? "Vente + prestation"
       : "Prestation de services";
-  drawPill(page, marginX, y - 2, "Nature", opLabel, regular, bold);
+  drawMeta(page, marginX + 2 * metaColW + 14, y - 14, "Nature", opLabel, regular, bold);
 
   if (data.deliveryAddress && data.operationType !== "service") {
-    text(`Livraison : ${data.deliveryAddress}`, rightX, y + 2, {
-      size: 9,
+    text(`Livraison : ${data.deliveryAddress}`, rightX - 14, y - 34, {
+      size: 8.5,
       color: C_MUTED,
       align: "right",
     });
   }
 
-  y -= 32;
+  y -= metaBoxH + 22;
 
   // -----------------------------------------------------------------------
-  // Line items — modern table
+  // Table — description / montant
   // -----------------------------------------------------------------------
-  // Header bar
-  const tableHeaderH = 28;
+  const tableHeaderH = 30;
   page.drawRectangle({
     x: marginX,
     y: y - tableHeaderH,
@@ -311,23 +298,21 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     height: tableHeaderH,
     color: C_INK,
   });
-  text("DESCRIPTION", marginX + 16, y - 18, {
+  text("DESCRIPTION", marginX + 16, y - 20, {
     size: 9,
     font: bold,
     color: C_WHITE,
   });
-  text("MONTANT", rightX - 16, y - 18, {
+  text("MONTANT", rightX - 16, y - 20, {
     size: 9,
     font: bold,
     color: C_WHITE,
     align: "right",
   });
-
   y -= tableHeaderH;
 
-  // Body
   const wrapped = wrap(data.description, 62);
-  const rowH = Math.max(40, wrapped.length * 14 + 20);
+  const rowH = Math.max(42, wrapped.length * 14 + 22);
   page.drawRectangle({
     x: marginX,
     y: y - rowH,
@@ -338,7 +323,7 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     borderWidth: 0.8,
   });
   wrapped.forEach((line, i) => {
-    text(line, marginX + 16, y - 18 - i * 14, {
+    text(line, marginX + 16, y - 20 - i * 14, {
       size: 11,
       color: C_INK_800,
       font: regular,
@@ -350,84 +335,115 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     color: C_INK,
     align: "right",
   });
-
-  y -= rowH + 18;
+  y -= rowH + 16;
 
   // -----------------------------------------------------------------------
-  // Grand total bar — full width, brand colored
+  // Bandeau TOTAL — plein largeur, navy profond
   // -----------------------------------------------------------------------
-  const totalH = 62;
+  const totalH = 64;
   page.drawRectangle({
     x: marginX,
     y: y - totalH,
     width: innerW,
     height: totalH,
-    color: C_BRAND,
+    color: C_INK_DEEP,
   });
-  // subtle pink accent on right edge
+  // Surcharge navy à droite pour un accent subtil
   page.drawRectangle({
-    x: rightX - 90,
+    x: rightX - 120,
     y: y - totalH,
-    width: 90,
+    width: 120,
     height: totalH,
-    color: C_PINK,
-    opacity: 0.22,
+    color: C_NAVY,
+    opacity: 0.35,
   });
-  text("TOTAL NET À PAYER", marginX + 18, y - 22, {
+  text("TOTAL NET À PAYER", marginX + 18, y - 24, {
     size: 10,
     font: bold,
     color: C_WHITE,
   });
-  text("TVA non applicable — art. 293 B du CGI", marginX + 18, y - 40, {
+  text("TVA non applicable — art. 293 B du CGI", marginX + 18, y - 42, {
     size: 8.5,
     font: italic,
-    color: C_WHITE,
+    color: C_SOFT,
   });
-  text(formatCurrency(data.amountCents, data.currency), rightX - 18, y - 36, {
+  text(formatCurrency(data.amountCents, data.currency), rightX - 18, y - 38, {
     size: 22,
     font: bold,
     color: C_WHITE,
     align: "right",
   });
-
-  y -= totalH + 22;
+  y -= totalH + 20;
 
   // -----------------------------------------------------------------------
-  // Bank details (if provided)
+  // RIB / Règlement — toujours affiché, même sans IBAN renseigné, pour
+  // que la facture soit explicite côté client.
   // -----------------------------------------------------------------------
-  if (data.seller.iban) {
-    const bankH = 54;
-    page.drawRectangle({
-      x: marginX,
-      y: y - bankH,
-      width: innerW,
-      height: bankH,
-      color: C_SURFACE,
-      borderColor: C_LINE,
-      borderWidth: 0.8,
-    });
-    text("RÈGLEMENT PAR VIREMENT", marginX + 14, y - 18, {
-      size: 8.5,
-      font: bold,
-      color: C_MUTED,
-    });
-    text(`Bénéficiaire · ${data.seller.displayName}`, marginX + 14, y - 32, {
-      size: 10,
+  const hasIban = Boolean(data.seller.iban);
+  const bankH = hasIban ? 86 : 58;
+  page.drawRectangle({
+    x: marginX,
+    y: y - bankH,
+    width: innerW,
+    height: bankH,
+    color: C_SURFACE,
+    borderColor: C_LINE,
+    borderWidth: 0.8,
+  });
+  drawLeftBorder(page, marginX, y - bankH, bankH, C_NAVY_DEEP);
+  text("RÈGLEMENT PAR VIREMENT BANCAIRE", marginX + 16, y - 18, {
+    size: 9,
+    font: bold,
+    color: C_NAVY_DEEP,
+  });
+
+  if (hasIban) {
+    text(`Bénéficiaire`, marginX + 16, y - 36, { size: 8, color: C_MUTED });
+    text(data.seller.displayName, marginX + 16, y - 48, {
+      size: 10.5,
       font: bold,
       color: C_INK,
     });
-    const bankLine = `IBAN ${data.seller.iban}${data.seller.bic ? `   ·   BIC ${data.seller.bic}` : ""}`;
-    text(bankLine, marginX + 14, y - 46, { size: 10, color: C_INK_600 });
-    y -= bankH + 14;
+    text(`IBAN`, marginX + 16, y - 64, { size: 8, color: C_MUTED });
+    text(formatIban(data.seller.iban!), marginX + 16, y - 76, {
+      size: 10.5,
+      font: bold,
+      color: C_INK,
+    });
+    if (data.seller.bic) {
+      text(`BIC`, marginX + 260, y - 64, { size: 8, color: C_MUTED });
+      text(data.seller.bic, marginX + 260, y - 76, {
+        size: 10.5,
+        font: bold,
+        color: C_INK,
+      });
+    }
+    text(`Référence à rappeler : ${data.number}`, rightX - 16, y - 48, {
+      size: 9,
+      color: C_INK_600,
+      align: "right",
+    });
+  } else {
+    text(
+      "IBAN non renseigné — va dans Profil → Coordonnées bancaires pour l'ajouter.",
+      marginX + 16,
+      y - 38,
+      { size: 9.5, color: C_MUTED, font: italic }
+    );
+    text(`Référence à rappeler : ${data.number}`, marginX + 16, y - 52, {
+      size: 9,
+      color: C_INK_600,
+    });
   }
+  y -= bankH + 18;
 
   // -----------------------------------------------------------------------
-  // Legal footer — small muted mentions at the bottom
+  // Mentions légales — petit texte sobre en bas de page
   // -----------------------------------------------------------------------
   const legal = [
     "TVA non applicable, art. 293 B du CGI.",
     "Dispensé d'immatriculation au registre du commerce et des sociétés (RCS) et au répertoire des métiers (RM).",
-    "Paiement à réception, sauf mention contraire. En cas de retard : indemnité forfaitaire de 40 € (art. L441-10 du",
+    "Paiement à réception sauf mention contraire. En cas de retard : indemnité forfaitaire de 40 € (art. L441-10 du",
     "Code de commerce) et pénalités au taux de la BCE majoré de 10 points. Pas d'escompte pour paiement anticipé.",
     `Mention « ${data.seller.legalForm} » apposée conformément à l'article L526-22 du Code de commerce.`,
   ];
@@ -446,20 +462,22 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     })
   );
 
-  // Page footer — contact line
+  // Bas de page — ligne contact
   text(
-    `${data.seller.displayName} · ${data.seller.email} · SIREN ${formatSiren(data.seller.siren)}`,
+    `${sellerLegalLabel(data)} · ${data.seller.email} · SIREN ${formatSiren(data.seller.siren)}`,
     width / 2,
     40,
     { size: 8, color: C_SOFT, align: "center" }
   );
   text(`1 / 1`, rightX, 40, { size: 8, color: C_SOFT, align: "right" });
 
-  // Decorative brand dot footer-left
-  page.drawCircle({ x: marginX + 4, y: 42, size: 3, color: C_BRAND });
+  // Petit marqueur navy discret en bas à gauche
+  page.drawCircle({ x: marginX + 4, y: 42, size: 3, color: C_NAVY });
 
   // -----------------------------------------------------------------------
-  // Embed Factur-X MINIMUM XML as associated file (AFRelationship=Alternative).
+  // Factur-X MINIMUM — XML CII attaché, AFRelationship = Alternative.
+  // Ce qui rend le PDF "lisible" par les Plateformes Agréées (PDP) du
+  // dispositif de facturation électronique 2026-2027.
   // -----------------------------------------------------------------------
   const xml = buildFacturxMinimumXml({
     number: data.number,
@@ -467,7 +485,7 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     currency: data.currency,
     totalCents: data.amountCents,
     seller: {
-      legalName: `${data.seller.displayName}${data.seller.legalForm ? `, ${data.seller.legalForm}` : ""}`,
+      legalName: sellerLegalLabel(data),
       siren: data.seller.siren,
       addressLine1: data.seller.addressLine1,
       postalCode: data.seller.postalCode,
@@ -482,25 +500,43 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
 
   await embedFacturxXml(pdf, xml);
 
-  // Mute unused-variable warnings for chip helper kept for future use
-  void C_TINT_PINK;
-  void C_INK_800;
-
   return await pdf.save();
 }
 
-// Approximate card height based on how many lines we'll actually draw.
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// Libellé légal "EI Prénom Nom" (ou EURL / SASU etc. selon legalForm).
+// Respecte la Loi du 14 février 2022 qui impose d'adjoindre la mention
+// "EI" ou "Entrepreneur Individuel" au nom de l'entrepreneur sur tous les
+// documents professionnels.
+function sellerLegalLabel(data: InvoicePdfData): string {
+  const form = (data.seller.legalForm || "EI").trim();
+  return `${form} ${data.seller.displayName}`.trim();
+}
+
+// Approximation de la hauteur nécessaire pour la carte "émetteur".
 function cardHeightSeller(data: InvoicePdfData): number {
-  let lines = 1; // name header
-  lines += 1; // address line 1
+  let lines = 1;                              // titre "EI Prénom Nom"
+  if (data.seller.businessName) lines += 1;   // nom commercial éventuel
+  if (data.seller.metier) lines += 1;         // métier
+  lines += 1;                                 // adresse ligne 1
   if (data.seller.addressLine2) lines += 1;
-  lines += 1; // postal + city
+  lines += 1;                                 // CP + ville
   if (data.seller.country && data.seller.country !== "France") lines += 1;
-  lines += 1; // email
-  lines += 2; // SIREN + SIRET
+  lines += 1;                                 // email
+  lines += 2;                                 // SIREN + SIRET
   if (data.seller.apeNaf) lines += 1;
-  // 16pt top pad + 20pt header + 12pt per line + 12pt bottom pad
-  return 20 + 24 + lines * 12 + 10;
+  return 20 + 28 + lines * 12 + 14;
+}
+
+function cardHeightClient(data: InvoicePdfData): number {
+  let lines = 1;                              // nom / email principal
+  if (data.client.address) lines += data.client.address.split(/\r?\n/).length;
+  if (data.client.name) lines += 1;           // email secondaire
+  if (data.client.siren) lines += 1;
+  return 20 + 28 + lines * 12 + 14;
 }
 
 function drawLeftBorder(
@@ -513,7 +549,7 @@ function drawLeftBorder(
   page.drawRectangle({ x, y, width: 3, height: h, color });
 }
 
-function drawPill(
+function drawMeta(
   page: import("pdf-lib").PDFPage,
   x: number,
   y: number,
@@ -522,41 +558,24 @@ function drawPill(
   regular: import("pdf-lib").PDFFont,
   bold: import("pdf-lib").PDFFont
 ) {
-  const labelSize = 8;
-  const valueSize = 10;
-  const padX = 12;
-  const labelW = bold.widthOfTextAtSize(label.toUpperCase(), labelSize);
-  const valueW = regular.widthOfTextAtSize(value, valueSize);
-  const w = labelW + valueW + padX * 2 + 10;
-  const h = 22;
-  page.drawRectangle({
+  page.drawText(label.toUpperCase(), {
     x,
     y: y - 4,
-    width: w,
-    height: h,
-    color: C_TINT,
-    borderColor: C_TINT,
-    borderWidth: 0,
-  });
-  page.drawText(label.toUpperCase(), {
-    x: x + padX,
-    y: y + 2,
-    size: labelSize,
+    size: 7.5,
     font: bold,
-    color: C_BRAND,
+    color: C_MUTED,
   });
   page.drawText(value, {
-    x: x + padX + labelW + 10,
-    y: y + 2,
-    size: valueSize,
+    x,
+    y: y - 18,
+    size: 11,
     font: regular,
     color: C_INK,
   });
 }
 
 // ---------------------------------------------------------------------------
-// Factur-X attachment — AFRelationship "Alternative" is the spec-compliant
-// relationship for the primary structured data of the invoice.
+// Factur-X attachment — AFRelationship "Alternative" (primary structured data).
 // ---------------------------------------------------------------------------
 async function embedFacturxXml(pdf: PDFDocument, xml: string) {
   const xmlBytes = new TextEncoder().encode(xml);
@@ -622,4 +641,10 @@ function formatSiren(s: string) {
 function formatSiret(s: string) {
   const d = (s || "").replace(/\D/g, "");
   return d.length === 14 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 9)} ${d.slice(9, 14)}` : s;
+}
+
+// IBAN groupé en blocs de 4 caractères, sans espaces indésirables.
+function formatIban(raw: string): string {
+  const compact = raw.replace(/\s+/g, "").toUpperCase();
+  return compact.replace(/(.{4})/g, "$1 ").trim();
 }

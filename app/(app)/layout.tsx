@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { MobileBottomNav, MobileHeader, Sidebar } from "@/components/ui/nav";
+import { MobileBottomNav, Sidebar } from "@/components/ui/nav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -19,7 +19,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-dvh flex flex-col md:flex-row">
       <Sidebar displayName={displayName} email={email} />
-      <MobileHeader displayName={displayName} />
       <main className="flex-1 min-w-0">
         <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10 animate-fade-in-up">
           {children}

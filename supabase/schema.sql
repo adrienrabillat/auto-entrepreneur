@@ -165,7 +165,12 @@ insert into storage.buckets (id, name, public)
 values ('invoices', 'invoices', false)
 on conflict (id) do nothing;
 
-drop policy if exists "invoices bucket: self read"  on storage.objects;
+-- IMPORTANT : pour que le RE-envoi d'une facture fonctionne, il faut
+-- quatre policies distinctes sur storage.objects (Supabase ne déduit pas
+-- les opérations : chaque verbe doit être couvert). upload(..., upsert:true)
+-- enchaîne INSERT puis UPDATE si l'objet existe déjà.
+
+drop policy if exists "invoices bucket: self read"   on storage.objects;
 create policy "invoices bucket: self read"
   on storage.objects for select
   using (
@@ -173,10 +178,30 @@ create policy "invoices bucket: self read"
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 
-drop policy if exists "invoices bucket: self write" on storage.objects;
+drop policy if exists "invoices bucket: self write"  on storage.objects;
 create policy "invoices bucket: self write"
   on storage.objects for insert
   with check (
+    bucket_id = 'invoices'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "invoices bucket: self update" on storage.objects;
+create policy "invoices bucket: self update"
+  on storage.objects for update
+  using (
+    bucket_id = 'invoices'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  )
+  with check (
+    bucket_id = 'invoices'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "invoices bucket: self delete" on storage.objects;
+create policy "invoices bucket: self delete"
+  on storage.objects for delete
+  using (
     bucket_id = 'invoices'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
