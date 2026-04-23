@@ -22,12 +22,12 @@ export default async function LandingPage({
       <header className="px-5 md:px-8 py-5 max-w-6xl mx-auto w-full flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
           <Image
-            src="/logo.svg"
+            src="/logo.webp"
             alt="Asthia"
-            width={34}
-            height={34}
+            width={36}
+            height={36}
             priority
-            className="h-8 w-8 md:h-9 md:w-9"
+            className="h-8 w-8 md:h-9 md:w-9 rounded-lg"
           />
           <span className="font-extrabold tracking-tight text-h2 text-ink-900">
             Asthia
@@ -44,12 +44,12 @@ export default async function LandingPage({
           {/* Big logo echo on mobile — fills the top visual space. */}
           <div className="mb-6 md:mb-8 flex justify-center md:hidden">
             <Image
-              src="/logo.svg"
+              src="/logo.webp"
               alt=""
-              width={96}
-              height={96}
+              width={112}
+              height={112}
               priority
-              className="h-24 w-24 drop-shadow-[0_10px_30px_rgba(30,58,138,0.25)]"
+              className="h-28 w-28 rounded-2xl drop-shadow-[0_10px_30px_rgba(30,58,138,0.25)]"
             />
           </div>
 

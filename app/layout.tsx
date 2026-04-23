@@ -6,10 +6,10 @@ export const metadata: Metadata = {
   description: "Factures, encaissements et déclarations URSSAF — simplement.",
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/logo.webp", type: "image/webp" },
     ],
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    shortcut: "/logo.webp",
+    apple: "/logo.webp",
   },
 };
 
