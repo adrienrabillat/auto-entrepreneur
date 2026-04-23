@@ -21,6 +21,8 @@ type Body = {
   payment_terms?: string | null;
   discount_terms?: string | null;
   send?: boolean;
+  /** true = facture acquittée (paiement déjà reçu avant émission) */
+  prepaid?: boolean;
 };
 
 export async function POST(req: NextRequest) {
@@ -69,6 +71,7 @@ export async function POST(req: NextRequest) {
       due_on: body.due_on ?? null,
       payment_terms: body.payment_terms ?? null,
       discount_terms: body.discount_terms ?? "Néant",
+      prepaid: Boolean(body.prepaid),
     });
 
     if (body.send) {

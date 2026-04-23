@@ -21,6 +21,10 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       auth: {
+        // PKCE = plus sûr, et @supabase/ssr stocke le code_verifier dans un
+        // cookie lisible par le serveur (-> /auth/callback peut faire
+        // exchangeCodeForSession sans localStorage).
+        flowType: "pkce",
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,

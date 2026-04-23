@@ -107,9 +107,20 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        "pop-in": {
+          "0%": { opacity: "0", transform: "scale(.8)" },
+          "70%": { opacity: "1", transform: "scale(1.05)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
       },
       animation: {
         "fade-in-up": "fade-in-up 240ms ease-out both",
+        "fade-in": "fade-in 180ms ease-out both",
+        "pop-in": "pop-in 420ms cubic-bezier(.34,1.56,.64,1) both",
       },
     },
   },

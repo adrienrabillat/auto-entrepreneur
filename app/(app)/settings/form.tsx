@@ -232,14 +232,18 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
         <h2 className="text-h3 text-ink-900">URSSAF</h2>
         <div>
           <Label htmlFor="urssaf_declaration_day" hint="entre 1 et 28">Jour de la déclaration URSSAF</Label>
-          <Input
+          <select
             id="urssaf_declaration_day"
-            type="number"
-            min={1}
-            max={28}
             value={v.urssaf_declaration_day}
             onChange={(e) => setV({ ...v, urssaf_declaration_day: Number(e.target.value) })}
-          />
+            className="h-12 w-full rounded-xl bg-white px-4 text-body text-ink-900 shadow-hair focus:outline-none focus:ring-2 focus:ring-brand-400 focus:shadow-glow transition-shadow appearance-none"
+          >
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                Le {d} du mois
+              </option>
+            ))}
+          </select>
           <p className="mt-1 text-xs text-ink-500">
             Ce jour-là chaque mois, l&apos;app déclare automatiquement le CA encaissé du mois précédent.
           </p>

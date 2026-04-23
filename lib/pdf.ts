@@ -37,6 +37,8 @@ export type InvoicePdfData = {
   deliveryAddress?: string;
   paymentTerms?: string;         // "Paiement à réception", "30 jours..."
   discountTerms?: string;        // default: "Néant"
+  /** Si présente → facture acquittée, stamp "ACQUITTÉE" + "Payée le …" sur le PDF. */
+  paidAt?: string;
   seller: {
     displayName: string;
     businessName?: string;
@@ -81,6 +83,8 @@ const C_INK_500  = rgb(0.392, 0.455, 0.545); // #64748B
 const C_INK_400  = rgb(0.580, 0.639, 0.722); // #94A3B8
 const C_LINE     = rgb(0.882, 0.910, 0.941); // #E2E8F0
 const C_LINE_SOFT= rgb(0.941, 0.953, 0.969); // #F1F5F9
+const C_PAID     = rgb(0.086, 0.537, 0.310); // #16A34A — vert sobre pour "ACQUITTÉE"
+const C_PAID_SOFT= rgb(0.925, 0.972, 0.933); // #ECF8EE
 
 export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
@@ -135,7 +139,8 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   let y = height - 64;
 
   // ----------------------------------------------------------------
-  // TITRE — "FACTURE" à gauche, numéro à droite
+  // TITRE — "FACTURE" à gauche, numéro à droite.
+  // Si acquittée : tampon vert "ACQUITTÉE" sous le titre.
   // ----------------------------------------------------------------
   draw("FACTURE", marginX, y, { size: 28, font: bold, color: C_INK_900 });
   draw(`#${data.number}`, rightX, y + 6, {
@@ -145,16 +150,40 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     align: "right",
   });
 
-  y -= 36;
+  if (data.paidAt) {
+    // Pastille verte sous le titre, alignée à gauche.
+    const label = "ACQUITTÉE";
+    const padX = 8;
+    const padY = 3;
+    const size = 9;
+    const w = bold.widthOfTextAtSize(label, size) + padX * 2;
+    const h = size + padY * 2;
+    const bx = marginX;
+    const by = y - 20;
+    page.drawRectangle({
+      x: bx,
+      y: by - h + size + padY,
+      width: w,
+      height: h,
+      color: C_PAID_SOFT,
+      borderColor: C_PAID,
+      borderWidth: 0.8,
+    });
+    draw(label, bx + padX, by, { size, font: bold, color: C_PAID });
+  }
+
+  y -= data.paidAt ? 52 : 36;
 
   // ----------------------------------------------------------------
-  // Ligne méta : Date d'émission / Date de règlement / Date d'exécution
+  // Ligne méta : Date d'émission / Règlement (ou "Payée le") / Exécution
   // ----------------------------------------------------------------
   const metaCols = [
     { label: "DATE D'ÉMISSION", value: formatFr(data.issuedOn) },
-    data.dueOn
-      ? { label: "DATE DE RÈGLEMENT", value: formatFr(data.dueOn) }
-      : { label: "RÈGLEMENT", value: data.paymentTerms || "À réception" },
+    data.paidAt
+      ? { label: "PAYÉE LE", value: formatFr(data.paidAt.slice(0, 10)) }
+      : data.dueOn
+        ? { label: "DATE DE RÈGLEMENT", value: formatFr(data.dueOn) }
+        : { label: "RÈGLEMENT", value: data.paymentTerms || "À réception" },
     data.executionDate
       ? { label: "DATE D'EXÉCUTION", value: formatFr(data.executionDate) }
       : { label: "NATURE", value: operationLabel(data.operationType) },
@@ -297,44 +326,66 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   y -= 40;
 
   // ----------------------------------------------------------------
-  // Bloc "PAY TO" / RIB — toujours en bas de la partie haute
+  // Bloc règlement
+  //   • facture normale  → IBAN / BIC / référence
+  //   • facture acquittée → bandeau vert "Paiement reçu", pas d'IBAN
   // ----------------------------------------------------------------
   y -= 6;
-  draw("RÈGLEMENT PAR VIREMENT BANCAIRE", marginX, y, {
-    size: 7.5, font: bold, color: C_INK_400,
-  });
-  y -= 16;
+  if (data.paidAt) {
+    // Bandeau "Paiement reçu"
+    const bw = innerW;
+    const bh = 40;
+    const by = y - bh + 12;
+    page.drawRectangle({
+      x: marginX, y: by, width: bw, height: bh,
+      color: C_PAID_SOFT, borderColor: C_PAID, borderWidth: 0.8,
+    });
+    draw("PAIEMENT REÇU", marginX + 14, y - 4, {
+      size: 9, font: bold, color: C_PAID,
+    });
+    draw(
+      `Facture acquittée le ${formatFr(data.paidAt.slice(0, 10))} · Aucun règlement n'est dû.`,
+      marginX + 14, y - 20,
+      { size: 10, font: regular, color: C_INK_700 }
+    );
+    y -= bh + 18;
+  } else {
+    draw("RÈGLEMENT PAR VIREMENT BANCAIRE", marginX, y, {
+      size: 7.5, font: bold, color: C_INK_400,
+    });
+    y -= 16;
 
-  const payCol1X = marginX;
-  const payCol2X = marginX + 280;
+    const payCol1X = marginX;
+    const payCol2X = marginX + 280;
 
-  draw("Bénéficiaire", payCol1X, y, { size: 9, color: C_INK_500 });
-  draw(data.seller.displayName, payCol1X, y - 13, {
-    size: 11, font: bold, color: C_INK_900,
-  });
+    draw("Bénéficiaire", payCol1X, y, { size: 9, color: C_INK_500 });
+    draw(data.seller.displayName, payCol1X, y - 13, {
+      size: 11, font: bold, color: C_INK_900,
+    });
 
-  draw("BIC", payCol2X, y, { size: 9, color: C_INK_500 });
-  draw(data.seller.bic.toUpperCase(), payCol2X, y - 13, {
-    size: 11, font: bold, color: C_INK_900,
-  });
+    draw("BIC", payCol2X, y, { size: 9, color: C_INK_500 });
+    draw(data.seller.bic.toUpperCase(), payCol2X, y - 13, {
+      size: 11, font: bold, color: C_INK_900,
+    });
 
-  y -= 32;
+    y -= 32;
 
-  draw("IBAN", payCol1X, y, { size: 9, color: C_INK_500 });
-  draw(formatIban(data.seller.iban), payCol1X, y - 13, {
-    size: 11, font: bold, color: C_INK_900,
-  });
+    draw("IBAN", payCol1X, y, { size: 9, color: C_INK_500 });
+    draw(formatIban(data.seller.iban), payCol1X, y - 13, {
+      size: 11, font: bold, color: C_INK_900,
+    });
 
-  draw("Référence à rappeler", payCol2X, y, { size: 9, color: C_INK_500 });
-  draw(data.number, payCol2X, y - 13, {
-    size: 11, font: bold, color: C_INK_900,
-  });
+    draw("Référence à rappeler", payCol2X, y, { size: 9, color: C_INK_500 });
+    draw(data.number, payCol2X, y - 13, {
+      size: 11, font: bold, color: C_INK_900,
+    });
 
-  y -= 36;
+    y -= 36;
 
-  // Accent navy discret : un petit trait sous le bloc règlement
-  page.drawRectangle({ x: marginX, y: y + 2, width: 32, height: 2, color: C_NAVY });
-  y -= 18;
+    // Accent navy discret : un petit trait sous le bloc règlement
+    page.drawRectangle({ x: marginX, y: y + 2, width: 32, height: 2, color: C_NAVY });
+    y -= 18;
+  }
 
   // ----------------------------------------------------------------
   // Mentions légales URSSAF — pied de page, petit corps

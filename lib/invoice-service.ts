@@ -53,6 +53,8 @@ type InvoiceRow = {
   client_name: string | null;
   client_siren: string | null;
   client_address: string | null;
+  status?: string;
+  paid_at?: string | null;
 };
 
 export async function loadProfile(supabase: SupabaseClient, userId: string): Promise<Profile> {
@@ -80,12 +82,15 @@ export async function createInvoiceRow(
     payment_terms?: string | null;
     discount_terms?: string | null;
     due_on?: string | null;
+    /** Facture acquittée : déjà payée à l'émission. Statut = paid + paid_at = now. */
+    prepaid?: boolean;
   }
 ) {
   const number = await nextInvoiceNumber(supabase, userId);
   const quantity = input.quantity && input.quantity > 0 ? input.quantity : 1;
   const unit_price_cents =
     input.unit_price_cents ?? Math.round(input.amount_cents / quantity);
+  const prepaid = Boolean(input.prepaid);
   const { data, error } = await supabase
     .from("invoices")
     .insert({
@@ -103,10 +108,11 @@ export async function createInvoiceRow(
       operation_type: input.operation_type ?? "service",
       execution_date: input.execution_date ?? null,
       delivery_address: input.delivery_address ?? null,
-      payment_terms: input.payment_terms ?? null,
+      payment_terms: prepaid ? "Déjà réglée" : (input.payment_terms ?? null),
       discount_terms: input.discount_terms ?? "Néant",
       due_on: input.due_on ?? null,
-      status: "draft",
+      status: prepaid ? "paid" : "draft",
+      paid_at: prepaid ? new Date().toISOString() : null,
     })
     .select("*")
     .single();
@@ -118,6 +124,9 @@ export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): Invoi
   assertProfileReady(profile);
   const qty = Number(invoice.quantity) || 1;
   const unit = invoice.unit_price_cents ?? Math.round(invoice.amount_cents / qty);
+  // "Acquittée" si le statut est payé ET que la date de paiement est ≤ la date d'émission
+  // (marqueur d'une facture émise déjà payée, par opposition à un paiement reçu plus tard).
+  const paidAt = invoice.status === "paid" && invoice.paid_at ? invoice.paid_at : undefined;
   return {
     number: invoice.number,
     issuedOn: invoice.issued_on,
@@ -132,6 +141,7 @@ export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): Invoi
     deliveryAddress: invoice.delivery_address ?? undefined,
     paymentTerms: invoice.payment_terms ?? undefined,
     discountTerms: invoice.discount_terms ?? "Néant",
+    paidAt,
     seller: {
       displayName: profile.display_name!,
       businessName: profile.business_name ?? undefined,
