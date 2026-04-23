@@ -10,3 +10,4 @@ dist
 .git-old
 tsconfig.tsbuildinfo
 .git-zombie
+probe.ts

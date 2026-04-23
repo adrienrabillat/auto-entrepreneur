@@ -1,0 +1,45 @@
+"use client";
+
+import { Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+/**
+ * Small trash button rendered on draft rows in the invoices list.
+ * Uses a confirm() dialog (simple and mobile-friendly) and refreshes
+ * the server component on success.
+ */
+export function DeleteDraftButton({ id }: { id: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function onClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm("Supprimer définitivement ce brouillon ?")) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/invoices/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        alert(json.error || `Erreur ${res.status}`);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Supprimer le brouillon"
+      onClick={onClick}
+      disabled={busy}
+      className="grid h-9 w-9 place-items-center rounded-full text-ink-400 hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
+    >
+      <Trash2 size={16} />
+    </button>
+  );
+}

@@ -97,7 +97,7 @@ export function NewInvoiceForm({ gmailConnected }: { gmailConnected: boolean }) 
               id="operation_type"
               value={operationType}
               onChange={(e) => setOperationType(e.target.value as OpType)}
-              className="h-10 w-full rounded-md bg-white px-3 text-body shadow-hair focus:outline-none focus:ring-2 focus:ring-ink-400/70"
+              className="h-12 w-full rounded-xl bg-white px-3 text-body ring-1 ring-inset ring-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:shadow-glow transition"
             >
               <option value="service">Prestation de services</option>
               <option value="vente">Vente de biens</option>

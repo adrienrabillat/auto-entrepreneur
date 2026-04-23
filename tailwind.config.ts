@@ -1,7 +1,13 @@
 import type { Config } from "tailwindcss";
 
-// Notion-inspired palette. Notion's UI is mostly neutral grays with
-// a very specific brown/tan for accents. We keep it sober and airy.
+/**
+ * Modern, vibrant design system. We swapped the warm-cream Notion palette
+ * for a crisp slate + a saturated violet brand. The `ink` scale name is
+ * kept (so we don't have to rename class usages across the codebase) but
+ * its values are now a cool slate instead of the old warm browns.
+ *
+ * `brand` is the new accent used for CTAs, active nav states, highlights.
+ */
 const config: Config = {
   content: [
     "./app/**/*.{ts,tsx}",
@@ -11,7 +17,6 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // Notion uses a custom Inter-like stack. Inter is the closest free match.
         sans: [
           "Inter",
           "ui-sans-serif",
@@ -22,57 +27,90 @@ const config: Config = {
           "Arial",
           "sans-serif",
         ],
-        serif: ["Lora", "Georgia", "serif"],
+        display: ["Inter", "ui-sans-serif", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
-        // Notion gray scale
+        // Neutral = cool slate (keeps the `ink-*` class names used across the app)
         ink: {
-          50: "#F7F6F3", // page bg
-          100: "#F1EFEC",
-          200: "#E9E7E2",
-          300: "#DCD9D3",
-          400: "#B8B5AE",
-          500: "#9B9A97",
-          600: "#6B6B68",
-          700: "#37352F", // Notion body text
-          800: "#2F2E29",
-          900: "#191918",
+          50: "#F8FAFC",
+          100: "#F1F5F9",
+          200: "#E2E8F0",
+          300: "#CBD5E1",
+          400: "#94A3B8",
+          500: "#64748B",
+          600: "#475569",
+          700: "#334155",
+          800: "#1E293B",
+          900: "#0F172A",
         },
+        // Vibrant violet / indigo brand
+        brand: {
+          50: "#EEF0FF",
+          100: "#DEE1FF",
+          200: "#C3C8FF",
+          300: "#9AA1FF",
+          400: "#7A7DFF",
+          500: "#5B47FF",
+          600: "#4636E0",
+          700: "#372BB2",
+          800: "#2A218A",
+          900: "#1E1866",
+        },
+        // Pink accent (gradient second stop)
+        pink: {
+          400: "#FF6AD5",
+          500: "#F13FAF",
+        },
+        // Legacy alias so older code still compiles.
         accent: {
-          // Notion's "brown" accent (used sparingly)
-          50: "#F4EEE9",
-          100: "#E6D9CC",
-          500: "#9F6B53",
-          600: "#8A5A43",
-          700: "#6E4632",
+          50: "#EEF0FF",
+          100: "#DEE1FF",
+          500: "#5B47FF",
+          600: "#4636E0",
+          700: "#372BB2",
         },
-        success: { 50: "#EDF3EC", 600: "#4F7C4A" },
-        warn: { 50: "#FAF3DD", 600: "#8A6A1A" },
-        danger: { 50: "#FBEAE7", 600: "#B24A3E" },
+        success: { 50: "#ECFDF5", 100: "#D1FAE5", 500: "#10B981", 600: "#059669" },
+        warn:    { 50: "#FFFBEB", 100: "#FEF3C7", 500: "#F59E0B", 600: "#B45309" },
+        danger:  { 50: "#FEF2F2", 100: "#FEE2E2", 500: "#EF4444", 600: "#DC2626" },
       },
       fontSize: {
-        // Tighter headline rhythm like Notion
-        "display": ["40px", { lineHeight: "1.15", letterSpacing: "-0.02em", fontWeight: "700" }],
-        "h1": ["32px", { lineHeight: "1.2", letterSpacing: "-0.015em", fontWeight: "700" }],
-        "h2": ["22px", { lineHeight: "1.3", letterSpacing: "-0.01em", fontWeight: "600" }],
-        "h3": ["17px", { lineHeight: "1.4", fontWeight: "600" }],
-        "body": ["15px", { lineHeight: "1.55" }],
-        "small": ["13px", { lineHeight: "1.5" }],
-        "xs": ["12px", { lineHeight: "1.5" }],
+        display: ["44px", { lineHeight: "1.05", letterSpacing: "-0.03em", fontWeight: "800" }],
+        h1: ["32px", { lineHeight: "1.15", letterSpacing: "-0.02em", fontWeight: "800" }],
+        h2: ["22px", { lineHeight: "1.25", letterSpacing: "-0.01em", fontWeight: "700" }],
+        h3: ["17px", { lineHeight: "1.35", fontWeight: "600" }],
+        body: ["15px", { lineHeight: "1.55" }],
+        small: ["13px", { lineHeight: "1.5" }],
+        xs: ["12px", { lineHeight: "1.5" }],
       },
       borderRadius: {
-        DEFAULT: "6px",
-        md: "6px",
-        lg: "8px",
-        xl: "10px",
-        "2xl": "14px",
+        DEFAULT: "10px",
+        md: "10px",
+        lg: "14px",
+        xl: "18px",
+        "2xl": "22px",
+        "3xl": "28px",
       },
       boxShadow: {
-        // Notion uses extremely subtle shadows
-        soft: "0 1px 2px rgba(15, 15, 15, 0.04), 0 2px 6px rgba(15, 15, 15, 0.06)",
-        pop: "0 4px 12px rgba(15, 15, 15, 0.08), 0 12px 24px rgba(15, 15, 15, 0.08)",
-        hair: "inset 0 0 0 1px rgba(55, 53, 47, 0.09)",
+        hair: "inset 0 0 0 1px rgb(226 232 240 / 1)",
+        soft: "0 1px 2px rgb(15 23 42 / 0.04), 0 2px 10px rgb(15 23 42 / 0.04)",
+        pop: "0 10px 30px -10px rgb(91 71 255 / 0.25), 0 6px 14px -6px rgb(15 23 42 / 0.10)",
+        glow: "0 0 0 1px rgb(91 71 255 / 0.15), 0 12px 32px -8px rgb(91 71 255 / 0.35)",
+      },
+      backgroundImage: {
+        "brand-gradient": "linear-gradient(135deg,#5B47FF 0%,#8B5FFF 50%,#FF6AD5 100%)",
+        "brand-gradient-subtle": "linear-gradient(135deg,#EEF0FF 0%,#FCE8F6 100%)",
+        "page-aurora":
+          "radial-gradient(1200px 400px at 80% -10%, rgba(91,71,255,0.12), transparent 60%), radial-gradient(900px 300px at -10% 10%, rgba(255,106,213,0.10), transparent 60%)",
+      },
+      keyframes: {
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(6px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+      },
+      animation: {
+        "fade-in-up": "fade-in-up 240ms ease-out both",
       },
     },
   },

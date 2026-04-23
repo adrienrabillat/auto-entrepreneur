@@ -6,10 +6,11 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     <input
       ref={ref}
       className={cn(
-        "h-10 w-full rounded-md bg-white px-3 text-body text-ink-800 shadow-hair",
+        "h-12 w-full rounded-xl bg-white px-4 text-body text-ink-900 shadow-hair",
         "placeholder:text-ink-400",
-        "focus:outline-none focus:ring-2 focus:ring-ink-400/70",
+        "focus:outline-none focus:ring-2 focus:ring-brand-400 focus:shadow-glow",
         "disabled:bg-ink-100 disabled:text-ink-500",
+        "transition-shadow",
         className
       )}
       {...props}
@@ -24,9 +25,10 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
       ref={ref}
       rows={rows}
       className={cn(
-        "w-full rounded-md bg-white px-3 py-2 text-body text-ink-800 shadow-hair",
+        "w-full rounded-xl bg-white px-4 py-3 text-body text-ink-900 shadow-hair",
         "placeholder:text-ink-400",
-        "focus:outline-none focus:ring-2 focus:ring-ink-400/70",
+        "focus:outline-none focus:ring-2 focus:ring-brand-400 focus:shadow-glow",
+        "transition-shadow",
         className
       )}
       {...props}
@@ -37,7 +39,7 @@ Textarea.displayName = "Textarea";
 
 export function Label({ children, htmlFor, hint }: { children: React.ReactNode; htmlFor?: string; hint?: string }) {
   return (
-    <label htmlFor={htmlFor} className="block text-small font-medium text-ink-700 mb-1.5">
+    <label htmlFor={htmlFor} className="block text-small font-semibold text-ink-700 mb-1.5">
       {children}
       {hint ? <span className="ml-1.5 text-ink-500 font-normal">· {hint}</span> : null}
     </label>

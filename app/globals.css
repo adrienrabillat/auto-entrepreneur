@@ -13,27 +13,55 @@
   }
   body {
     @apply font-sans text-body;
+    /* Luminous aurora background. It lives behind all pages and gives the app
+       a bit of depth without affecting readability (the bright blobs are in
+       the top corners and fade to transparent quickly). */
+    background-color: #F8FAFC;
+    background-image:
+      radial-gradient(1000px 400px at 85% -10%, rgba(91,71,255,0.10), transparent 60%),
+      radial-gradient(800px 300px at -5% 5%, rgba(255,106,213,0.08), transparent 60%);
+    background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
   }
-  h1 { @apply text-h1; }
-  h2 { @apply text-h2; }
-  h3 { @apply text-h3; }
+  h1 { @apply text-h1 text-ink-900; }
+  h2 { @apply text-h2 text-ink-900; }
+  h3 { @apply text-h3 text-ink-900; }
   ::selection {
-    background: rgba(55, 53, 47, 0.15);
+    background: rgba(91, 71, 255, 0.18);
   }
 }
 
 @layer components {
-  /* Notion-style "card" surface */
+  /* Elevated white card — the default container for content. */
   .surface {
-    @apply bg-white rounded-xl shadow-hair;
+    @apply bg-white rounded-2xl shadow-soft;
   }
-  /* Hairline divider like Notion's lists */
+  /* Hairline divider */
   .divider {
     @apply border-t border-ink-200;
   }
-  /* Subtle hover surface used on list rows */
+  /* Subtle row hover for list items */
   .row-hover {
-    @apply hover:bg-ink-100/60 transition-colors;
+    @apply hover:bg-ink-50 transition-colors;
   }
+  /* Gradient text for headlines / brand moments */
+  .text-gradient-brand {
+    background: linear-gradient(135deg, #5B47FF 0%, #8B5FFF 55%, #FF6AD5 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* Hide number input spinners across browsers */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] { -moz-appearance: textfield; }
+
+/* Mobile: give the scrollable main area room for the bottom nav */
+@media (max-width: 767px) {
+  main { padding-bottom: 96px; }
 }

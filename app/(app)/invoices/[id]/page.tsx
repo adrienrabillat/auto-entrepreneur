@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/card";
 import { formatDate, formatEUR } from "@/lib/format";
 import { InvoiceActions } from "./actions";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -31,30 +31,37 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <Link href="/invoices" className="text-small text-ink-500 hover:text-ink-800">
-          ← Factures
+        <Link
+          href="/invoices"
+          className="inline-flex items-center gap-1 text-small text-ink-500 hover:text-brand-600"
+        >
+          <ArrowLeft size={14} /> Factures
         </Link>
-        <div className="mt-3 flex items-start justify-between gap-4">
+        <div className="mt-3 flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="text-small text-ink-500">Facture</div>
-            <h1 className="text-h1 tabular-nums">{invoice.number}</h1>
+            <h1 className="text-h1 tabular-nums text-gradient-brand">{invoice.number}</h1>
           </div>
           <StatusBadge status={invoice.status} />
         </div>
       </div>
 
+      {/* Hero amount card */}
+      <div className="rounded-3xl p-6 md:p-7 bg-brand-gradient text-white shadow-pop">
+        <div className="text-small text-white/80">Montant</div>
+        <div className="mt-1 text-display font-extrabold tabular-nums">{formatEUR(invoice.amount_cents)}</div>
+        <div className="mt-2 text-small text-white/85">
+          Pour {invoice.client_name || invoice.client_email}
+        </div>
+      </div>
+
       <div className="surface p-6 space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-small">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-small">
           <Field label="Client">{invoice.client_name || invoice.client_email}</Field>
           <Field label="Email">{invoice.client_email}</Field>
           <Field label="Émise le">{formatDate(invoice.issued_on)}</Field>
           <Field label="Envoyée le">{invoice.sent_at ? formatDate(invoice.sent_at) : "—"}</Field>
           <Field label="Payée le">{invoice.paid_at ? formatDate(invoice.paid_at) : "—"}</Field>
-          <Field label="Montant">
-            <span className="text-body font-semibold text-ink-900 tabular-nums">
-              {formatEUR(invoice.amount_cents)}
-            </span>
-          </Field>
         </div>
         <div>
           <div className="text-small text-ink-500 mb-1">Description</div>
@@ -65,21 +72,21 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
       </div>
 
       <div className="surface p-0 overflow-hidden">
-        <div className="px-4 py-2 text-small text-ink-500 border-b border-ink-200 flex items-center justify-between">
-          <span>Aperçu PDF</span>
+        <div className="px-4 py-3 text-small border-b border-ink-100 flex items-center justify-between">
+          <span className="font-semibold text-ink-700">Aperçu PDF</span>
           <a
-            className="text-small text-ink-700 hover:text-ink-900"
+            className="inline-flex items-center gap-1 text-small font-semibold text-brand-600 hover:text-brand-700"
             href={`/api/invoices/${invoice.id}/pdf`}
             target="_blank"
             rel="noreferrer"
           >
-            Ouvrir ↗
+            Ouvrir <ExternalLink size={14} />
           </a>
         </div>
         <iframe
           src={`/api/invoices/${invoice.id}/pdf`}
           title={`Facture ${invoice.number}`}
-          className="w-full h-[600px] bg-ink-100"
+          className="w-full h-[600px] bg-ink-50"
         />
       </div>
     </div>
@@ -90,7 +97,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div>
       <div className="text-ink-500">{label}</div>
-      <div className="text-ink-800">{children}</div>
+      <div className="text-ink-800 font-medium">{children}</div>
     </div>
   );
 }

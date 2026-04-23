@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { Badge } from "@/components/ui/card";
+import { Badge, StatCard } from "@/components/ui/card";
 import { monthLabel, formatEUR, formatDate } from "@/lib/format";
 import { RunMyDeclaration } from "./run-button";
+import { CalendarClock, TrendingUp } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -50,12 +51,20 @@ export default async function DeclarationsPage() {
     .maybeSingle();
   const day = profile?.urssaf_declaration_day ?? 3;
 
+  const nextMonthLabel = monthLabel(
+    currentPeriodMonth === 12 ? currentPeriodYear + 1 : currentPeriodYear,
+    currentPeriodMonth === 12 ? 1 : currentPeriodMonth + 1
+  )
+    .split(" ")
+    .slice(0, 2)
+    .join(" ");
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-h1">Déclarations URSSAF</h1>
+        <h1 className="text-h1">Déclarations <span className="text-gradient-brand">URSSAF</span></h1>
         <p className="mt-1 text-small text-ink-500">
-          Chaque mois, le <strong>{day}</strong> au matin, l&apos;app déclare automatiquement ton chiffre
+          Chaque mois, le <strong className="text-ink-900">{day}</strong> au matin, l&apos;app déclare automatiquement ton chiffre
           d&apos;affaires encaissé du mois précédent.
           {process.env.URSSAF_LIVE === "true" ? null : (
             <span className="ml-1 italic">Mode test (mock) — les déclarations ne sont pas envoyées à l&apos;URSSAF tant que le mode live n&apos;est pas activé.</span>
@@ -63,57 +72,61 @@ export default async function DeclarationsPage() {
         </p>
       </div>
 
-      <div className="surface p-5">
-        <div className="text-small text-ink-500">Mois en cours</div>
-        <div className="mt-1 text-h2 text-ink-900">{monthLabel(currentPeriodYear, currentPeriodMonth)}</div>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <div className="text-small text-ink-500">Encaissé jusqu&apos;ici</div>
-            <div className="text-h2 tabular-nums text-success-600">{formatEUR(runningTotal)}</div>
-          </div>
-          <div className="flex md:items-end">
-            <p className="text-small text-ink-500">
-              Ce montant sera déclaré automatiquement le {day} {monthLabel(
-                currentPeriodMonth === 12 ? currentPeriodYear + 1 : currentPeriodYear,
-                currentPeriodMonth === 12 ? 1 : currentPeriodMonth + 1
-              ).split(" ").slice(0, 2).join(" ")}.
-            </p>
-          </div>
-        </div>
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+        <StatCard
+          label={`Encaissé en ${monthLabel(currentPeriodYear, currentPeriodMonth)}`}
+          value={formatEUR(runningTotal)}
+          accent="success"
+          icon={<TrendingUp size={16} />}
+          hint={`Sera déclaré le ${day} ${nextMonthLabel}`}
+        />
+        <StatCard
+          label="Prochaine déclaration"
+          value={`${day} ${nextMonthLabel}`}
+          accent="brand"
+          icon={<CalendarClock size={16} />}
+          hint="Automatique, tu n'as rien à faire"
+        />
       </div>
 
       <section>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-h2">Historique</h2>
           <RunMyDeclaration />
         </div>
         <div className="surface overflow-hidden">
           {decls.length === 0 ? (
-            <div className="p-10 text-center text-small text-ink-500">Aucune déclaration pour le moment.</div>
+            <div className="p-10 text-center">
+              <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand-gradient-subtle">
+                <CalendarClock className="text-brand-600" size={22} />
+              </div>
+              <p className="text-body font-semibold text-ink-900">Aucune déclaration pour le moment.</p>
+              <p className="mt-1 text-small text-ink-500">L&apos;historique apparaîtra dès la première déclaration.</p>
+            </div>
           ) : (
             <ul>
               {decls.map((d) => (
                 <li
                   key={d.id}
-                  className="flex items-center gap-4 px-4 py-3 border-b border-ink-200 last:border-0"
+                  className="flex items-center gap-4 px-4 py-4 md:px-5 border-b border-ink-100 last:border-0"
                 >
-                  <div className="w-40 text-small capitalize text-ink-700">
-                    {monthLabel(d.period_year, d.period_month)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold capitalize text-ink-900">
+                        {monthLabel(d.period_year, d.period_month)}
+                      </span>
                       <StatusBadge status={d.status} />
-                      {d.urssaf_reference ? (
-                        <span className="text-xs text-ink-500 font-mono truncate">{d.urssaf_reference}</span>
-                      ) : null}
                     </div>
+                    {d.urssaf_reference ? (
+                      <div className="mt-0.5 text-xs text-ink-500 font-mono truncate">{d.urssaf_reference}</div>
+                    ) : null}
                     {d.error_message ? (
                       <div className="text-xs text-danger-600 mt-0.5 truncate">{d.error_message}</div>
                     ) : d.submitted_at ? (
                       <div className="text-xs text-ink-500 mt-0.5">Envoyée le {formatDate(d.submitted_at)}</div>
                     ) : null}
                   </div>
-                  <div className="text-body font-medium tabular-nums">{formatEUR(d.total_cents)}</div>
+                  <div className="text-body font-bold tabular-nums text-ink-900">{formatEUR(d.total_cents)}</div>
                 </li>
               ))}
             </ul>
