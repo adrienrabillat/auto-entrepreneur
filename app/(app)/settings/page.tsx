@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { SettingsForm } from "./form";
 import { Badge } from "@/components/ui/card";
 import { ReconnectGmailButton } from "./reconnect-gmail";
+import { PasskeyManager } from "./passkey-manager";
 import { Mail, LogOut } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,8 @@ export default async function SettingsPage() {
           <ReconnectGmailButton />
         </div>
       </div>
+
+      <PasskeyManager />
 
       <SettingsForm
         defaultValues={{
