@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { StatCard } from "@/components/ui/card";
 import { formatDate, formatEUR } from "@/lib/format";
-import { Plus, UserPlus, Receipt, Download } from "lucide-react";
+import { Plus, UserPlus, Download } from "lucide-react";
 import { HeroAmount } from "./hero-amount";
 import { initialsFrom } from "@/lib/initials";
 
@@ -124,10 +124,6 @@ export default async function DashboardPage() {
             <Link href="/clients/new" className="pill pill-ghost">
               <UserPlus size={16} />
               Ajouter un client
-            </Link>
-            <Link href="/declarations" className="pill pill-ghost">
-              <Receipt size={16} />
-              URSSAF
             </Link>
             <a
               href="/api/export/xlsx"

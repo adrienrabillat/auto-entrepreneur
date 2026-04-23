@@ -6,6 +6,41 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/browser";
+import {
+  User,
+  MapPin,
+  Landmark,
+  FileBadge,
+  ShieldCheck,
+  Scale,
+  CalendarClock,
+} from "lucide-react";
+
+/**
+ * En-tête de section du formulaire Profil — icône ronde colorée + titre + sous-titre.
+ * Harmonise le look avec les cartes Gmail et Apparence de la page settings.
+ */
+function SectionHeader({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <h2 className="text-h3 text-ink-900">{title}</h2>
+        {description ? <p className="text-small text-ink-500 mt-0.5">{description}</p> : null}
+      </div>
+    </div>
+  );
+}
 
 type Values = {
   display_name: string;
@@ -80,7 +115,11 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <Card className="space-y-5">
-        <h2 className="text-h3 text-ink-900">Identité</h2>
+        <SectionHeader
+          icon={<User size={18} />}
+          title="Identité"
+          description="Ce qui apparaît en haut de tes factures."
+        />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2">
             <Label htmlFor="display_name">Nom & prénom</Label>
@@ -92,7 +131,7 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
               id="legal_form"
               value={v.legal_form}
               onChange={(e) => setV({ ...v, legal_form: e.target.value as Values["legal_form"] })}
-              className="h-10 w-full rounded-md bg-white px-3 text-body shadow-hair focus:outline-none focus:ring-2 focus:ring-ink-400/70"
+              className="h-10 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
             >
               <option value="EI">EI (Entrepreneur Individuel)</option>
               <option value="EURL">EURL</option>
@@ -141,7 +180,11 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
       </Card>
 
       <Card className="space-y-5">
-        <h2 className="text-h3 text-ink-900">Coordonnées</h2>
+        <SectionHeader
+          icon={<MapPin size={18} />}
+          title="Coordonnées"
+          description="Adresse postale, téléphone et site web."
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <Label htmlFor="address_line1">Adresse</Label>
@@ -172,10 +215,11 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
       </Card>
 
       <Card className="space-y-5">
-        <h2 className="text-h3 text-ink-900">Coordonnées bancaires</h2>
-        <p className="text-small text-ink-500">
-          Obligatoires pour émettre une facture. Elles apparaissent sur le PDF dans le bloc &laquo;&nbsp;Règlement&nbsp;&raquo;.
-        </p>
+        <SectionHeader
+          icon={<Landmark size={18} />}
+          title="Coordonnées bancaires"
+          description={"Obligatoires pour émettre une facture — apparaissent dans le bloc « Règlement » du PDF."}
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="iban">IBAN</Label>
@@ -189,10 +233,11 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
       </Card>
 
       <Card className="space-y-5">
-        <h2 className="text-h3 text-ink-900">Registres pros (RCS / RM)</h2>
-        <p className="text-small text-ink-500">
-          Obligatoire pour les <strong>commerçants</strong> (RCS) et les <strong>artisans</strong> (RM). Laisse vide si ton activité est libérale pure.
-        </p>
+        <SectionHeader
+          icon={<FileBadge size={18} />}
+          title="Registres pros (RCS / RM)"
+          description="Obligatoire pour les commerçants (RCS) et les artisans (RM). Laisse vide si ton activité est libérale pure."
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="rcs_number" hint="commerçants — souvent = SIREN">Numéro RCS</Label>
@@ -214,10 +259,11 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
       </Card>
 
       <Card className="space-y-5">
-        <h2 className="text-h3 text-ink-900">Assurance professionnelle</h2>
-        <p className="text-small text-ink-500">
-          Mention URSSAF obligatoire quand ton activité y est soumise (artisanat bâtiment, conseil, santé, etc.).
-        </p>
+        <SectionHeader
+          icon={<ShieldCheck size={18} />}
+          title="Assurance professionnelle"
+          description="Mention obligatoire quand ton activité y est soumise (bâtiment, conseil, santé, etc.)."
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="insurance_name" hint="optionnel">Assureur</Label>
@@ -231,12 +277,11 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
       </Card>
 
       <Card className="space-y-5">
-        <h2 className="text-h3 text-ink-900">Médiation de la consommation</h2>
-        <p className="text-small text-ink-500">
-          Obligatoire si tu factures des particuliers (art. L616-1 du Code de la consommation).
-          Laisse vide tant que tu n&apos;as pas adhéré à un médiateur — aucune mention n&apos;apparaîtra
-          sur les factures.
-        </p>
+        <SectionHeader
+          icon={<Scale size={18} />}
+          title="Médiation de la consommation"
+          description="Obligatoire si tu factures des particuliers (art. L616-1 Code de la conso). Laisse vide tant que tu n'as pas adhéré à un médiateur — aucune mention n'apparaîtra sur les factures."
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="mediator_name" hint="ex: CM2C, AME Conso, Medicys…">Nom du médiateur</Label>
@@ -261,14 +306,18 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
       </Card>
 
       <Card className="space-y-5">
-        <h2 className="text-h3 text-ink-900">URSSAF</h2>
+        <SectionHeader
+          icon={<CalendarClock size={18} />}
+          title="URSSAF"
+          description="Chaque mois, l'app déclare automatiquement ton CA encaissé du mois précédent."
+        />
         <div>
           <Label htmlFor="urssaf_declaration_day" hint="entre 1 et 28">Jour de la déclaration URSSAF</Label>
           <select
             id="urssaf_declaration_day"
             value={v.urssaf_declaration_day}
             onChange={(e) => setV({ ...v, urssaf_declaration_day: Number(e.target.value) })}
-            className="h-12 w-full rounded-xl bg-white px-4 text-body text-ink-900 shadow-hair focus:outline-none focus:ring-2 focus:ring-brand-400 focus:shadow-glow transition-shadow appearance-none"
+            className="h-12 w-full rounded-xl bg-surface px-4 text-body text-ink-900 shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
           >
             {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
               <option key={d} value={d}>
@@ -276,9 +325,6 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-ink-500">
-            Ce jour-là chaque mois, l&apos;app déclare automatiquement le CA encaissé du mois précédent.
-          </p>
         </div>
 
         {error ? <p className="text-small text-danger-600">{error}</p> : null}

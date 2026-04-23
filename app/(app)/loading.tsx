@@ -1,21 +1,23 @@
-import { HeaderSkeleton, ListRowSkeleton, StatCardSkeleton } from "@/components/ui/skeleton";
+import {
+  HeroCardSkeleton,
+  ListRowSkeleton,
+  StatCardSkeleton,
+} from "@/components/ui/skeleton";
 
 /**
- * Shared loading skeleton for every page in the authenticated app group.
- * Next.js renders this immediately on client-side navigation while the
- * destination server component streams in, so the user always gets visual
- * feedback instead of staring at a frozen screen.
+ * Skeleton partagé entre toutes les pages du groupe (app).
+ * Rendu immédiatement pendant la navigation client — le user voit la structure
+ * Revolut (hero + stats + liste) pendant que le server component stream.
  */
 export default function AppLoading() {
   return (
-    <div className="space-y-8">
-      <HeaderSkeleton />
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
-        <StatCardSkeleton />
+    <div className="space-y-5 animate-fade-in">
+      <HeroCardSkeleton />
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
         <StatCardSkeleton />
         <StatCardSkeleton />
       </div>
-      <div className="surface overflow-hidden">
+      <div className="surface p-2">
         <ListRowSkeleton />
         <ListRowSkeleton />
         <ListRowSkeleton />
