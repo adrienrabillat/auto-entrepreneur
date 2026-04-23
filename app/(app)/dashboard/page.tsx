@@ -90,7 +90,7 @@ export default async function DashboardPage() {
 
         <div className="relative">
           <div className="inline-flex items-center gap-2 text-small text-ink-500">
-            <span className="h-1.5 w-1.5 rounded-full bg-success-500 animate-pulse" aria-hidden />
+            <span className="h-1.5 w-1.5 rounded-full bg-success-500 animate-pulse-dot" aria-hidden />
             Encaissé ce mois · {monthLabel}
           </div>
 

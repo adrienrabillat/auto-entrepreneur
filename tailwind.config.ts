@@ -149,7 +149,7 @@ const config: Config = {
           "70%": { opacity: "1", transform: "scale(1.05)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
-        pulse: {
+        "pulse-dot": {
           "0%":   { boxShadow: "0 0 0 0 rgb(var(--c-green) / 0.5)" },
           "70%":  { boxShadow: "0 0 0 10px rgb(var(--c-green) / 0)" },
           "100%": { boxShadow: "0 0 0 0 rgb(var(--c-green) / 0)" },
@@ -159,7 +159,10 @@ const config: Config = {
         "fade-in-up": "fade-in-up 280ms ease-out both",
         "fade-in":    "fade-in 200ms ease-out both",
         "pop-in":     "pop-in 420ms cubic-bezier(.34,1.56,.64,1) both",
-        pulse:        "pulse 2.2s ease-out infinite",
+        // Laisse Tailwind garder son `animate-pulse` par défaut (opacity 0.5 → 1)
+        // pour les skeletons. Notre onde verte est désormais exposée comme
+        // `animate-pulse-dot` et n'est utilisée QUE sur le dot "Encaissé ce mois".
+        "pulse-dot": "pulse-dot 2.2s ease-out infinite",
       },
     },
   },
