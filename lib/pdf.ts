@@ -323,7 +323,25 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     size: 16, font: bold, color: C_INK_900, align: "right",
   });
 
-  y -= 40;
+  y -= 24;
+
+  // Ligne "Solde dû" — toujours affichée. Passe à 0 quand la facture est
+  // acquittée (= paiement déjà reçu), colorée en vert pour éviter toute
+  // ambiguïté avec le client.
+  const paid = Boolean(data.paidAt);
+  draw("Solde dû", totalsLeft, y, {
+    size: 10, font: bold, color: paid ? C_PAID : C_INK_900,
+  });
+  draw(paid ? "0,00 €" : formatCurrency(data.amountCents, data.currency), totalX, y, {
+    size: 12, font: bold, color: paid ? C_PAID : C_INK_900, align: "right",
+  });
+  if (paid) {
+    draw("· Facture acquittée", totalsLeft + 55, y, {
+      size: 9, font: italic, color: C_PAID,
+    });
+  }
+
+  y -= 28;
 
   // ----------------------------------------------------------------
   // Bloc règlement

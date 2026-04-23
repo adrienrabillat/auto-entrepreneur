@@ -259,8 +259,7 @@ export function NewInvoiceForm({
           due_on: dueOn || null,
           discount_terms: discountTerms.trim() || "Néant",
           prepaid,
-          // Une facture acquittée ne s'envoie pas via Gmail — on émet le PDF, point.
-          send: action === "send" && !prepaid,
+          send: action === "send",
         }),
       });
       const payload = await res.json();
@@ -269,7 +268,7 @@ export function NewInvoiceForm({
       setSuccess({
         id: payload.id,
         number: payload.number,
-        sent: action === "send" && !prepaid,
+        sent: action === "send",
         prepaid,
         clientLabel,
         clientEmail: email,
@@ -673,11 +672,11 @@ export function NewInvoiceForm({
             <Button variant="secondary" type="button" onClick={() => submit("save")} disabled={busy !== null}>
               {busy === "save" ? "Enregistrement…" : "Brouillon"}
             </Button>
-            <Button type="button" onClick={() => submit("send")} disabled={busy !== null || (kind === "to_pay" && !gmailConnected)}>
+            <Button type="button" onClick={() => submit("send")} disabled={busy !== null || !gmailConnected}>
               {busy === "send" ? (
-                <><Loader2 size={14} className="animate-spin" /> {kind === "prepaid" ? "Création…" : "Envoi…"}</>
+                <><Loader2 size={14} className="animate-spin" /> Envoi…</>
               ) : (
-                <>{kind === "prepaid" ? <><BadgeCheck size={14} /> Émettre la facture</> : <><Send size={14} /> Créer & envoyer</>}</>
+                <><Send size={14} /> {kind === "prepaid" ? "Envoyer le justificatif" : "Créer & envoyer"}</>
               )}
             </Button>
           </div>

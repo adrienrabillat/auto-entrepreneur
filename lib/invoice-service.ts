@@ -204,25 +204,51 @@ export async function sendInvoice(
     .upload(storagePath, pdfBytes, { contentType: "application/pdf", upsert: true });
   if (upErr) throw upErr;
 
-  const subject = `Facture ${invoice.number} — ${profile.display_name}`;
+  const alreadyPaid = invoice.status === "paid" || Boolean(invoice.paid_at);
   const prettyAmount = formatEUR(invoice.amount_cents);
-  const text = [
-    `Bonjour${invoice.client_name ? " " + invoice.client_name : ""},`,
-    ``,
-    `Tu trouveras en pièce jointe la facture ${invoice.number} d'un montant de ${prettyAmount}.`,
-    ``,
-    `Objet : ${invoice.description}`,
-    ``,
-    `Merci !`,
-    profile.display_name,
-    profile.metier ?? "",
-  ].join("\n");
-  const html = `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-    <p>Bonjour${invoice.client_name ? " " + escapeHtml(invoice.client_name) : ""},</p>
-    <p>Tu trouveras en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
-    <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
-    <p>Merci !<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span></p>
-  </div>`;
+
+  const subject = alreadyPaid
+    ? `Facture acquittée ${invoice.number} — ${profile.display_name}`
+    : `Facture ${invoice.number} — ${profile.display_name}`;
+
+  const text = alreadyPaid
+    ? [
+        `Bonjour${invoice.client_name ? " " + invoice.client_name : ""},`,
+        ``,
+        `Voici en pièce jointe la facture ${invoice.number} (${prettyAmount}) — acquittée, aucun règlement n'est dû.`,
+        ``,
+        `Objet : ${invoice.description}`,
+        ``,
+        `Merci pour la confiance,`,
+        profile.display_name,
+        profile.metier ?? "",
+      ].join("\n")
+    : [
+        `Bonjour${invoice.client_name ? " " + invoice.client_name : ""},`,
+        ``,
+        `Tu trouveras en pièce jointe la facture ${invoice.number} d'un montant de ${prettyAmount}.`,
+        ``,
+        `Objet : ${invoice.description}`,
+        ``,
+        `Merci !`,
+        profile.display_name,
+        profile.metier ?? "",
+      ].join("\n");
+
+  const html = alreadyPaid
+    ? `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
+        <p>Bonjour${invoice.client_name ? " " + escapeHtml(invoice.client_name) : ""},</p>
+        <p>Voici en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
+        <p style="background:#ECF8EE;border:1px solid #16A34A;border-radius:8px;padding:10px 14px;color:#14532D;"><strong>Facture acquittée · Solde dû : 0,00 €</strong><br/>Aucun règlement n'est dû.</p>
+        <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
+        <p>Merci pour la confiance,<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span></p>
+      </div>`
+    : `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
+        <p>Bonjour${invoice.client_name ? " " + escapeHtml(invoice.client_name) : ""},</p>
+        <p>Tu trouveras en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
+        <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
+        <p>Merci !<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span></p>
+      </div>`;
 
   await sendGmail({
     refreshToken: profile.gmail_refresh_token,
@@ -236,9 +262,16 @@ export async function sendInvoice(
     attachment: { filename, contentType: "application/pdf", content: pdfBytes },
   });
 
+  // Si acquittée : on ne redescend PAS le statut à "sent" (sinon on perd
+  // l'info payé). On garde status=paid, on note juste sent_at + pdf_path.
+  const patch: Record<string, unknown> = {
+    sent_at: new Date().toISOString(),
+    pdf_path: storagePath,
+  };
+  if (!alreadyPaid) patch.status = "sent";
   const { error: updErr } = await supabase
     .from("invoices")
-    .update({ status: "sent", sent_at: new Date().toISOString(), pdf_path: storagePath })
+    .update(patch)
     .eq("id", invoice.id);
   if (updErr) throw updErr;
 

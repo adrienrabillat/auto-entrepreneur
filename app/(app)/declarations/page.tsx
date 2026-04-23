@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { Badge, StatCard } from "@/components/ui/card";
 import { monthLabel, formatEUR, formatDate } from "@/lib/format";
 import { RunMyDeclaration } from "./run-button";
+import { ExportExcelButton } from "@/components/ui/export-excel";
 import { CalendarClock, TrendingUp } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +98,10 @@ export default async function DeclarationsPage() {
       <section>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-h2">Historique</h2>
-          <RunMyDeclaration />
+          <div className="flex items-center gap-2 flex-wrap">
+            <ExportExcelButton />
+            <RunMyDeclaration />
+          </div>
         </div>
         <div className="surface overflow-hidden">
           {decls.length === 0 ? (

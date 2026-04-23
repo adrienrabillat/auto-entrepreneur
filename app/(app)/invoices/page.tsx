@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate, formatEUR } from "@/lib/format";
 import { FileText, Plus } from "lucide-react";
 import { DeleteDraftButton } from "./row-delete";
+import { ExportExcelButton } from "@/components/ui/export-excel";
 
 export const dynamic = "force-dynamic";
 
@@ -53,12 +54,15 @@ export default async function InvoicesPage({
             Historique de tes factures, avec statut d&apos;envoi et de paiement.
           </p>
         </div>
-        <Link href="/invoices/new" className="sm:w-auto">
-          <Button size="lg" className="w-full sm:w-auto">
-            <Plus size={18} />
-            Nouvelle facture
-          </Button>
-        </Link>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <ExportExcelButton />
+          <Link href="/invoices/new" className="sm:w-auto">
+            <Button size="lg" className="w-full sm:w-auto">
+              <Plus size={18} />
+              Nouvelle facture
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <nav className="flex gap-2 text-small overflow-x-auto -mx-1 px-1 pb-1">
