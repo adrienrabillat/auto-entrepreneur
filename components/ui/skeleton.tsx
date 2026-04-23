@@ -69,3 +69,59 @@ export function HeaderSkeleton({ withCta = false }: { withCta?: boolean }) {
     </div>
   );
 }
+
+/** Segmented filter en pills (factures : Toutes / Brouillons / En attente / Payées). */
+export function SegmentedSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div className="inline-flex bg-surface-2 p-1 rounded-full">
+      {Array.from({ length: count }).map((_, i) => (
+        <Skeleton key={i} className="h-8 w-24 rounded-full mx-0.5" />
+      ))}
+    </div>
+  );
+}
+
+/** Carte de formulaire : en-tête (icône + titre) + lignes d'inputs. */
+export function FormCardSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="surface p-5 md:p-7 space-y-5">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-11 w-11 rounded-2xl" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="h-3 w-56" />
+        </div>
+      </div>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="space-y-1.5">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-12 w-full rounded-xl" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Stepper 3 étapes (wizard Nouvelle facture). */
+export function StepperSkeleton() {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Skeleton className="h-7 w-7 rounded-full" />
+          <Skeleton className="h-3 w-20" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Back link + titre compact (pages détail + formulaires). */
+export function BackLinkHeaderSkeleton() {
+  return (
+    <div className="space-y-3">
+      <Skeleton className="h-3 w-24" />
+      <Skeleton className="h-8 w-64" />
+    </div>
+  );
+}
