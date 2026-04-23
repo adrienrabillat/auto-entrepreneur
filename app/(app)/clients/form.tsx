@@ -122,7 +122,6 @@ export function ClientForm({
                 required
                 value={v.company_name}
                 onChange={(e) => setV({ ...v, company_name: e.target.value })}
-                placeholder="Acme SARL"
               />
             </div>
             <div>
@@ -132,7 +131,6 @@ export function ClientForm({
                 inputMode="numeric"
                 value={v.siren}
                 onChange={(e) => setV({ ...v, siren: e.target.value.replace(/\D/g, "").slice(0, 9) })}
-                placeholder="123456789"
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -176,7 +174,7 @@ export function ClientForm({
             <Input id="address_line1" value={v.address_line1} onChange={(e) => setV({ ...v, address_line1: e.target.value })} />
           </div>
           <div className="md:col-span-2">
-            <Input aria-label="Complément" value={v.address_line2} onChange={(e) => setV({ ...v, address_line2: e.target.value })} placeholder="Complément (optionnel)" />
+            <Input aria-label="Complément" value={v.address_line2} onChange={(e) => setV({ ...v, address_line2: e.target.value })} />
           </div>
           <div>
             <Label htmlFor="postal_code">Code postal</Label>

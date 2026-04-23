@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { Badge, StatCard } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatEUR } from "@/lib/format";
@@ -22,20 +23,28 @@ type Invoice = {
 
 export default async function DashboardPage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const yearStart = new Date(now.getFullYear(), 0, 1);
 
-  const { data: invoices = [] } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("user_id", user!.id)
-    .order("issued_on", { ascending: false })
-    .limit(100);
-
-  const all = (invoices ?? []) as Invoice[];
+  // Run the two Supabase reads in parallel — neither depends on the other.
+  const [invoicesRes, profileRes] = await Promise.all([
+    supabase
+      .from("invoices")
+      .select("*")
+      .eq("user_id", user!.id)
+      .order("issued_on", { ascending: false })
+      .limit(100),
+    supabase
+      .from("profiles")
+      .select("display_name, metier")
+      .eq("id", user!.id)
+      .maybeSingle(),
+  ]);
+  const all = (invoicesRes.data ?? []) as Invoice[];
+  const profile = profileRes.data;
 
   const monthCollected = all
     .filter((i) => i.paid_at && new Date(i.paid_at) >= monthStart)
@@ -50,12 +59,6 @@ export default async function DashboardPage() {
     .reduce((s, i) => s + i.amount_cents, 0);
 
   const recent = all.slice(0, 6);
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name, metier")
-    .eq("id", user!.id)
-    .maybeSingle();
 
   const firstName = profile?.display_name?.split(" ")[0] ?? "";
 

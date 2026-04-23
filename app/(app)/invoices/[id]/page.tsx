@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { Badge } from "@/components/ui/card";
 import { formatDate, formatEUR } from "@/lib/format";
 import { InvoiceActions } from "./actions";
@@ -10,23 +11,25 @@ export const dynamic = "force-dynamic";
 
 export default async function InvoiceDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("*")
-    .eq("id", params.id)
-    .eq("user_id", user!.id)
-    .maybeSingle();
+  // Fetch the invoice and the Gmail-connection flag in parallel.
+  const [invoiceRes, profileRes] = await Promise.all([
+    supabase
+      .from("invoices")
+      .select("*")
+      .eq("id", params.id)
+      .eq("user_id", user!.id)
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("gmail_refresh_token, gmail_connected_email")
+      .eq("id", user!.id)
+      .maybeSingle(),
+  ]);
+  const invoice = invoiceRes.data;
   if (!invoice) notFound();
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("gmail_refresh_token, gmail_connected_email")
-    .eq("id", user!.id)
-    .maybeSingle();
-
-  const gmailConnected = Boolean(profile?.gmail_refresh_token);
+  const gmailConnected = Boolean(profileRes.data?.gmail_refresh_token);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

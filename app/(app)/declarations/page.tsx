@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { Badge, StatCard } from "@/components/ui/card";
 import { monthLabel, formatEUR, formatDate } from "@/lib/format";
 import { RunMyDeclaration } from "./run-button";
@@ -19,7 +20,7 @@ type Declaration = {
 
 export default async function DeclarationsPage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const now = new Date();
   const currentPeriodYear = now.getFullYear();
@@ -27,29 +28,33 @@ export default async function DeclarationsPage() {
 
   // Total collected for the current running month
   const firstOfThisMonth = new Date(currentPeriodYear, currentPeriodMonth - 1, 1).toISOString();
-  const { data: runningInv = [] } = await supabase
-    .from("invoices")
-    .select("amount_cents, paid_at")
-    .eq("user_id", user!.id)
-    .eq("status", "paid")
-    .gte("paid_at", firstOfThisMonth);
-  const runningTotal = (runningInv ?? []).reduce((s, i) => s + (i.amount_cents as number), 0);
 
-  const { data: rows = [] } = await supabase
-    .from("monthly_declarations")
-    .select("*")
-    .eq("user_id", user!.id)
-    .order("period_year", { ascending: false })
-    .order("period_month", { ascending: false });
-
-  const decls = (rows ?? []) as Declaration[];
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("urssaf_declaration_day")
-    .eq("id", user!.id)
-    .maybeSingle();
-  const day = profile?.urssaf_declaration_day ?? 3;
+  // Three independent reads — fire them in parallel to save ~2 round-trips.
+  const [runningInvRes, rowsRes, profileRes] = await Promise.all([
+    supabase
+      .from("invoices")
+      .select("amount_cents, paid_at")
+      .eq("user_id", user!.id)
+      .eq("status", "paid")
+      .gte("paid_at", firstOfThisMonth),
+    supabase
+      .from("monthly_declarations")
+      .select("*")
+      .eq("user_id", user!.id)
+      .order("period_year", { ascending: false })
+      .order("period_month", { ascending: false }),
+    supabase
+      .from("profiles")
+      .select("urssaf_declaration_day")
+      .eq("id", user!.id)
+      .maybeSingle(),
+  ]);
+  const runningTotal = (runningInvRes.data ?? []).reduce(
+    (s, i) => s + (i.amount_cents as number),
+    0
+  );
+  const decls = (rowsRes.data ?? []) as Declaration[];
+  const day = profileRes.data?.urssaf_declaration_day ?? 3;
 
   const nextMonthLabel = monthLabel(
     currentPeriodMonth === 12 ? currentPeriodYear + 1 : currentPeriodYear,

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { NewInvoiceForm, type ClientOption } from "./form";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function NewInvoicePage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const [{ data: profile }, { data: clientsRaw }] = await Promise.all([
     supabase

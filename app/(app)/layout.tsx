@@ -1,15 +1,16 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { MobileBottomNav, Sidebar } from "@/components/ui/nav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/");
 
+  const supabase = createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, email, onboarded")
+    .select("display_name, email")
     .eq("id", user.id)
     .maybeSingle();
 

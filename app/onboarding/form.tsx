@@ -73,7 +73,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               required
               value={v.display_name}
               onChange={(e) => setV({ ...v, display_name: e.target.value })}
-              placeholder="Jeanne Dupont"
             />
           </div>
           <div>
@@ -98,7 +97,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
             id="business_name"
             value={v.business_name}
             onChange={(e) => setV({ ...v, business_name: e.target.value })}
-            placeholder="Dupont Sophrologie"
           />
         </div>
 
@@ -109,7 +107,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
             required
             value={v.metier}
             onChange={(e) => setV({ ...v, metier: e.target.value })}
-            placeholder="Sophrologue, Manutention, …"
           />
         </div>
 
@@ -122,7 +119,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               inputMode="numeric"
               value={v.siret}
               onChange={(e) => onSiretChange(e.target.value)}
-              placeholder="12345678900010"
             />
           </div>
           <div>
@@ -133,7 +129,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               inputMode="numeric"
               value={v.siren}
               onChange={(e) => setV({ ...v, siren: e.target.value.replace(/\D/g, "").slice(0, 9) })}
-              placeholder="123456789"
             />
           </div>
         </div>
@@ -144,7 +139,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
             id="ape_naf"
             value={v.ape_naf}
             onChange={(e) => setV({ ...v, ape_naf: e.target.value })}
-            placeholder="8690F"
           />
         </div>
 
@@ -156,7 +150,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               required
               value={v.address_line1}
               onChange={(e) => setV({ ...v, address_line1: e.target.value })}
-              placeholder="12 rue des Lilas"
             />
           </div>
           <div className="md:col-span-2">
@@ -164,7 +157,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               aria-label="Complément d'adresse"
               value={v.address_line2}
               onChange={(e) => setV({ ...v, address_line2: e.target.value })}
-              placeholder="Complément (optionnel)"
             />
           </div>
           <div>
@@ -174,7 +166,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               required
               value={v.postal_code}
               onChange={(e) => setV({ ...v, postal_code: e.target.value })}
-              placeholder="75011"
             />
           </div>
           <div>
@@ -184,7 +175,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               required
               value={v.city}
               onChange={(e) => setV({ ...v, city: e.target.value })}
-              placeholder="Paris"
             />
           </div>
         </div>
@@ -196,7 +186,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               id="iban"
               value={v.iban}
               onChange={(e) => setV({ ...v, iban: e.target.value })}
-              placeholder="FR76 1234 …"
             />
           </div>
           <div>
@@ -205,7 +194,6 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               id="bic"
               value={v.bic}
               onChange={(e) => setV({ ...v, bic: e.target.value })}
-              placeholder="BNPAFRPPXXX"
             />
           </div>
         </div>

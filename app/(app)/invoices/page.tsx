@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { Badge } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatEUR } from "@/lib/format";
@@ -34,7 +35,7 @@ export default async function InvoicesPage({
   searchParams: { status?: string };
 }) {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const filter = (searchParams.status ?? "all") as (typeof STATUS_FILTERS)[number]["key"];
   let q = supabase.from("invoices").select("*").eq("user_id", user!.id).order("issued_on", { ascending: false });

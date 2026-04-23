@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { SettingsForm } from "./form";
 import { Badge } from "@/components/ui/card";
 import { ReconnectGmailButton } from "./reconnect-gmail";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: profile } = await supabase
     .from("profiles")

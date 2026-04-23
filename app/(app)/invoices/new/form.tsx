@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { Plus } from "lucide-react";
+import { Plus, Wand2, Check, X, Loader2 } from "lucide-react";
 
 type OpType = "service" | "vente" | "mixte";
 
@@ -52,6 +52,54 @@ export function NewInvoiceForm({
   const [discountTerms, setDiscountTerms] = useState("Néant");
   const [busy, setBusy] = useState<"save" | "send" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Magic-wand state: calls Mistral to polish the description and shows
+  // an "Avant / Après" panel so the user can accept or discard the rewrite.
+  const [polishing, setPolishing] = useState(false);
+  const [polished, setPolished] = useState<string | null>(null);
+  const [polishError, setPolishError] = useState<string | null>(null);
+
+  async function polishDescription() {
+    const trimmed = description.trim();
+    if (!trimmed) {
+      setPolishError("Écris d'abord quelque chose à reformuler.");
+      return;
+    }
+    setPolishing(true);
+    setPolishError(null);
+    setPolished(null);
+    try {
+      const res = await fetch("/api/ai/polish-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: trimmed }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || `Erreur ${res.status}`);
+      const suggestion = String(payload.polished || "").trim();
+      if (!suggestion) throw new Error("Réponse vide");
+      if (suggestion === trimmed) {
+        setPolishError("Le texte est déjà propre — rien à reformuler.");
+      } else {
+        setPolished(suggestion);
+      }
+    } catch (err) {
+      setPolishError(err instanceof Error ? err.message : "Erreur inattendue");
+    } finally {
+      setPolishing(false);
+    }
+  }
+
+  function acceptPolished() {
+    if (polished) setDescription(polished);
+    setPolished(null);
+    setPolishError(null);
+  }
+
+  function dismissPolished() {
+    setPolished(null);
+    setPolishError(null);
+  }
 
   const effectiveClient = useMemo(() => {
     if (pickedClient === MANUAL) return null;
@@ -209,15 +257,73 @@ export function NewInvoiceForm({
 
       <Card className="space-y-5">
         <div>
-          <Label htmlFor="description">Description de la prestation</Label>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <Label htmlFor="description">Description de la prestation</Label>
+            <button
+              type="button"
+              onClick={polishDescription}
+              disabled={polishing || !description.trim()}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white bg-brand-gradient shadow-pop hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              title="Reformuler avec l'IA (Mistral)"
+            >
+              {polishing ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Wand2 size={13} />
+              )}
+              {polishing ? "Analyse…" : "Améliorer avec l'IA"}
+            </button>
+          </div>
           <Textarea
             id="description"
             required
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Séance de sophrologie du 14 avril 2026"
           />
+          {polishError ? (
+            <p className="mt-2 text-xs text-danger-600">{polishError}</p>
+          ) : null}
+          {polished ? (
+            <div className="mt-3 rounded-2xl ring-1 ring-inset ring-brand-200 bg-brand-50/50 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Wand2 size={14} className="text-brand-600" />
+                <span className="text-xs font-semibold text-brand-700 uppercase tracking-wide">
+                  Suggestion IA
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <div className="text-xs font-semibold text-ink-500 mb-1">Avant</div>
+                  <p className="text-small text-ink-700 whitespace-pre-wrap">
+                    {description}
+                  </p>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-ink-900 mb-1">Après</div>
+                  <p className="text-small text-ink-900 whitespace-pre-wrap">
+                    {polished}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={acceptPolished}
+                  className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-small font-semibold text-white bg-brand-gradient shadow-pop hover:opacity-90"
+                >
+                  <Check size={14} /> Utiliser
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissPolished}
+                  className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-small font-semibold text-ink-600 bg-white ring-1 ring-inset ring-ink-200 hover:bg-ink-50"
+                >
+                  <X size={14} /> Ignorer
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -229,7 +335,6 @@ export function NewInvoiceForm({
               inputMode="decimal"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              placeholder="1"
             />
           </div>
           <div>
@@ -240,7 +345,6 @@ export function NewInvoiceForm({
               inputMode="decimal"
               value={unitPrice}
               onChange={(e) => setUnitPrice(e.target.value)}
-              placeholder="60"
             />
           </div>
           <div>

@@ -1,0 +1,40 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Asthia">
+  <defs>
+    <linearGradient id="asthia-left" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#1E3A8A"/>
+      <stop offset="0.6" stop-color="#4338CA"/>
+      <stop offset="1" stop-color="#6366F1"/>
+    </linearGradient>
+    <linearGradient id="asthia-inner-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#312E81"/>
+      <stop offset="1" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="asthia-peak" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C3AED"/>
+      <stop offset="0.5" stop-color="#C026D3"/>
+      <stop offset="1" stop-color="#DB2777"/>
+    </linearGradient>
+    <linearGradient id="asthia-right" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0EA5E9"/>
+      <stop offset="0.45" stop-color="#14B8A6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <linearGradient id="asthia-inner-right" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#C4B5FD"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Left outer ribbon face (blues) -->
+  <polygon points="100,20 30,180 60,180 105,90" fill="url(#asthia-left)"/>
+  <!-- Left inner shadow fold -->
+  <polygon points="100,20 105,90 60,180 90,180" fill="url(#asthia-inner-left)" opacity="0.9"/>
+
+  <!-- Top peak magenta ribbon -->
+  <polygon points="100,20 95,180 120,180 105,90" fill="url(#asthia-peak)"/>
+
+  <!-- Right outer ribbon face (teal) -->
+  <polygon points="100,20 105,90 150,180 170,180" fill="url(#asthia-right)"/>
+  <!-- Right inner lavender fold -->
+  <polygon points="120,180 150,180 105,90" fill="url(#asthia-inner-right)" opacity="0.95"/>
+</svg>

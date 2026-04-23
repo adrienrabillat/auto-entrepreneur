@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/card";
 import { Plus, Users, Building2, User as UserIcon } from "lucide-react";
@@ -22,7 +23,7 @@ type ClientRow = {
 
 export default async function ClientsPage() {
   const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   const { data: clients = [] } = await supabase
     .from("clients")
