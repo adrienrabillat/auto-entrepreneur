@@ -21,7 +21,7 @@ export default async function SettingsPage() {
   const gmailActive = Boolean(profile.gmail_refresh_token);
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-h1">
           Profil & <span className="text-gradient-brand">paramètres</span>
@@ -100,10 +100,10 @@ export default async function SettingsPage() {
         }}
       />
 
-      <form action="/auth/signout" method="post" className="pt-2">
+      <form action="/auth/signout" method="post" className="pt-2 flex justify-center">
         <button
           type="submit"
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-small font-semibold text-ink-600 ring-1 ring-inset ring-ink-200 hover:bg-ink-50 hover:text-ink-900"
+          className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-small font-medium text-danger-600 bg-danger-500/10 hover:bg-danger-500/20 transition-colors"
         >
           <LogOut size={16} />
           Se déconnecter

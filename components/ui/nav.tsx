@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { FileText, LayoutDashboard, Receipt, Settings, LogOut, Users } from "lucide-react";
+import { FileText, LayoutDashboard, Receipt, Settings, Users } from "lucide-react";
 
 const items = [
   { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
@@ -55,15 +55,6 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
         })}
       </nav>
 
-      <form action="/auth/signout" method="post" className="mt-auto pt-4">
-        <button
-          type="submit"
-          className="flex w-full items-center gap-2 rounded-full px-3.5 py-2 text-small font-medium text-ink-500 hover:bg-surface hover:text-ink-800 transition-colors"
-        >
-          <LogOut size={16} />
-          Se déconnecter
-        </button>
-      </form>
     </aside>
   );
 }
