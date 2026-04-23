@@ -23,9 +23,7 @@ export default async function SettingsPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-h1">
-          Profil & <span className="text-gradient-brand">paramètres</span>
-        </h1>
+        <h1 className="text-h1">Profil & paramètres</h1>
         <p className="mt-1 text-small text-ink-500">
           Ces infos apparaissent sur tes factures. Change-les à tout moment.
         </p>

@@ -105,6 +105,11 @@ export function NewInvoiceForm({
     totalCents: number;
   }>(null);
 
+  // step 3 — aperçu PDF temps réel
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   // ---------- derived ----------
   const effectiveClient = useMemo(() => {
     if (mode !== "existing") return null;
@@ -124,6 +129,69 @@ export function NewInvoiceForm({
     const q = parseFloat(quantity.replace(",", ".")) || 1;
     return Math.round(pu * q);
   }, [unitPrice, quantity]);
+
+  // ---------- aperçu PDF ----------
+  // Quand on arrive à l'étape 3 (Relecture), on POST les valeurs actuelles
+  // à /api/invoices/preview qui régénère le PDF sans rien écrire en base.
+  // Le résultat est un blob transformé en ObjectURL et rendu en iframe.
+  useEffect(() => {
+    if (step !== 3) return;
+    if (amountCents <= 0) return;
+
+    let cancelled = false;
+    let currentUrl: string | null = null;
+
+    async function run() {
+      setPreviewLoading(true);
+      setPreviewError(null);
+      try {
+        const q = parseFloat(quantity.replace(",", ".")) || 1;
+        const pu = Math.round(parseFloat(unitPrice.replace(",", ".")) * 100) || 0;
+        const body = {
+          description: description.trim(),
+          quantity: q,
+          unit_price_cents: pu,
+          amount_cents: amountCents,
+          client_email: effectiveClient?.email || clientEmail,
+          client_name: effectiveClient?.name ?? (clientName || null),
+          client_siren: effectiveClient?.siren ?? (clientSiren.replace(/\s/g, "") || null),
+          client_address: effectiveClient?.address ?? (clientAddress || null),
+          operation_type: operationType,
+          delivery_address: deliveryAddress.trim() || null,
+          execution_date: executionDate || null,
+          due_on: kind === "to_pay" ? (dueOn || null) : null,
+          discount_terms: discountTerms.trim() || "Néant",
+          prepaid: kind === "prepaid",
+        };
+        const res = await fetch("/api/invoices/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}));
+          throw new Error(payload.error || `Erreur ${res.status}`);
+        }
+        const blob = await res.blob();
+        if (cancelled) return;
+        currentUrl = URL.createObjectURL(blob);
+        setPreviewUrl(currentUrl);
+      } catch (e: unknown) {
+        if (cancelled) return;
+        setPreviewError(e instanceof Error ? e.message : "Aperçu indisponible");
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    }
+    run();
+
+    return () => {
+      cancelled = true;
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+    };
+    // Les deps incluent tout ce qui change le PDF généré.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   // ---------- validation ----------
   function validateStep1(): string | null {
@@ -634,6 +702,29 @@ export function NewInvoiceForm({
             </div>
           </div>
 
+          {/* Aperçu PDF — régénéré à l'entrée dans l'étape 3 */}
+          <div>
+            <div className="text-xs uppercase tracking-wide text-ink-500 mb-2">Aperçu du PDF</div>
+            {previewLoading ? (
+              <div className="rounded-2xl bg-surface-2 h-[420px] md:h-[520px] grid place-items-center animate-pulse">
+                <div className="flex items-center gap-2 text-small text-ink-500">
+                  <Loader2 size={16} className="animate-spin" />
+                  Génération de l&apos;aperçu…
+                </div>
+              </div>
+            ) : previewError ? (
+              <div className="rounded-2xl bg-danger-500/10 p-4 text-small text-danger-600">
+                {previewError}
+              </div>
+            ) : previewUrl ? (
+              <iframe
+                src={previewUrl}
+                title="Aperçu de la facture"
+                className="w-full h-[420px] md:h-[520px] rounded-2xl bg-surface-2"
+              />
+            ) : null}
+          </div>
+
           {/* Récap blocks */}
           <RecapRow icon={<User size={14} />} label="Client" value={recapName} sub={recapEmail} />
           <RecapRow icon={<FileSignature size={14} />} label="Prestation" value={description} />
@@ -678,7 +769,10 @@ export function NewInvoiceForm({
             Suivant <ArrowRight size={14} />
           </Button>
         ) : (
-          <div className="flex flex-col md:flex-row gap-2">
+          // Mobile : l'action primaire "Créer & envoyer" apparaît en haut
+          // (flex-col-reverse), Brouillon juste en dessous et centré.
+          // Desktop (md:) : rangée classique Brouillon puis primaire.
+          <div className="flex flex-col-reverse items-center gap-2 md:flex-row md:items-center">
             <Button variant="secondary" type="button" onClick={() => submit("save")} disabled={busy !== null}>
               {busy === "save" ? "Enregistrement…" : "Brouillon"}
             </Button>
