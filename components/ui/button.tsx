@@ -4,30 +4,35 @@ import { cn } from "@/lib/cn";
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
 type Size = "sm" | "md" | "lg";
 
+/**
+ * Bouton — style Revolut : pill arrondie full, accent bleu rempli pour le
+ * primaire, ghost léger sur fond surface-2 pour le secondaire.
+ * - La variante `primary` pose une ombre portée colorée (shadow-pop).
+ * - Toutes les tailles sont en radius-full pour garder l'aspect pill.
+ */
 const base =
-  "inline-flex items-center justify-center gap-2 font-semibold transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white active:scale-[0.98]";
+  "inline-flex items-center justify-center gap-2 font-medium transition-all duration-150 " +
+  "disabled:opacity-50 disabled:pointer-events-none " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-page " +
+  "active:scale-[0.98] hover:-translate-y-[1px]";
 
 const variants: Record<Variant, string> = {
-  // Primary: vivid gradient — text must stay white.
   primary:
-    "bg-brand-gradient text-white shadow-pop hover:shadow-glow hover:brightness-[1.05]",
-  // Secondary: white pill with hairline border
+    "bg-brand-500 text-white shadow-pop hover:brightness-[1.05]",
   secondary:
-    "bg-white text-ink-800 shadow-hair hover:bg-ink-50 hover:shadow-soft",
-  // Ghost: no bg, for inline controls
-  ghost: "text-ink-700 hover:bg-ink-100",
-  // Danger: solid red
-  danger: "bg-danger-500 text-white hover:bg-danger-600",
-  // Outline: transparent bg with brand border
+    "bg-surface-2 text-ink-900 hover:bg-brand-500/10 hover:text-brand-600",
+  ghost:
+    "text-ink-700 hover:bg-surface-2",
+  danger:
+    "bg-danger-500 text-white hover:brightness-[1.05]",
   outline:
-    "bg-white text-brand-600 ring-1 ring-inset ring-brand-200 hover:bg-brand-50",
+    "bg-transparent text-brand-600 ring-1 ring-inset ring-brand-500/30 hover:bg-brand-500/10",
 };
 
 const sizes: Record<Size, string> = {
-  // Mobile-friendly heights (≥40px tap targets on md+)
-  sm: "h-9 px-3.5 text-small rounded-lg",
-  md: "h-11 px-5 text-small rounded-xl",
-  lg: "h-12 px-6 text-body rounded-xl",
+  sm: "h-9 px-4 text-small rounded-full",
+  md: "h-11 px-5 text-small rounded-full",
+  lg: "h-12 px-6 text-body rounded-full",
 };
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {

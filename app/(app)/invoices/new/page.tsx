@@ -55,7 +55,7 @@ export default async function NewInvoicePage() {
       </p>
 
       {!bankingReady ? (
-        <div className="mt-5 rounded-2xl p-4 text-small bg-warn-50 ring-1 ring-inset ring-warn-200 flex items-start gap-3 text-warn-700">
+        <div className="mt-5 rounded-2xl p-4 text-small bg-warn-500/10 flex items-start gap-3 text-warn-600">
           <AlertTriangle size={18} className="shrink-0 mt-0.5" />
           <p>
             IBAN / BIC manquants. Renseigne-les dans{" "}
@@ -66,7 +66,7 @@ export default async function NewInvoicePage() {
       ) : null}
 
       {!gmailConnected ? (
-        <div className="mt-5 rounded-2xl p-4 text-small bg-warn-50 ring-1 ring-inset ring-warn-200 flex items-start gap-3 text-warn-700">
+        <div className="mt-5 rounded-2xl p-4 text-small bg-warn-500/10 flex items-start gap-3 text-warn-600">
           <AlertTriangle size={18} className="shrink-0 mt-0.5" />
           <p>
             Gmail n&apos;est pas encore connecté. Tu pourras quand même créer la facture en brouillon ; pour

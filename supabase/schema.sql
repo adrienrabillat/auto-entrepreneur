@@ -39,6 +39,10 @@ create table if not exists public.profiles (
   rm_department text,                                -- département d'immatriculation RM
   insurance_name text,                               -- nom de l'assureur responsabilité civile professionnelle
   insurance_coverage text,                           -- couverture géographique (ex: "France métropolitaine")
+  -- Médiateur de la consommation (art. L616-1 Code de la consommation)
+  -- Obligatoire si l'émetteur facture des particuliers (BtoC). Laisse vide sinon.
+  mediator_name text,                                -- ex: "CM2C — Centre de la médiation de la consommation"
+  mediator_website text,                             -- URL publique du médiateur
   gmail_refresh_token text,                          -- encrypted at rest by Supabase, never sent to browser
   gmail_connected_email text,
   urssaf_declaration_day smallint default 3 check (urssaf_declaration_day between 1 and 28),

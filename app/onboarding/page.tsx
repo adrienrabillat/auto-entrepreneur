@@ -16,7 +16,7 @@ export default async function OnboardingPage() {
   if (profile?.onboarded) redirect("/dashboard");
 
   return (
-    <main className="min-h-dvh flex items-start md:items-center justify-center bg-ink-50 py-10 px-4">
+    <main className="min-h-dvh flex items-start md:items-center justify-center bg-page py-10 px-4">
       <div className="w-full max-w-2xl">
         <div className="text-center mb-8">
           <h1 className="text-h1">Quelques infos pour tes factures</h1>

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
-import { Badge, StatCard } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { StatCard } from "@/components/ui/card";
 import { formatDate, formatEUR } from "@/lib/format";
-import { Clock, Plus, TrendingUp, Wallet } from "lucide-react";
+import { Plus, UserPlus, Receipt, Download } from "lucide-react";
+import { HeroAmount } from "./hero-amount";
+import { initialsFrom } from "@/lib/initials";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +28,10 @@ export default async function DashboardPage() {
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthEnd = monthStart;
   const yearStart = new Date(now.getFullYear(), 0, 1);
 
-  // Run the two Supabase reads in parallel — neither depends on the other.
   const [invoicesRes, profileRes] = await Promise.all([
     supabase
       .from("invoices")
@@ -39,133 +41,211 @@ export default async function DashboardPage() {
       .limit(100),
     supabase
       .from("profiles")
-      .select("display_name, metier")
+      .select("display_name")
       .eq("id", user!.id)
       .maybeSingle(),
   ]);
   const all = (invoicesRes.data ?? []) as Invoice[];
   const profile = profileRes.data;
 
-  const monthCollected = all
-    .filter((i) => i.paid_at && new Date(i.paid_at) >= monthStart)
-    .reduce((s, i) => s + i.amount_cents, 0);
+  const sumBetween = (from: Date, to?: Date) =>
+    all
+      .filter((i) => {
+        if (!i.paid_at) return false;
+        const d = new Date(i.paid_at);
+        if (d < from) return false;
+        if (to && d >= to) return false;
+        return true;
+      })
+      .reduce((s, i) => s + i.amount_cents, 0);
 
-  const yearCollected = all
-    .filter((i) => i.paid_at && new Date(i.paid_at) >= yearStart)
-    .reduce((s, i) => s + i.amount_cents, 0);
+  const monthCollected = sumBetween(monthStart);
+  const prevMonthCollected = sumBetween(prevMonthStart, prevMonthEnd);
+  const yearCollected = sumBetween(yearStart);
 
-  const outstanding = all
-    .filter((i) => i.status === "sent")
-    .reduce((s, i) => s + i.amount_cents, 0);
+  const outstandingInvoices = all.filter((i) => i.status === "sent");
+  const outstanding = outstandingInvoices.reduce((s, i) => s + i.amount_cents, 0);
+
+  const deltaPct =
+    prevMonthCollected > 0
+      ? Math.round(((monthCollected - prevMonthCollected) / prevMonthCollected) * 100)
+      : null;
 
   const recent = all.slice(0, 6);
-
   const firstName = profile?.display_name?.split(" ")[0] ?? "";
+  const monthLabel = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 
   return (
-    <div className="space-y-8">
-      {/* Hero greeting */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-h1">
-            Bonjour <span className="text-gradient-brand">{firstName}</span>
-          </h1>
-          <p className="mt-1 text-small text-ink-500">
-            {profile?.metier ? `${profile.metier} · ` : ""}Voici ton activité en ce moment.
-          </p>
-        </div>
-        <Link href="/invoices/new" className="sm:w-auto">
-          <Button size="lg" className="w-full sm:w-auto">
-            <Plus size={18} />
-            Nouvelle facture
-          </Button>
-        </Link>
-      </div>
-
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
-        <StatCard
-          label="Encaissé ce mois"
-          value={formatEUR(monthCollected)}
-          accent="success"
-          icon={<TrendingUp size={16} />}
-          hint="Sera déclaré à l'URSSAF"
+    <div className="space-y-5 animate-fade-in-up">
+      {/* HERO KPI */}
+      <section className="surface relative overflow-hidden p-6 md:p-9">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-20 -bottom-20 h-80 w-80 rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle at center, var(--accent-soft) 0%, transparent 65%)",
+          }}
         />
+
+        <div className="relative">
+          <div className="inline-flex items-center gap-2 text-small text-ink-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-success-500 animate-pulse" aria-hidden />
+            Encaissé ce mois · {monthLabel}
+          </div>
+
+          <HeroAmount cents={monthCollected} />
+
+          {deltaPct !== null ? (
+            <div
+              className={
+                "mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-small font-medium " +
+                (deltaPct >= 0
+                  ? "bg-success-500/10 text-success-600"
+                  : "bg-danger-500/10 text-danger-600")
+              }
+            >
+              <span aria-hidden>{deltaPct >= 0 ? "↗" : "↘"}</span>
+              {deltaPct >= 0 ? "+" : ""}
+              {deltaPct} % vs. mois précédent
+            </div>
+          ) : monthCollected > 0 ? null : (
+            <div className="mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-small text-ink-500 bg-surface-2">
+              Premier mois — aucune comparaison possible
+            </div>
+          )}
+
+          {/* Quick actions */}
+          <div className="mt-6 flex flex-wrap gap-2.5">
+            <Link href="/invoices/new" className="pill pill-primary">
+              <Plus size={16} />
+              Nouvelle facture
+            </Link>
+            <Link href="/clients/new" className="pill pill-ghost">
+              <UserPlus size={16} />
+              Ajouter un client
+            </Link>
+            <Link href="/declarations" className="pill pill-ghost">
+              <Receipt size={16} />
+              URSSAF
+            </Link>
+            <a
+              href="/api/export/xlsx"
+              className="pill pill-ghost"
+              aria-label="Exporter en Excel"
+            >
+              <Download size={16} />
+              Exporter
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* 2 stats — en attente + année */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
         <StatCard
           label="En attente de paiement"
           value={formatEUR(outstanding)}
           accent="warn"
-          icon={<Clock size={16} />}
-          hint="Factures envoyées, non payées"
+          hint={
+            outstandingInvoices.length > 0
+              ? `${outstandingInvoices.length} facture${
+                  outstandingInvoices.length > 1 ? "s" : ""
+                } envoyée${outstandingInvoices.length > 1 ? "s" : ""}, non payée${
+                  outstandingInvoices.length > 1 ? "s" : ""
+                }`
+              : "Tout est à jour"
+          }
         />
         <StatCard
-          label="Encaissé cette année"
+          label={`Encaissé ${now.getFullYear()}`}
           value={formatEUR(yearCollected)}
           accent="brand"
-          icon={<Wallet size={16} />}
         />
       </div>
 
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-h2">Dernières factures</h2>
-          <Link href="/invoices" className="text-small font-semibold text-brand-600 hover:text-brand-700">
+      {/* Liste factures */}
+      <section className="surface p-2">
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+          <h2 className="text-h3">Dernières factures</h2>
+          <Link
+            href="/invoices"
+            className="text-small font-medium text-brand-600 hover:text-brand-700 transition-colors"
+          >
             Tout voir →
           </Link>
         </div>
-        <div className="surface overflow-hidden">
-          {recent.length === 0 ? (
-            <EmptyInvoices />
-          ) : (
-            <ul>
-              {recent.map((inv) => (
+
+        {recent.length === 0 ? (
+          <EmptyInvoices />
+        ) : (
+          <ul className="pb-1">
+            {recent.map((inv) => {
+              const displayName = inv.client_name || inv.client_email;
+              const initials = initialsFrom(displayName);
+              return (
                 <li key={inv.id}>
                   <Link
                     href={`/invoices/${inv.id}`}
-                    className="row-hover flex items-center gap-4 px-4 py-4 md:px-5 border-b border-ink-100 last:border-0"
+                    className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-ink-900 truncate">{inv.description}</span>
-                        <StatusBadge status={inv.status} />
+                    <div className="avatar">{initials}</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="font-medium text-ink-900 truncate">
+                          {inv.description}
+                        </span>
+                        <StatusDot status={inv.status} />
                       </div>
-                      <div className="mt-0.5 text-small text-ink-500 truncate">
-                        {inv.number} · {inv.client_name || inv.client_email} · {formatDate(inv.issued_on)}
+                      <div className="mt-0.5 text-xs text-ink-500 truncate">
+                        {inv.number} · {displayName} · {formatDate(inv.issued_on)}
                       </div>
                     </div>
-                    <div className="text-body font-bold tabular-nums text-ink-900">
+                    <div className="text-body font-bold tabular-nums tracking-tight text-ink-900">
                       {formatEUR(inv.amount_cents)}
                     </div>
                   </Link>
                 </li>
-              ))}
-            </ul>
-          )}
-        </div>
+              );
+            })}
+          </ul>
+        )}
       </section>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: Invoice["status"] }) {
-  if (status === "paid") return <Badge tone="success">Payée</Badge>;
-  if (status === "sent") return <Badge tone="warn">Envoyée</Badge>;
-  if (status === "cancelled") return <Badge tone="danger">Annulée</Badge>;
-  return <Badge tone="neutral">Brouillon</Badge>;
+function StatusDot({ status }: { status: Invoice["status"] }) {
+  const map: Record<Invoice["status"], { cls: string; label: string }> = {
+    paid:      { cls: "paid",   label: "Payée" },
+    sent:      { cls: "sent",   label: "Envoyée" },
+    draft:     { cls: "draft",  label: "Brouillon" },
+    cancelled: { cls: "cancel", label: "Annulée" },
+  };
+  const { cls, label } = map[status];
+  return (
+    <span className={`status-dot ${cls}`}>
+      <span className="d" aria-hidden />
+      {label}
+    </span>
+  );
 }
 
 function EmptyInvoices() {
   return (
     <div className="p-10 text-center">
-      <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand-gradient-subtle">
-        <Plus className="text-brand-600" size={22} />
+      <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-brand-500/10 text-brand-600">
+        <Plus size={22} />
       </div>
-      <p className="text-body font-semibold text-ink-900">Aucune facture pour le moment</p>
+      <p className="text-body font-medium text-ink-900">Aucune facture pour le moment</p>
       <p className="mt-1 text-small text-ink-500">Crée ta première en moins d&apos;une minute.</p>
       <div className="mt-4">
-        <Link href="/invoices/new">
-          <Button>Créer ma première facture</Button>
+        <Link href="/invoices/new" className="pill pill-primary">
+          <Plus size={16} />
+          Créer ma première facture
         </Link>
       </div>
     </div>
   );
 }
+

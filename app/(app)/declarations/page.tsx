@@ -1,10 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
-import { Badge, StatCard } from "@/components/ui/card";
+import { StatCard } from "@/components/ui/card";
 import { monthLabel, formatEUR, formatDate } from "@/lib/format";
 import { RunMyDeclaration } from "./run-button";
 import { ExportExcelButton } from "@/components/ui/export-excel";
-import { CalendarClock, TrendingUp } from "lucide-react";
+import { CalendarClock } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -66,9 +66,9 @@ export default async function DeclarationsPage() {
     .join(" ");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 animate-fade-in-up">
       <div>
-        <h1 className="text-h1">Déclarations <span className="text-gradient-brand">URSSAF</span></h1>
+        <h1 className="text-h1">Déclarations URSSAF</h1>
         <p className="mt-1 text-small text-ink-500">
           Chaque mois, le <strong className="text-ink-900">{day}</strong> au matin, l&apos;app déclare automatiquement ton chiffre
           d&apos;affaires encaissé du mois précédent.
@@ -83,14 +83,12 @@ export default async function DeclarationsPage() {
           label={`Encaissé en ${monthLabel(currentPeriodYear, currentPeriodMonth)}`}
           value={formatEUR(runningTotal)}
           accent="success"
-          icon={<TrendingUp size={16} />}
           hint={`Sera déclaré le ${day} ${nextMonthLabel}`}
         />
         <StatCard
           label="Prochaine déclaration"
           value={`${day} ${nextMonthLabel}`}
           accent="brand"
-          icon={<CalendarClock size={16} />}
           hint="Automatique, tu n'as rien à faire"
         />
       </div>
@@ -103,28 +101,25 @@ export default async function DeclarationsPage() {
             <RunMyDeclaration />
           </div>
         </div>
-        <div className="surface overflow-hidden">
+        <div className="surface p-2">
           {decls.length === 0 ? (
             <div className="p-10 text-center">
-              <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand-gradient-subtle">
-                <CalendarClock className="text-brand-600" size={22} />
+              <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-brand-500/10 text-brand-600">
+                <CalendarClock size={22} />
               </div>
-              <p className="text-body font-semibold text-ink-900">Aucune déclaration pour le moment.</p>
+              <p className="text-body font-medium text-ink-900">Aucune déclaration pour le moment.</p>
               <p className="mt-1 text-small text-ink-500">L&apos;historique apparaîtra dès la première déclaration.</p>
             </div>
           ) : (
             <ul>
               {decls.map((d) => (
-                <li
-                  key={d.id}
-                  className="flex items-center gap-4 px-4 py-4 md:px-5 border-b border-ink-100 last:border-0"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold capitalize text-ink-900">
+                <li key={d.id} className="grid grid-cols-[1fr_auto] gap-3 items-center px-3.5 py-3 rounded-2xl row-hover">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-medium capitalize text-ink-900">
                         {monthLabel(d.period_year, d.period_month)}
                       </span>
-                      <StatusBadge status={d.status} />
+                      <StatusDot status={d.status} />
                     </div>
                     {d.urssaf_reference ? (
                       <div className="mt-0.5 text-xs text-ink-500 font-mono truncate">{d.urssaf_reference}</div>
@@ -135,7 +130,9 @@ export default async function DeclarationsPage() {
                       <div className="text-xs text-ink-500 mt-0.5">Envoyée le {formatDate(d.submitted_at)}</div>
                     ) : null}
                   </div>
-                  <div className="text-body font-bold tabular-nums text-ink-900">{formatEUR(d.total_cents)}</div>
+                  <div className="text-body font-bold tabular-nums tracking-tight text-ink-900">
+                    {formatEUR(d.total_cents)}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -146,17 +143,19 @@ export default async function DeclarationsPage() {
   );
 }
 
-function StatusBadge({ status }: { status: Declaration["status"] }) {
-  switch (status) {
-    case "submitted":
-      return <Badge tone="success">Envoyée</Badge>;
-    case "confirmed":
-      return <Badge tone="success">Confirmée</Badge>;
-    case "pending":
-      return <Badge tone="warn">En attente</Badge>;
-    case "skipped":
-      return <Badge tone="neutral">Non applicable</Badge>;
-    case "error":
-      return <Badge tone="danger">Erreur</Badge>;
-  }
+function StatusDot({ status }: { status: Declaration["status"] }) {
+  const map: Record<Declaration["status"], { cls: string; label: string }> = {
+    submitted: { cls: "paid",   label: "Envoyée" },
+    confirmed: { cls: "paid",   label: "Confirmée" },
+    pending:   { cls: "sent",   label: "En attente" },
+    skipped:   { cls: "draft",  label: "Non applicable" },
+    error:     { cls: "cancel", label: "Erreur" },
+  };
+  const { cls, label } = map[status];
+  return (
+    <span className={`status-dot ${cls}`}>
+      <span className="d" aria-hidden />
+      {label}
+    </span>
+  );
 }

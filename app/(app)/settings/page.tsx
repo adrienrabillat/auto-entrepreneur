@@ -3,8 +3,8 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { SettingsForm } from "./form";
 import { Badge } from "@/components/ui/card";
 import { ReconnectGmailButton } from "./reconnect-gmail";
-import { PasskeyManager } from "./passkey-manager";
-import { Mail, LogOut } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Mail, LogOut, Palette } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,16 @@ export default async function SettingsPage() {
         </div>
       </div>
 
-      <PasskeyManager />
+      <div className="surface p-5 flex items-center gap-4">
+        <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600">
+          <Palette size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-ink-900">Apparence</div>
+          <div className="text-small text-ink-500">Clair par défaut · bascule en sombre à tout moment</div>
+        </div>
+        <ThemeToggle />
+      </div>
 
       <SettingsForm
         defaultValues={{
@@ -85,6 +94,8 @@ export default async function SettingsPage() {
           rm_department: profile.rm_department ?? "",
           insurance_name: profile.insurance_name ?? "",
           insurance_coverage: profile.insurance_coverage ?? "",
+          mediator_name: profile.mediator_name ?? "",
+          mediator_website: profile.mediator_website ?? "",
           urssaf_declaration_day: profile.urssaf_declaration_day ?? 3,
         }}
       />

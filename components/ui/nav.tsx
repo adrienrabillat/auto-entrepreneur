@@ -14,20 +14,22 @@ const items = [
 ];
 
 /**
- * Desktop sidebar (≥ md). Uses a soft gradient header, pill-shaped active
- * nav states with brand gradient, and a clear sign-out at the bottom.
+ * Sidebar desktop (≥ md) — design Revolut épuré :
+ * identité utilisateur dans une pastille surface-2 douce, navigation
+ * en pills qui passent en accent bleu rempli quand actives. Pas de
+ * bordure à droite, la séparation se fait par le contraste de fond.
  */
 export function Sidebar({ displayName, email }: { displayName: string; email: string }) {
   const pathname = usePathname();
   const initial = (displayName?.[0] ?? "?").toUpperCase();
   return (
-    <aside className="hidden md:flex md:w-64 shrink-0 flex-col border-r border-ink-200 bg-white/80 backdrop-blur px-4 py-5">
-      <div className="mb-4 flex items-center gap-3 rounded-2xl bg-brand-gradient-subtle p-3">
-        <div className="grid h-10 w-10 place-items-center rounded-full bg-brand-gradient text-white font-bold">
+    <aside className="hidden md:flex md:w-64 shrink-0 flex-col bg-surface-2 px-4 py-5">
+      <div className="mb-6 flex items-center gap-3 rounded-2xl bg-surface shadow-hair p-3">
+        <div className="grid h-10 w-10 place-items-center rounded-full bg-brand-500 text-white font-semibold">
           {initial}
         </div>
         <div className="min-w-0">
-          <div className="text-small font-semibold text-ink-900 truncate">{displayName}</div>
+          <div className="text-small font-medium text-ink-900 truncate">{displayName}</div>
           <div className="text-xs text-ink-500 truncate">{email}</div>
         </div>
       </div>
@@ -40,10 +42,10 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-small font-semibold transition-colors",
+                "flex items-center gap-3 rounded-full px-3.5 py-2.5 text-small font-medium transition-all",
                 active
-                  ? "bg-brand-gradient text-white shadow-pop"
-                  : "text-ink-700 hover:bg-ink-100"
+                  ? "bg-brand-500 text-white shadow-pop"
+                  : "text-ink-700 hover:bg-surface hover:text-ink-900"
               )}
             >
               <Icon size={18} className={active ? "text-white" : "text-ink-500"} />
@@ -56,7 +58,7 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
       <form action="/auth/signout" method="post" className="mt-auto pt-4">
         <button
           type="submit"
-          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-small font-medium text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+          className="flex w-full items-center gap-2 rounded-full px-3.5 py-2 text-small font-medium text-ink-500 hover:bg-surface hover:text-ink-800 transition-colors"
         >
           <LogOut size={16} />
           Se déconnecter
@@ -67,14 +69,14 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
 }
 
 /**
- * Mobile bottom navigation (≤ md). Large touch targets with brand highlight
- * on the active tab. Respects iOS safe-area inset.
+ * Mobile bottom nav — fond surface (blanc/dark), item actif avec pastille
+ * bleue remplie type Revolut. Respecte la safe-area iOS.
  */
 export function MobileBottomNav() {
   const pathname = usePathname();
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-20 border-t border-ink-200 bg-white/95 backdrop-blur"
+      className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-surface shadow-card"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="grid grid-cols-5">
@@ -85,14 +87,14 @@ export function MobileBottomNav() {
               <Link
                 href={href}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 py-2 text-xs font-medium",
+                  "flex flex-col items-center justify-center gap-0.5 py-2 text-xs font-medium transition-colors",
                   active ? "text-brand-600" : "text-ink-500"
                 )}
               >
                 <span
                   className={cn(
                     "grid h-9 w-12 place-items-center rounded-full transition-all",
-                    active ? "bg-brand-gradient text-white shadow-pop" : ""
+                    active ? "bg-brand-500 text-white shadow-pop" : ""
                   )}
                 >
                   <Icon size={18} />

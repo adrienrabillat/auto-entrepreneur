@@ -50,7 +50,7 @@ export default async function LandingPage({
           </div>
 
           {err ? (
-            <div className="mt-5 rounded-xl bg-danger-50 ring-1 ring-inset ring-danger-200 p-3 text-small text-danger-700">
+            <div className="mt-5 rounded-2xl bg-danger-500/10 p-3.5 text-small text-danger-600">
               {isPkceError
                 ? "Connexion interrompue. Clique à nouveau sur « Se connecter » depuis le même appareil et le même navigateur."
                 : `Connexion interrompue : ${err}`}

@@ -63,10 +63,18 @@ export type InvoicePdfData = {
     rmDepartment?: string;
     insuranceName?: string;
     insuranceCoverage?: string;
+    /** Médiateur de la consommation — mention obligatoire sur factures BtoC (art. L616-1). */
+    mediatorName?: string;
+    /** URL publique du médiateur (même règle que mediatorName). */
+    mediatorWebsite?: string;
   };
   client: {
     name?: string;
     email: string;
+    /**
+     * SIREN client : sert aussi de marqueur BtoB. Si absent, la facture est
+     * considérée BtoC et on affiche les mentions de médiation conso.
+     */
     siren?: string;
     address?: string;
   };
@@ -496,6 +504,18 @@ function buildLegalFooter(data: InvoicePdfData): string[] {
   if (data.seller.insuranceName) {
     const cov = data.seller.insuranceCoverage ? ` — couverture : ${data.seller.insuranceCoverage}` : "";
     lines.push(`Assurance responsabilité civile professionnelle : ${data.seller.insuranceName}${cov}.`);
+  }
+
+  // Médiateur de la consommation (art. L616-1 Code de la consommation).
+  // Obligatoire uniquement sur les factures BtoC. Heuristique : pas de SIREN
+  // client => particulier. Les champs médiateur vides => pas de mention
+  // (utile tant que l'émetteur n'a pas encore adhéré à un médiateur).
+  const isBtoC = !data.client.siren;
+  if (isBtoC && data.seller.mediatorName) {
+    const site = data.seller.mediatorWebsite ? ` — ${data.seller.mediatorWebsite}` : "";
+    lines.push(
+      `En cas de litige non résolu à l'amiable, le client peut saisir gratuitement le médiateur de la consommation : ${data.seller.mediatorName}${site}.`
+    );
   }
 
   // Mention EI (Loi 14 fév. 2022, L526-22)

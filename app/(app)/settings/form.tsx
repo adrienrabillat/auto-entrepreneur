@@ -29,6 +29,8 @@ type Values = {
   rm_department: string;
   insurance_name: string;
   insurance_coverage: string;
+  mediator_name: string;
+  mediator_website: string;
   urssaf_declaration_day: number;
 };
 
@@ -224,6 +226,36 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
           <div>
             <Label htmlFor="insurance_coverage" hint="couverture géographique">Couverture</Label>
             <Input id="insurance_coverage" value={v.insurance_coverage} onChange={(e) => setV({ ...v, insurance_coverage: e.target.value })} />
+          </div>
+        </div>
+      </Card>
+
+      <Card className="space-y-5">
+        <h2 className="text-h3 text-ink-900">Médiation de la consommation</h2>
+        <p className="text-small text-ink-500">
+          Obligatoire si tu factures des particuliers (art. L616-1 du Code de la consommation).
+          Laisse vide tant que tu n&apos;as pas adhéré à un médiateur — aucune mention n&apos;apparaîtra
+          sur les factures.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="mediator_name" hint="ex: CM2C, AME Conso, Medicys…">Nom du médiateur</Label>
+            <Input
+              id="mediator_name"
+              value={v.mediator_name}
+              onChange={(e) => setV({ ...v, mediator_name: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label htmlFor="mediator_website" hint="URL publique">Site du médiateur</Label>
+            <Input
+              id="mediator_website"
+              type="url"
+              inputMode="url"
+              placeholder="https://…"
+              value={v.mediator_website}
+              onChange={(e) => setV({ ...v, mediator_website: e.target.value })}
+            />
           </div>
         </div>
       </Card>

@@ -29,6 +29,8 @@ type Profile = {
   rm_department: string | null;
   insurance_name: string | null;
   insurance_coverage: string | null;
+  mediator_name: string | null;
+  mediator_website: string | null;
   gmail_refresh_token: string | null;
   gmail_connected_email: string | null;
 };
@@ -86,38 +88,60 @@ export async function createInvoiceRow(
     prepaid?: boolean;
   }
 ) {
-  const number = await nextInvoiceNumber(supabase, userId);
   const quantity = input.quantity && input.quantity > 0 ? input.quantity : 1;
   const unit_price_cents =
     input.unit_price_cents ?? Math.round(input.amount_cents / quantity);
   const prepaid = Boolean(input.prepaid);
-  const { data, error } = await supabase
-    .from("invoices")
-    .insert({
-      user_id: userId,
-      number,
-      description: input.description,
-      quantity,
-      unit_price_cents,
-      amount_cents: input.amount_cents,
-      client_id: input.client_id ?? null,
-      client_email: input.client_email,
-      client_name: input.client_name ?? null,
-      client_siren: input.client_siren ?? null,
-      client_address: input.client_address ?? null,
-      operation_type: input.operation_type ?? "service",
-      execution_date: input.execution_date ?? null,
-      delivery_address: input.delivery_address ?? null,
-      payment_terms: prepaid ? "Déjà réglée" : (input.payment_terms ?? null),
-      discount_terms: input.discount_terms ?? "Néant",
-      due_on: input.due_on ?? null,
-      status: prepaid ? "paid" : "draft",
-      paid_at: prepaid ? new Date().toISOString() : null,
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data as InvoiceRow;
+
+  // Numérotation facture : la contrainte unique (user_id, number) en base
+  // garantit l'unicité, mais deux requêtes parallèles peuvent calculer le même
+  // "next" (lecture puis insert non atomiques). On retente tant que Postgres
+  // renvoie 23505 (unique_violation) sur cette contrainte. En pratique ça
+  // n'arrive quasiment jamais (3 utilisateurs, jamais de créations concurrentes)
+  // mais ça nous protège contre un double-clic ou un lancement simultané.
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const number = await nextInvoiceNumber(supabase, userId);
+    const { data, error } = await supabase
+      .from("invoices")
+      .insert({
+        user_id: userId,
+        number,
+        description: input.description,
+        quantity,
+        unit_price_cents,
+        amount_cents: input.amount_cents,
+        client_id: input.client_id ?? null,
+        client_email: input.client_email,
+        client_name: input.client_name ?? null,
+        client_siren: input.client_siren ?? null,
+        client_address: input.client_address ?? null,
+        operation_type: input.operation_type ?? "service",
+        execution_date: input.execution_date ?? null,
+        delivery_address: input.delivery_address ?? null,
+        payment_terms: prepaid ? "Déjà réglée" : (input.payment_terms ?? null),
+        discount_terms: input.discount_terms ?? "Néant",
+        due_on: input.due_on ?? null,
+        status: prepaid ? "paid" : "draft",
+        paid_at: prepaid ? new Date().toISOString() : null,
+      })
+      .select("*")
+      .single();
+
+    if (!error) return data as InvoiceRow;
+
+    // 23505 = unique_violation. On ne retente que si le conflit porte sur le
+    // couple (user_id, number) — tout autre conflit est une vraie erreur.
+    const isNumberClash =
+      (error as { code?: string })?.code === "23505" &&
+      /invoices_user_id_number_key|\(number\)|\bnumber\b/i.test(error.message || "");
+    if (isNumberClash && attempt < MAX_ATTEMPTS) continue;
+    throw error;
+  }
+  // Inatteignable en pratique — garde-fou TS + protection contre une boucle silencieuse.
+  throw new Error(
+    `Impossible d'attribuer un numéro de facture unique après ${MAX_ATTEMPTS} tentatives.`
+  );
 }
 
 export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): InvoicePdfData {
@@ -166,6 +190,8 @@ export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): Invoi
       rmDepartment: profile.rm_department ?? undefined,
       insuranceName: profile.insurance_name ?? undefined,
       insuranceCoverage: profile.insurance_coverage ?? undefined,
+      mediatorName: profile.mediator_name ?? undefined,
+      mediatorWebsite: profile.mediator_website ?? undefined,
     },
     client: {
       name: invoice.client_name ?? undefined,

@@ -2,59 +2,173 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------
+ * Design tokens — Revolut-like, thème clair par défaut, dark via
+ * attribut data-theme="dark" sur <html>. Les palettes `ink-*` sont
+ * remappées sur des CSS variables en canaux RGB pour que Tailwind
+ * gère l'opacité (text-ink-500/70, etc.). Les couleurs "pleines"
+ * (ombres, soft bg) sont déclarées à part.
+ * ----------------------------------------------------------------- */
 @layer base {
   :root {
     color-scheme: light;
+
+    /* Canaux R G B (pour rgb(var(--…) / <alpha-value>) côté Tailwind) */
+    --c-bg:        244 245 247;  /* #F4F5F7 — fond page */
+    --c-surface:   255 255 255;  /* #FFFFFF — carte principale */
+    --c-surface-2: 250 250 252;  /* #FAFAFC — sous-surface / hover */
+    --c-divider:   234 236 241;  /* #EAECF1 — trait discret */
+
+    --c-ink-1:     11 13 18;     /* #0B0D12 — primary text */
+    --c-ink-2:     74 79 92;     /* #4A4F5C — body */
+    --c-ink-3:     138 143 156;  /* #8A8F9C — muted */
+    --c-ink-4:     194 198 208;  /* #C2C6D0 — placeholder / disabled */
+
+    --c-accent:    47 107 255;   /* #2F6BFF — bleu fintech */
+    --c-accent-ink: 10 42 128;   /* #0A2A80 — texte sur fond accent clair */
+
+    --c-green:     18 168 104;   /* #12A868 */
+    --c-amber:     243 165 59;   /* #F3A53B */
+    --c-red:       225 69 44;    /* #E1452C */
+
+    /* Valeurs pleines — ombres, softs, rings. Pas exposées à Tailwind. */
+    --accent-soft: rgba(47,107,255,0.08);
+    --accent-ring: rgba(47,107,255,0.16);
+    --green-soft:  rgba(18,168,104,0.12);
+    --amber-soft:  rgba(243,165,59,0.14);
+    --red-soft:    rgba(225,69,44,0.12);
+    --shadow-card: 0 1px 2px rgba(10,13,30,0.04), 0 8px 32px rgba(10,13,30,0.06);
+    --shadow-pop:  0 8px 28px rgba(47,107,255,0.18);
+    --shadow-hair: 0 1px 2px rgba(10,13,30,0.04);
+
+    --radius-card: 24px;
+    --radius-md:   14px;
+    --radius-sm:   10px;
   }
-  html,
-  body {
-    @apply bg-ink-50 text-ink-700 antialiased;
+
+  html[data-theme="dark"] {
+    color-scheme: dark;
+
+    --c-bg:        11 13 18;     /* #0B0D12 */
+    --c-surface:   20 23 30;     /* #14171E */
+    --c-surface-2: 27 31 40;     /* #1B1F28 */
+    --c-divider:   36 41 52;     /* #242934 */
+
+    --c-ink-1:     243 244 248;  /* #F3F4F8 */
+    --c-ink-2:     175 181 195;  /* #AFB5C3 */
+    --c-ink-3:     126 132 148;  /* #7E8494 */
+    --c-ink-4:     59 64 75;     /* #3B404B */
+
+    --c-accent:    89 135 255;   /* #5987FF */
+    --c-accent-ink: 220 230 255; /* #DCE6FF */
+
+    --c-green:     60 201 138;
+    --c-amber:     245 179 83;
+    --c-red:       242 106 82;
+
+    --accent-soft: rgba(89,135,255,0.16);
+    --accent-ring: rgba(89,135,255,0.26);
+    --green-soft:  rgba(60,201,138,0.18);
+    --amber-soft:  rgba(245,179,83,0.18);
+    --red-soft:    rgba(242,106,82,0.18);
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.4);
+    --shadow-pop:  0 8px 28px rgba(89,135,255,0.28);
+    --shadow-hair: 0 1px 2px rgba(0,0,0,0.35);
+  }
+
+  html, body {
+    background: rgb(var(--c-bg));
+    color: rgb(var(--c-ink-1));
     font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   body {
     @apply font-sans text-body;
-    /* Fond neutre slate très pâle — pas d'aurora colorée. */
-    background-color: #F8FAFC;
-    background-image:
-      radial-gradient(1100px 420px at 85% -10%, rgba(30,58,138,0.06), transparent 60%),
-      radial-gradient(800px 300px at -5% 5%, rgba(15,23,42,0.05), transparent 60%);
-    background-attachment: fixed;
-    -webkit-font-smoothing: antialiased;
   }
-  h1 { @apply text-h1 text-ink-900; }
-  h2 { @apply text-h2 text-ink-900; }
-  h3 { @apply text-h3 text-ink-900; }
-  ::selection {
-    background: rgba(30, 58, 138, 0.18);
-  }
+  h1, h2, h3 { color: rgb(var(--c-ink-1)); letter-spacing: -0.02em; }
+  ::selection { background: var(--accent-soft); color: rgb(var(--c-accent-ink)); }
 }
 
 @layer components {
-  /* Carte blanche surélevée — conteneur par défaut. */
+  /* Carte principale — grand radius, ombre douce, aucune bordure. */
   .surface {
-    @apply bg-white rounded-2xl shadow-soft;
+    background: rgb(var(--c-surface));
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+  /* Surface secondaire — pour sous-cards, hovers, segments. */
+  .surface-2 {
+    background: rgb(var(--c-surface-2));
   }
   .divider {
-    @apply border-t border-ink-200;
+    border-top: 1px solid rgb(var(--c-divider));
   }
   .row-hover {
-    @apply hover:bg-ink-50 transition-colors;
+    transition: background 150ms ease;
   }
-  /* "Gradient" texte pour les titres — désormais simple navy, pas de dégradé coloré. */
+  .row-hover:hover {
+    background: rgb(var(--c-surface-2));
+  }
+  /* Compat : ancien titre en dégradé → simple couleur accent. */
   .text-gradient-brand {
-    color: #0F172A;
+    color: rgb(var(--c-accent));
+  }
+
+  /* Pills — action principale et ghosts. */
+  .pill {
+    @apply inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-small font-medium transition-all;
+    will-change: transform;
+  }
+  .pill:hover { transform: translateY(-1px); }
+
+  .pill-primary {
+    background: rgb(var(--c-accent));
+    color: #fff;
+    box-shadow: var(--shadow-pop);
+  }
+  .pill-primary:hover {
+    filter: brightness(1.05);
+  }
+
+  .pill-ghost {
+    background: rgb(var(--c-surface-2));
+    color: rgb(var(--c-ink-1));
+  }
+  .pill-ghost:hover {
+    background: var(--accent-soft);
+    color: rgb(var(--c-accent-ink));
+  }
+
+  /* Status dots — remplace les badges pastel (Payée/Envoyée/etc.). */
+  .status-dot {
+    @apply inline-flex items-center gap-1.5 text-xs font-medium;
+    color: rgb(var(--c-ink-2));
+  }
+  .status-dot > .d {
+    width: 6px; height: 6px; border-radius: 9999px;
+    display: inline-block;
+  }
+  .status-dot.paid   > .d { background: rgb(var(--c-green)); box-shadow: 0 0 0 3px var(--green-soft); }
+  .status-dot.sent   > .d { background: rgb(var(--c-amber)); box-shadow: 0 0 0 3px var(--amber-soft); }
+  .status-dot.draft  > .d { background: rgb(var(--c-ink-3)); box-shadow: 0 0 0 3px rgba(138,143,156,0.18); }
+  .status-dot.cancel > .d { background: rgb(var(--c-red));   box-shadow: 0 0 0 3px var(--red-soft); }
+
+  /* Avatar rond — initiales client dans les listes. */
+  .avatar {
+    @apply grid place-items-center rounded-full text-xs font-semibold;
+    width: 40px; height: 40px;
+    background: var(--accent-soft);
+    color: rgb(var(--c-accent-ink));
   }
 }
 
-/* Hide number input spinners across browsers */
+/* Reset number spinners (sobriété) */
 input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
 
-/* Mobile: give the scrollable main area room for the bottom nav */
+/* Mobile : espace pour la bottom-nav */
 @media (max-width: 767px) {
   main { padding-bottom: 96px; }
 }

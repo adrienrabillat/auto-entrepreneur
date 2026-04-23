@@ -87,14 +87,14 @@ export function ClientForm({
       <Card className="space-y-5">
         <div>
           <Label htmlFor="is_pro">Type de client</Label>
-          <div className="flex gap-2">
+          <div className="inline-flex bg-surface-2 p-1 rounded-full w-full">
             <button
               type="button"
               onClick={() => setV({ ...v, is_pro: false })}
               className={
                 !v.is_pro
-                  ? "flex-1 h-12 rounded-xl bg-brand-gradient text-white font-semibold shadow-pop"
-                  : "flex-1 h-12 rounded-xl bg-white text-ink-700 ring-1 ring-inset ring-ink-200 hover:ring-brand-300 font-semibold"
+                  ? "flex-1 h-10 rounded-full bg-surface text-ink-900 shadow-hair text-small font-medium"
+                  : "flex-1 h-10 rounded-full text-ink-500 hover:text-ink-900 text-small font-medium transition-colors"
               }
             >
               Particulier
@@ -104,8 +104,8 @@ export function ClientForm({
               onClick={() => setV({ ...v, is_pro: true })}
               className={
                 v.is_pro
-                  ? "flex-1 h-12 rounded-xl bg-brand-gradient text-white font-semibold shadow-pop"
-                  : "flex-1 h-12 rounded-xl bg-white text-ink-700 ring-1 ring-inset ring-ink-200 hover:ring-brand-300 font-semibold"
+                  ? "flex-1 h-10 rounded-full bg-surface text-ink-900 shadow-hair text-small font-medium"
+                  : "flex-1 h-10 rounded-full text-ink-500 hover:text-ink-900 text-small font-medium transition-colors"
               }
             >
               Professionnel

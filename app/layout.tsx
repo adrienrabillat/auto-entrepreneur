@@ -26,10 +26,13 @@ export const metadata: Metadata = {
   },
 };
 
-// Fixe le thème iOS pour la barre de statut + empêche le zoom accidentel
-// par pincement sur un formulaire (UX PWA typique).
+// Deux couleurs selon le thème : iOS ajuste la status bar dynamiquement
+// si on déclare les deux medias.
 export const viewport: Viewport = {
-  themeColor: "#0F172A",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F4F5F7" },
+    { media: "(prefers-color-scheme: dark)",  color: "#0B0D12" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -37,16 +40,25 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Applique le thème choisi AVANT le render React pour éviter un flash
+// clair→sombre au premier paint. Lit localStorage.ae-theme ("dark"|"light")
+// et, à défaut, respecte la préférence système (prefers-color-scheme).
+const themeBootScript = `
+(function(){try{
+  var t=localStorage.getItem('ae-theme');
+  if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
+  if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}
+}catch(e){}})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
       <head>
-        {/* Inter — match the Notion-esque typography. */}
         <link rel="preconnect" href="https://rsms.me/" />
         <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
-        {/* Balise iOS historique (support < iOS 15) en plus de l'API
-            appleWebApp du metadata Next — ceinture + bretelles. */}
         <meta name="mobile-web-app-capable" content="yes" />
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>{children}</body>
     </html>

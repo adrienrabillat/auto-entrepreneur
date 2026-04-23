@@ -298,11 +298,11 @@ export function NewInvoiceForm({
       {step === 1 ? (
         <Card className="space-y-4">
           <div className="flex items-center gap-2">
-            <div className="h-9 w-9 grid place-items-center rounded-xl bg-brand-gradient-subtle text-brand-700">
+            <div className="h-9 w-9 grid place-items-center rounded-xl bg-brand-500/10 text-brand-600">
               <Users size={16} />
             </div>
             <div>
-              <div className="font-semibold text-ink-900">Pour qui ?</div>
+              <div className="font-medium text-ink-900">Pour qui ?</div>
               <div className="text-xs text-ink-500">Choisis un client existant ou saisis ses infos à la main.</div>
             </div>
           </div>
@@ -350,13 +350,13 @@ export function NewInvoiceForm({
                         type="button"
                         key={c.id}
                         onClick={() => setPickedClientId(c.id)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition ${
+                        className={`w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-all ${
                           active
-                            ? "bg-brand-gradient-subtle ring-2 ring-inset ring-brand-400"
-                            : "bg-white ring-1 ring-inset ring-ink-200 hover:ring-ink-300"
+                            ? "bg-brand-500/10 shadow-hair"
+                            : "bg-surface shadow-hair hover:bg-surface-2"
                         }`}
                       >
-                        <div className="h-10 w-10 grid place-items-center rounded-full bg-white font-bold text-ink-700 ring-1 ring-inset ring-ink-200 shrink-0">
+                        <div className="avatar shrink-0">
                           {(c.label?.[0] || "?").toUpperCase()}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -412,15 +412,15 @@ export function NewInvoiceForm({
                   onChange={(e) => setClientAddress(e.target.value)}
                 />
               </div>
-              <label className="md:col-span-2 flex items-center gap-2 cursor-pointer select-none rounded-xl bg-brand-gradient-subtle p-3 text-small">
+              <label className="md:col-span-2 flex items-center gap-2 cursor-pointer select-none rounded-2xl bg-surface-2 p-3.5 text-small">
                 <input
                   type="checkbox"
                   checked={saveAsClient}
                   onChange={(e) => setSaveAsClient(e.target.checked)}
-                  className="h-4 w-4 accent-[color:var(--brand-600,#6366f1)]"
+                  className="h-4 w-4 accent-brand-500"
                 />
                 <span className="text-ink-700">
-                  <strong className="text-ink-900">Créer aussi comme client</strong>
+                  <strong className="text-ink-900 font-medium">Créer aussi comme client</strong>
                   <span className="text-ink-500 ml-1">· pour le retrouver en un clic la prochaine fois</span>
                 </span>
               </label>
@@ -433,11 +433,11 @@ export function NewInvoiceForm({
       {step === 2 ? (
         <Card className="space-y-5">
           <div className="flex items-center gap-2">
-            <div className="h-9 w-9 grid place-items-center rounded-xl bg-brand-gradient-subtle text-brand-700">
+            <div className="h-9 w-9 grid place-items-center rounded-xl bg-brand-500/10 text-brand-600">
               <FileSignature size={16} />
             </div>
             <div>
-              <div className="font-semibold text-ink-900">Détails de la facture</div>
+              <div className="font-medium text-ink-900">Détails de la facture</div>
               <div className="text-xs text-ink-500">Prestation, montant, dates.</div>
             </div>
           </div>
@@ -483,13 +483,13 @@ export function NewInvoiceForm({
             />
             {polishError ? <p className="mt-2 text-xs text-danger-600">{polishError}</p> : null}
             {polished ? (
-              <div className="mt-3 rounded-2xl ring-1 ring-inset ring-brand-200 bg-brand-50/50 p-4 space-y-3">
+              <div className="mt-3 rounded-2xl bg-surface-2 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <Wand2 size={14} className="text-brand-600" />
-                  <span className="text-xs font-semibold text-brand-700 uppercase tracking-wide">Suggestion IA</span>
+                  <span className="text-xs font-medium text-brand-600 uppercase tracking-wide">Suggestion IA</span>
                 </div>
                 <div>
-                  <div className="text-xs font-semibold text-ink-900 mb-1">Proposition</div>
+                  <div className="text-xs font-medium text-ink-900 mb-1">Proposition</div>
                   <p className="text-small text-ink-900 whitespace-pre-wrap">{polished}</p>
                 </div>
                 <div className="flex gap-2">
@@ -500,14 +500,14 @@ export function NewInvoiceForm({
                       setPolished(null);
                       setPolishError(null);
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-small font-semibold text-white bg-brand-gradient shadow-pop"
+                    className="pill pill-primary text-xs py-1.5 px-3.5"
                   >
                     <Check size={14} /> Utiliser
                   </button>
                   <button
                     type="button"
                     onClick={() => { setPolished(null); setPolishError(null); }}
-                    className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-small font-semibold text-ink-600 bg-white ring-1 ring-inset ring-ink-200"
+                    className="pill pill-ghost text-xs py-1.5 px-3.5"
                   >
                     <X size={14} /> Ignorer
                   </button>
@@ -552,7 +552,7 @@ export function NewInvoiceForm({
                 id="operation_type"
                 value={operationType}
                 onChange={(e) => setOperationType(e.target.value as OpType)}
-                className="h-12 w-full rounded-xl bg-white px-3 text-body shadow-hair focus:outline-none focus:ring-2 focus:ring-brand-400 focus:shadow-glow transition appearance-none"
+                className="h-12 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
               >
                 <option value="service">Prestation de services</option>
                 <option value="vente">Vente de biens</option>
@@ -604,23 +604,33 @@ export function NewInvoiceForm({
       {step === 3 ? (
         <Card className="space-y-5">
           <div className="flex items-center gap-2">
-            <div className="h-9 w-9 grid place-items-center rounded-xl bg-brand-gradient-subtle text-brand-700">
+            <div className="h-9 w-9 grid place-items-center rounded-xl bg-brand-500/10 text-brand-600">
               <BadgeCheck size={16} />
             </div>
             <div>
-              <div className="font-semibold text-ink-900">Relecture</div>
+              <div className="font-medium text-ink-900">Relecture</div>
               <div className="text-xs text-ink-500">Un coup d&apos;œil avant d&apos;envoyer.</div>
             </div>
           </div>
 
-          {/* Total hero */}
-          <div className="rounded-3xl p-5 md:p-6 bg-brand-gradient text-white shadow-pop">
-            <div className="text-xs uppercase tracking-wide text-white/75">Montant</div>
-            <div className="mt-1 text-[2rem] md:text-[2.4rem] font-extrabold tabular-nums leading-none">
-              {formatEUR(amountCents)}
-            </div>
-            <div className="mt-2 text-small text-white/85">
-              {kind === "prepaid" ? "Facture acquittée — déjà réglée par le client" : "Facture à régler par le client"}
+          {/* Total hero — en surface (blanc/dark) avec chiffre XL */}
+          <div className="relative overflow-hidden rounded-2xl bg-surface-2 p-6">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -right-16 -bottom-16 h-56 w-56 rounded-full"
+              style={{ background: "radial-gradient(circle at center, var(--accent-soft) 0%, transparent 65%)" }}
+            />
+            <div className="relative">
+              <div className="text-xs uppercase tracking-wide text-ink-500">Montant</div>
+              <div
+                className="mt-1 font-bold tabular-nums tracking-[-0.035em] leading-none text-ink-900"
+                style={{ fontSize: "clamp(36px, 5vw, 52px)" }}
+              >
+                {formatEUR(amountCents)}
+              </div>
+              <div className="mt-2 text-small text-ink-500">
+                {kind === "prepaid" ? "Facture acquittée — déjà réglée par le client" : "Facture à régler par le client"}
+              </div>
             </div>
           </div>
 
@@ -639,7 +649,7 @@ export function NewInvoiceForm({
           />
 
           {!gmailConnected && kind === "to_pay" ? (
-            <div className="rounded-xl bg-warn-50 ring-1 ring-inset ring-warn-200 p-3 text-small text-warn-700">
+            <div className="rounded-2xl bg-warn-500/10 p-3.5 text-small text-warn-600">
               Gmail pas connecté → tu ne pourras qu&apos;enregistrer en brouillon. Reconnecte-toi avec Google pour envoyer.
             </div>
           ) : null}
@@ -647,7 +657,7 @@ export function NewInvoiceForm({
       ) : null}
 
       {error ? (
-        <div className="mt-4 rounded-xl bg-danger-50 ring-1 ring-inset ring-danger-200 p-3 text-small text-danger-700">
+        <div className="mt-4 rounded-2xl bg-danger-500/10 p-3.5 text-small text-danger-600">
           {error}
         </div>
       ) : null}
@@ -702,17 +712,17 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
         return (
           <li key={s.n} className="flex items-center gap-2">
             <div
-              className={`h-7 w-7 grid place-items-center rounded-full text-xs font-bold shrink-0 transition ${
+              className={`h-7 w-7 grid place-items-center rounded-full text-xs font-semibold shrink-0 transition-all ${
                 done
-                  ? "bg-brand-gradient text-white"
+                  ? "bg-brand-500 text-white"
                   : active
-                    ? "bg-brand-gradient text-white shadow-pop"
-                    : "bg-white ring-1 ring-inset ring-ink-200 text-ink-500"
+                    ? "bg-brand-500 text-white shadow-pop"
+                    : "bg-surface-2 text-ink-500"
               }`}
             >
               {done ? <Check size={14} /> : s.n}
             </div>
-            <span className={`text-xs font-semibold ${active ? "text-ink-900" : done ? "text-ink-700" : "text-ink-400"}`}>
+            <span className={`text-xs font-medium ${active ? "text-ink-900" : done ? "text-ink-700" : "text-ink-400"}`}>
               {s.label}
             </span>
           </li>
@@ -740,10 +750,10 @@ function ToggleChip({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+      className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
         active
-          ? "bg-brand-gradient text-white shadow-pop"
-          : "bg-white text-ink-700 ring-1 ring-inset ring-ink-200 hover:ring-ink-300 disabled:opacity-40"
+          ? "bg-brand-500 text-white shadow-pop"
+          : "bg-surface-2 text-ink-700 hover:bg-brand-500/10 hover:text-brand-600 disabled:opacity-40"
       }`}
     >
       {icon}
@@ -769,23 +779,23 @@ function TypeCard({
     <button
       type="button"
       onClick={onClick}
-      className={`text-left rounded-2xl p-3.5 ring-2 transition ${
+      className={`text-left rounded-2xl p-4 transition-all ${
         active
-          ? "bg-brand-gradient-subtle ring-brand-400"
-          : "bg-white ring-ink-200 ring-opacity-60 hover:ring-ink-300"
+          ? "bg-brand-500/10 shadow-hair"
+          : "bg-surface shadow-hair hover:bg-surface-2"
       }`}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <div
-          className={`h-8 w-8 grid place-items-center rounded-lg ${
-            active ? "bg-brand-gradient text-white" : "bg-ink-50 text-ink-600"
+          className={`h-9 w-9 grid place-items-center rounded-xl ${
+            active ? "bg-brand-500 text-white shadow-pop" : "bg-surface-2 text-ink-600"
           }`}
         >
           {icon}
         </div>
-        <div className="font-semibold text-ink-900">{title}</div>
+        <div className="font-medium text-ink-900">{title}</div>
       </div>
-      <p className="mt-1.5 text-xs text-ink-500 leading-snug">{body}</p>
+      <p className="mt-2 text-xs text-ink-500 leading-snug">{body}</p>
     </button>
   );
 }
@@ -802,12 +812,12 @@ function RecapRow({
   sub?: string;
 }) {
   return (
-    <div className="flex items-start gap-3 py-2 border-t border-ink-100 first:border-t-0">
-      <div className="h-8 w-8 grid place-items-center rounded-lg bg-ink-50 text-ink-500 shrink-0">
+    <div className="flex items-start gap-3 py-3 first:pt-0">
+      <div className="h-8 w-8 grid place-items-center rounded-xl bg-surface-2 text-ink-500 shrink-0">
         {icon}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold uppercase tracking-wide text-ink-400">{label}</div>
+        <div className="text-xs font-medium uppercase tracking-wide text-ink-500">{label}</div>
         <div className="text-body text-ink-900 mt-0.5 break-words">{value || "—"}</div>
         {sub ? <div className="text-xs text-ink-500 mt-0.5 break-all">{sub}</div> : null}
       </div>
@@ -845,20 +855,20 @@ function SuccessOverlay({
       : "Brouillon enregistré";
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink-900/40 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="w-full max-w-md rounded-3xl bg-white shadow-pop p-6 md:p-8 text-center">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-ink-900/50 backdrop-blur-sm p-4 animate-fade-in">
+      <div className="w-full max-w-md surface p-6 md:p-8 text-center">
         <div
-          className={`mx-auto grid h-20 w-20 md:h-24 md:w-24 place-items-center rounded-full bg-brand-gradient text-white transition-transform duration-500 ${
+          className={`mx-auto grid h-20 w-20 md:h-24 md:w-24 place-items-center rounded-full bg-brand-500 text-white shadow-pop transition-transform duration-500 ${
             mounted ? "scale-100" : "scale-0"
           }`}
           style={{ transitionTimingFunction: "cubic-bezier(.34,1.56,.64,1)" }}
         >
-          <Check size={48} strokeWidth={3.5} />
+          <Check size={48} strokeWidth={3} />
         </div>
-        <h2 className="mt-5 text-h2 font-extrabold text-ink-900">{title}</h2>
+        <h2 className="mt-5 text-h2 text-ink-900">{title}</h2>
         <p className="mt-1 text-small text-ink-500">N° {s.number}</p>
 
-        <div className="mt-6 text-left rounded-2xl bg-ink-50 p-4 space-y-2.5">
+        <div className="mt-6 text-left rounded-2xl bg-surface-2 p-4 divide-y divide-divider">
           <MiniRow label="Client" value={s.clientLabel} sub={s.clientEmail} />
           <MiniRow label="Montant" value={formatEUR(s.totalCents)} />
           <MiniRow
@@ -879,9 +889,9 @@ function SuccessOverlay({
 
 function MiniRow({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="flex items-start justify-between gap-3 text-small">
+    <div className="flex items-start justify-between gap-3 text-small py-2 first:pt-0 last:pb-0">
       <span className="text-ink-500">{label}</span>
-      <span className="text-right text-ink-900 font-semibold min-w-0 flex-1 break-words">
+      <span className="text-right text-ink-900 font-medium min-w-0 flex-1 break-words">
         {value}
         {sub ? <span className="block text-xs text-ink-500 font-normal break-all">{sub}</span> : null}
       </span>
