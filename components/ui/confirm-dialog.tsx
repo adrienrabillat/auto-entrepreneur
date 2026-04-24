@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -44,6 +45,12 @@ export function ConfirmDialog({
   variant?: "danger" | "primary";
 }) {
   const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Portal : on attend le mount côté client pour accéder à document.body.
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -65,14 +72,18 @@ export function ConfirmDialog({
     };
   }, [open, loading, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const accentClass =
     variant === "danger"
       ? "bg-danger-500/10 text-danger-600"
       : "bg-brand-500/10 text-brand-600";
 
-  return (
+  // Rendu via un Portal dans document.body pour échapper à tout ancêtre
+  // transformé (ex : .animate-fade-in-up sur les pages) qui casserait le
+  // position:fixed. Sans ça, le dialog s'ancre au conteneur transformé
+  // au lieu du viewport et apparaît décalé à droite.
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -131,6 +142,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
