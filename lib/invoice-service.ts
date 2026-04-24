@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateInvoicePdf, type InvoicePdfData, type OperationType } from "@/lib/pdf";
-import { sendGmail } from "@/lib/gmail";
+import { deliverInvoice, type DeliveryResult } from "@/lib/delivery";
 import { nextInvoiceNumber } from "@/lib/invoice-number";
 import { formatEUR } from "@/lib/format";
 
@@ -208,9 +208,9 @@ export async function sendInvoice(
   invoiceId: string
 ) {
   const profile = await loadProfile(supabase, userId);
-  if (!profile.gmail_refresh_token || !profile.gmail_connected_email) {
-    throw new Error("Gmail non connecté. Reconnecte-toi avec Google depuis la page d'accueil.");
-  }
+  // On ne pré-vérifie plus Gmail ici : le dispatcher gère le choix du canal
+  // (PDP si B2B FR + configurée, sinon Gmail). Il jette une erreur claire si
+  // aucun canal n'est disponible (Gmail déconnecté ET PDP non configurée).
 
   const { data: invoiceRaw, error } = await supabase
     .from("invoices")
@@ -276,17 +276,35 @@ export async function sendInvoice(
         <p>Merci !<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span></p>
       </div>`;
 
-  await sendGmail({
-    refreshToken: profile.gmail_refresh_token,
-    fromEmail: profile.gmail_connected_email,
-    fromName: profile.display_name ?? profile.gmail_connected_email,
-    to: invoice.client_email,
-    subject,
-    text,
-    html,
-    bccSelf: true,
-    attachment: { filename, contentType: "application/pdf", content: pdfBytes },
+  // Dispatcher : choisit automatiquement Gmail ou PDP selon le destinataire
+  // et la configuration (env PDP_PROVIDER). Tant que PDP n'est pas activée,
+  // tout passe via Gmail — comportement strictement identique à avant.
+  const delivery: DeliveryResult = await deliverInvoice({
+    recipient: {
+      siren: invoice.client_siren,
+      countryCode: "FR",
+      email: invoice.client_email,
+      name: invoice.client_name,
+    },
+    invoice: {
+      id: invoice.id,
+      number: invoice.number,
+      description: invoice.description,
+      amount_cents: invoice.amount_cents,
+      prepaid: alreadyPaid,
+    },
+    pdf: { bytes: pdfBytes, filename },
+    email: { subject, text, html, bccSelf: true },
+    sender: {
+      displayName: profile.display_name ?? profile.gmail_connected_email ?? profile.email,
+      email: profile.email,
+      gmailRefreshToken: profile.gmail_refresh_token,
+      gmailConnectedEmail: profile.gmail_connected_email,
+    },
   });
+  // delivery.channel / reference / status seront utilisés plus tard pour
+  // stocker la trace PDP en base et remonter les statuts dans l'UI.
+  void delivery;
 
   // Si acquittée : on ne redescend PAS le statut à "sent" (sinon on perd
   // l'info payé). On garde status=paid, on note juste sent_at + pdf_path.
