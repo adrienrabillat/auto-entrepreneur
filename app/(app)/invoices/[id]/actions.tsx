@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Send, CheckCircle2, Undo2, Trash2 } from "lucide-react";
 
 type Invoice = {
@@ -15,6 +16,7 @@ export function InvoiceActions({ invoice, gmailConnected }: { invoice: Invoice; 
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function request(key: string, method: "POST" | "DELETE", url: string, body?: object) {
     setBusy(key);
@@ -45,14 +47,14 @@ export function InvoiceActions({ invoice, gmailConnected }: { invoice: Invoice; 
     }
   }
 
-  async function onDelete() {
-    if (!window.confirm("Supprimer définitivement ce brouillon ? Cette action est irréversible.")) return;
+  async function doDelete() {
     try {
       await request("delete", "DELETE", `/api/invoices/${invoice.id}`);
+      setConfirmOpen(false);
       router.push("/invoices");
       router.refresh();
     } catch {
-      /* error already surfaced */
+      /* error surfaced via setError — on laisse le dialog ouvert pour afficher. */
     }
   }
 
@@ -93,13 +95,28 @@ export function InvoiceActions({ invoice, gmailConnected }: { invoice: Invoice; 
           <Button
             variant="danger"
             disabled={busy !== null}
-            onClick={onDelete}
+            onClick={() => { setError(null); setConfirmOpen(true); }}
           >
             <Trash2 size={16} />
             {busy === "delete" ? "Suppression…" : "Supprimer le brouillon"}
           </Button>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => (busy === "delete" ? undefined : setConfirmOpen(false))}
+        onConfirm={doDelete}
+        title="Supprimer ce brouillon ?"
+        description={
+          error
+            ? error
+            : "La facture brouillon sera définitivement supprimée. Cette action est irréversible."
+        }
+        confirmLabel="Supprimer"
+        loading={busy === "delete"}
+        variant="danger"
+      />
       {!gmailConnected && invoice.status !== "paid" ? (
         <p className="text-xs text-ink-500">
           Gmail non connecté — reconnecte-toi avec Google depuis la page d&apos;accueil pour pouvoir envoyer.
