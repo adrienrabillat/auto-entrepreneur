@@ -77,14 +77,14 @@ export function ConfirmDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
-      className="fixed inset-0 z-50 grid place-items-end md:place-items-center bg-ink-900/50 backdrop-blur-sm p-0 md:p-4 animate-fade-in"
+      className="fixed inset-0 z-50 grid place-items-center bg-ink-900/50 backdrop-blur-sm p-4 animate-fade-in"
       onClick={(e) => {
         // Clic sur le backdrop (pas sur la carte) = fermer.
         if (e.target === e.currentTarget && !loading) onClose();
       }}
     >
       <div
-        className="w-full max-w-md surface p-6 md:p-7 animate-pop-in rounded-b-none md:rounded-2xl"
+        className="w-full max-w-md surface p-6 md:p-7 animate-pop-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
