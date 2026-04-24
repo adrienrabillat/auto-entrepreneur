@@ -287,8 +287,11 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   line(marginX, y, rightX, y);
   y -= 22;
 
-  // Ligne produit
-  const wrapped = wrap(data.description, 60);
+  // Ligne produit — wrap mesuré à la vraie largeur de la colonne Description
+  // pour garantir qu'aucun mot ne déborde dans la colonne QTÉ.
+  // On laisse 12pt de marge de sécurité avant la colonne des quantités.
+  const descColW = qtyX - marginX - 12;
+  const wrapped = wrapByWidth(data.description, regular, 11, descColW);
   wrapped.forEach((l, i) =>
     draw(l, marginX, y - i * 14, { size: 11, color: C_INK_900, font: regular })
   );
@@ -591,16 +594,57 @@ async function embedFacturxXml(pdf: PDFDocument, xml: string) {
   void PDFHexString;
 }
 
-function wrap(s: string, maxChars: number): string[] {
-  const words = s.split(/\s+/);
+/**
+ * Wrap un texte en utilisant la vraie largeur mesurée par la police pdf-lib.
+ * Évite les débordements dans les colonnes voisines (QTÉ / PU).
+ *
+ * - `maxWidth` : largeur disponible en points PDF.
+ * - Découpe d'abord par espaces.
+ * - Si un mot seul dépasse `maxWidth` (URL longue, mot composé sans espace),
+ *   on le casse caractère par caractère pour garantir qu'aucune ligne ne déborde.
+ */
+type MeasuringFont = { widthOfTextAtSize: (text: string, size: number) => number };
+
+function wrapByWidth(
+  s: string,
+  font: MeasuringFont,
+  size: number,
+  maxWidth: number
+): string[] {
+  const src = (s ?? "").trim();
+  if (!src) return [""];
+  const fits = (t: string) => font.widthOfTextAtSize(t, size) <= maxWidth;
   const lines: string[] = [];
   let current = "";
-  for (const w of words) {
-    if ((current + " " + w).trim().length > maxChars) {
-      if (current) lines.push(current);
-      current = w;
+
+  const pushCurrent = () => {
+    if (current) lines.push(current);
+    current = "";
+  };
+
+  const words = src.split(/\s+/);
+  for (const wordRaw of words) {
+    // Si le mot seul dépasse la largeur, on le segmente caractère par caractère.
+    if (!fits(wordRaw)) {
+      pushCurrent();
+      let chunk = "";
+      for (const ch of wordRaw) {
+        if (fits(chunk + ch)) {
+          chunk += ch;
+        } else {
+          if (chunk) lines.push(chunk);
+          chunk = ch;
+        }
+      }
+      current = chunk;
+      continue;
+    }
+    const candidate = current ? current + " " + wordRaw : wordRaw;
+    if (fits(candidate)) {
+      current = candidate;
     } else {
-      current = (current + " " + w).trim();
+      pushCurrent();
+      current = wordRaw;
     }
   }
   if (current) lines.push(current);
