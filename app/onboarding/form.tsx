@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { createClient } from "@/lib/supabase/browser";
 
 type Values = {
@@ -145,11 +146,13 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <Label htmlFor="address_line1">Adresse</Label>
-            <Input
+            <AddressAutocomplete
               id="address_line1"
               required
               value={v.address_line1}
-              onChange={(e) => setV({ ...v, address_line1: e.target.value })}
+              onChange={(val) => setV({ ...v, address_line1: val })}
+              onSelect={(s) => setV({ ...v, address_line1: s.addressLine1, postal_code: s.postalCode, city: s.city })}
+              placeholder="Rechercher une adresse…"
             />
           </div>
           <div className="md:col-span-2">

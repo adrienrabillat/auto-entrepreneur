@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
+import { identifyBank } from "@/lib/iban-banks";
 import { createClient } from "@/lib/supabase/browser";
 import {
   User,
@@ -188,7 +190,14 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <Label htmlFor="address_line1">Adresse</Label>
-            <Input id="address_line1" required value={v.address_line1} onChange={(e) => setV({ ...v, address_line1: e.target.value })} />
+            <AddressAutocomplete
+              id="address_line1"
+              required
+              value={v.address_line1}
+              onChange={(val) => setV({ ...v, address_line1: val })}
+              onSelect={(s) => setV({ ...v, address_line1: s.addressLine1, postal_code: s.postalCode, city: s.city })}
+              placeholder="12 Rue Léonard De Vinci…"
+            />
           </div>
           <div className="md:col-span-2">
             <Input aria-label="Complément" value={v.address_line2} onChange={(e) => setV({ ...v, address_line2: e.target.value })} />
@@ -224,6 +233,17 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
           <div>
             <Label htmlFor="iban">IBAN</Label>
             <Input id="iban" required value={v.iban} onChange={(e) => setV({ ...v, iban: e.target.value })} />
+            {(() => {
+              const bank = identifyBank(v.iban);
+              return bank ? (
+                <p className="mt-1.5 text-xs text-ink-500 flex items-center gap-2">
+                  <span className="inline-grid place-items-center h-5 w-5 rounded-md bg-brand-500/10 text-brand-600 text-[9px] font-semibold">
+                    {bank.glyph ?? "B"}
+                  </span>
+                  Compte identifié : <span className="font-medium text-ink-700">{bank.name}</span>
+                </p>
+              ) : null;
+            })()}
           </div>
           <div>
             <Label htmlFor="bic">BIC</Label>

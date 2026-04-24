@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
+import { EmailSuggestion } from "@/components/ui/email-suggestion";
 import { Loader2, Check, AlertCircle } from "lucide-react";
 import { lookupSiren } from "@/lib/sirene";
 
@@ -225,6 +227,7 @@ export function ClientForm({
           <div>
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" required value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} />
+            <EmailSuggestion email={v.email} onAccept={(fixed) => setV({ ...v, email: fixed })} />
           </div>
           <div>
             <Label htmlFor="phone" hint="optionnel">Téléphone</Label>
@@ -235,7 +238,13 @@ export function ClientForm({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
             <Label htmlFor="address_line1" hint="obligatoire pour un pro">Adresse</Label>
-            <Input id="address_line1" value={v.address_line1} onChange={(e) => setV({ ...v, address_line1: e.target.value })} />
+            <AddressAutocomplete
+              id="address_line1"
+              value={v.address_line1}
+              onChange={(val) => setV({ ...v, address_line1: val })}
+              onSelect={(s) => setV({ ...v, address_line1: s.addressLine1, postal_code: s.postalCode, city: s.city })}
+              placeholder="Rechercher une adresse…"
+            />
           </div>
           <div className="md:col-span-2">
             <Input aria-label="Complément" value={v.address_line2} onChange={(e) => setV({ ...v, address_line2: e.target.value })} />

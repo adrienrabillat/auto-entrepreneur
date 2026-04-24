@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { EmailSuggestion } from "@/components/ui/email-suggestion";
 import {
   ArrowLeft,
   ArrowRight,
@@ -461,6 +462,7 @@ export function NewInvoiceForm({
                   value={clientEmail}
                   onChange={(e) => setClientEmail(e.target.value)}
                 />
+                <EmailSuggestion email={clientEmail} onAccept={(fixed) => setClientEmail(fixed)} />
               </div>
               <div>
                 <Label htmlFor="client_siren" hint="si pro">SIREN</Label>
