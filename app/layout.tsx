@@ -24,6 +24,11 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  // Google Search Console — preuve de propriété d'asthia.fr.
+  // Ajoute la balise <meta name="google-site-verification" content="..."> dans <head>.
+  verification: {
+    google: "7RigPVZvnQIFWSy0ZmsewuSxefizCv2fN3zzFXI-SU8",
+  },
 };
 
 // Deux couleurs selon le thème : iOS ajuste la status bar dynamiquement
