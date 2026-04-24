@@ -443,13 +443,25 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   draw("1 / 1", rightX, 38, { size: 7.5, color: C_INK_400, align: "right" });
 
   // ----------------------------------------------------------------
-  // Factur-X MINIMUM — XML CII attaché (facturation électronique 2026)
+  // Factur-X BASIC (EN 16931-compliant) — XML CII attaché
+  // Profile suffisant pour l'obligation B2B française 2026/2027.
   // ----------------------------------------------------------------
   const xml = buildFacturxMinimumXml({
     number: data.number,
     issuedOnIso: data.issuedOn,
+    dueOnIso: data.dueOn,
+    executionDateIso: data.executionDate,
     currency: data.currency,
+    description: data.description,
+    quantity: data.quantity,
+    unitPriceCents: data.unitPriceCents,
+    lineTotalCents: data.amountCents,
     totalCents: data.amountCents,
+    duePayableCents: data.amountCents,
+    paymentTermsText: data.paymentTerms,
+    iban: data.seller.iban,
+    bic: data.seller.bic,
+    paid: Boolean(data.paidAt),
     seller: {
       legalName: sellerLegalLabel(data),
       siren: data.seller.siren,
@@ -461,6 +473,7 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     buyer: {
       name: data.client.name || data.client.email,
       siren: data.client.siren,
+      addressLine1: data.client.address?.split(/\r?\n/)[0],
     },
   });
   await embedFacturxXml(pdf, xml);
@@ -567,7 +580,7 @@ async function embedFacturxXml(pdf: PDFDocument, xml: string) {
   const xmlBytes = new TextEncoder().encode(xml);
   await pdf.attach(xmlBytes, "factur-x.xml", {
     mimeType: "application/xml",
-    description: "Factur-X (MINIMUM profile) — données structurées de la facture",
+    description: "Factur-X (BASIC profile, EN 16931) — données structurées de la facture",
     creationDate: new Date(),
     modificationDate: new Date(),
   });
@@ -590,7 +603,7 @@ async function embedFacturxXml(pdf: PDFDocument, xml: string) {
       root.set(PDFName.of("AF"), afArr);
     }
   }
-  pdf.setKeywords(["Factur-X", "MINIMUM", "EN16931", "CII", "auto-entrepreneur"]);
+  pdf.setKeywords(["Factur-X", "BASIC", "EN16931", "CII", "auto-entrepreneur"]);
   void PDFHexString;
 }
 
