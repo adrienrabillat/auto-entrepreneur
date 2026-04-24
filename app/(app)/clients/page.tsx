@@ -43,12 +43,12 @@ export default async function ClientsPage() {
             pour pré-remplir les informations du client.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 self-start">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 self-start sm:shrink-0">
           <ExportExcelButton
             endpoint="/api/export/clients"
             label="Exporter"
           />
-          <Link href="/clients/new" className="pill pill-primary">
+          <Link href="/clients/new" className="pill pill-primary whitespace-nowrap">
             <Plus size={16} />
             Nouveau client
           </Link>

@@ -31,7 +31,7 @@ export function RunMyDeclaration() {
   return (
     <div className="flex items-center gap-3">
       {error ? <span className="text-small text-danger-600">{error}</span> : null}
-      <Button variant="secondary" size="sm" onClick={run} disabled={busy}>
+      <Button variant="primary" size="sm" onClick={run} disabled={busy}>
         {busy ? "Envoi…" : "Lancer ma déclaration maintenant"}
       </Button>
     </div>
