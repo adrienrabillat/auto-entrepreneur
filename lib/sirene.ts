@@ -25,7 +25,11 @@ type RawApiResult = {
     nom_raison_sociale?: string;
     nombre_etablissements?: number;
     siege?: {
-      adresse?: string;
+      adresse?: string;            // ex: "6 RUE ALPHONSE HELBRONNER 93400 SAINT-OUEN-SUR-SEINE"
+      numero_voie?: string;        // "6"
+      type_voie?: string;           // "RUE"
+      libelle_voie?: string;        // "ALPHONSE HELBRONNER"
+      complement_adresse?: string;  // complément éventuel
       code_postal?: string;
       libelle_commune?: string;
       activite_principale?: string;
@@ -36,6 +40,36 @@ type RawApiResult = {
     libelle_nature_juridique?: string;
   }>;
 };
+
+/**
+ * Reconstruit la ligne 1 d'adresse (numéro + voie uniquement, SANS CP ni ville)
+ * à partir des champs structurés de l'API. Fallback : si ces champs ne sont
+ * pas fournis, on nettoie `adresse` en retirant le suffixe " CP VILLE".
+ *
+ * Évite le doublon "6 rue XX 93400 SAINT-OUEN / 93400 SAINT-OUEN" qui se
+ * produisait avant sur le PDF.
+ */
+function composeStreet(siege: NonNullable<RawApiResult["results"]>[number]["siege"]): string | null {
+  if (!siege) return null;
+  const structured = [siege.numero_voie, siege.type_voie, siege.libelle_voie]
+    .filter((p) => p && String(p).trim().length > 0)
+    .join(" ")
+    .trim();
+  if (structured) return structured;
+
+  // Fallback : `adresse` full, on retire le suffixe " CP VILLE" s'il est là.
+  const full = (siege.adresse ?? "").trim();
+  if (!full) return null;
+  const suffix = [siege.code_postal, siege.libelle_commune]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if (suffix) {
+    const idx = full.toUpperCase().lastIndexOf(suffix.toUpperCase());
+    if (idx >= 0) return full.slice(0, idx).trim();
+  }
+  return full;
+}
 
 /**
  * Recherche une entreprise par son SIREN (9 chiffres).
@@ -57,7 +91,7 @@ export async function lookupSiren(siren: string, signal?: AbortSignal): Promise<
     return {
       siren: hit.siren,
       name: hit.nom_raison_sociale || hit.nom_complet || "",
-      addressLine1: hit.siege?.adresse ?? null,
+      addressLine1: composeStreet(hit.siege),
       postalCode: hit.siege?.code_postal ?? null,
       city: hit.siege?.libelle_commune ?? null,
       apeNaf: hit.siege?.activite_principale ?? hit.activite_principale ?? null,
