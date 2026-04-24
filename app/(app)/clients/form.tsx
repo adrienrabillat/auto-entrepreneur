@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Loader2, Check, AlertCircle } from "lucide-react";
+import { lookupSiren } from "@/lib/sirene";
 
 type Values = {
   is_pro: boolean;
@@ -51,6 +53,47 @@ export function ClientForm({
   const [v, setV] = useState<Values>(defaultValues ?? EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // SIREN auto-fill : état de la recherche + abort controller pour annuler
+  // les fetchs pendants quand l'utilisateur tape vite.
+  const [sirenStatus, setSirenStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Se déclenche quand le SIREN atteint pile 9 chiffres. On ne ré-interroge
+  // pas si on a déjà rempli le client (mode édition) ou si l'utilisateur
+  // vient de saisir manuellement raison sociale + ville.
+  useEffect(() => {
+    if (!v.is_pro) return;
+    const clean = v.siren.replace(/\D/g, "");
+    if (clean.length !== 9) {
+      if (sirenStatus !== "idle") setSirenStatus("idle");
+      return;
+    }
+    // Annule toute requête précédente encore en vol.
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    setSirenStatus("loading");
+    lookupSiren(clean, ctrl.signal).then((company) => {
+      if (ctrl.signal.aborted) return;
+      if (!company) {
+        setSirenStatus("not_found");
+        return;
+      }
+      // On remplit uniquement les champs vides pour ne pas écraser une édition.
+      setV((prev) => ({
+        ...prev,
+        company_name: prev.company_name || company.name,
+        address_line1: prev.address_line1 || company.addressLine1 || "",
+        postal_code: prev.postal_code || company.postalCode || "",
+        city: prev.city || company.city || "",
+      }));
+      setSirenStatus("found");
+    });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.is_pro, v.siren]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -125,13 +168,28 @@ export function ClientForm({
               />
             </div>
             <div>
-              <Label htmlFor="siren" hint="9 chiffres — requis pour un pro (obligation 2026)">SIREN</Label>
-              <Input
-                id="siren"
-                inputMode="numeric"
-                value={v.siren}
-                onChange={(e) => setV({ ...v, siren: e.target.value.replace(/\D/g, "").slice(0, 9) })}
-              />
+              <Label htmlFor="siren" hint="9 chiffres — on remplit le reste automatiquement">SIREN</Label>
+              <div className="relative">
+                <Input
+                  id="siren"
+                  inputMode="numeric"
+                  value={v.siren}
+                  onChange={(e) => setV({ ...v, siren: e.target.value.replace(/\D/g, "").slice(0, 9) })}
+                  className="pr-10"
+                />
+                {sirenStatus === "loading" ? (
+                  <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 animate-spin" />
+                ) : sirenStatus === "found" ? (
+                  <Check size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-success-600" />
+                ) : sirenStatus === "not_found" ? (
+                  <AlertCircle size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-warn-600" />
+                ) : null}
+              </div>
+              {sirenStatus === "found" ? (
+                <p className="mt-1.5 text-xs text-success-600">Entreprise trouvée, infos remplies automatiquement.</p>
+              ) : sirenStatus === "not_found" ? (
+                <p className="mt-1.5 text-xs text-warn-600">SIREN introuvable — tu peux saisir les infos à la main ci-dessous.</p>
+              ) : null}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
