@@ -54,14 +54,14 @@ export function ClientForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // SIREN auto-fill : état de la recherche + abort controller pour annuler
-  // les fetchs pendants quand l'utilisateur tape vite.
+  // SIREN auto-fill : écrase les champs entreprise à chaque nouveau SIREN
+  // valide. On mémorise le dernier SIREN résolu pour ne pas re-fetcher
+  // inutilement (et ne pas écraser les éditions manuelles faites APRÈS
+  // le remplissage auto).
   const [sirenStatus, setSirenStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
   const abortRef = useRef<AbortController | null>(null);
+  const lastResolvedSirenRef = useRef<string>(defaultValues?.siren?.replace(/\D/g, "") ?? "");
 
-  // Se déclenche quand le SIREN atteint pile 9 chiffres. On ne ré-interroge
-  // pas si on a déjà rempli le client (mode édition) ou si l'utilisateur
-  // vient de saisir manuellement raison sociale + ville.
   useEffect(() => {
     if (!v.is_pro) return;
     const clean = v.siren.replace(/\D/g, "");
@@ -69,7 +69,10 @@ export function ClientForm({
       if (sirenStatus !== "idle") setSirenStatus("idle");
       return;
     }
-    // Annule toute requête précédente encore en vol.
+    // Même SIREN qu'avant → on ne réinterroge pas, l'utilisateur est peut-être
+    // en train d'éditer les champs à la main après un premier remplissage.
+    if (clean === lastResolvedSirenRef.current) return;
+
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -81,14 +84,17 @@ export function ClientForm({
         setSirenStatus("not_found");
         return;
       }
-      // On remplit uniquement les champs vides pour ne pas écraser une édition.
+      // Écrase les champs entreprise avec les valeurs officielles du Sirene.
+      // L'utilisateur peut ensuite éditer librement — on ne re-fetch plus
+      // tant qu'il ne change pas le SIREN.
       setV((prev) => ({
         ...prev,
-        company_name: prev.company_name || company.name,
-        address_line1: prev.address_line1 || company.addressLine1 || "",
-        postal_code: prev.postal_code || company.postalCode || "",
-        city: prev.city || company.city || "",
+        company_name: company.name,
+        address_line1: company.addressLine1 ?? "",
+        postal_code: company.postalCode ?? "",
+        city: company.city ?? "",
       }));
+      lastResolvedSirenRef.current = clean;
       setSirenStatus("found");
     });
     return () => ctrl.abort();

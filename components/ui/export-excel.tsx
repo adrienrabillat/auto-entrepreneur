@@ -13,10 +13,12 @@ export function ExportExcelButton({
   label = "Exporter en Excel",
   variant = "secondary",
   size = "sm",
+  endpoint = "/api/export/xlsx",
 }: {
   label?: string;
   variant?: "primary" | "secondary" | "outline";
   size?: "sm" | "md" | "lg";
+  endpoint?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,7 @@ export function ExportExcelButton({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/export/xlsx");
+      const res = await fetch(endpoint);
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
         throw new Error(txt || `Erreur ${res.status}`);

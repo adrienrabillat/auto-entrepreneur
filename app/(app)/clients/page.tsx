@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { Plus, Users, Building2 } from "lucide-react";
 import { DeleteClientButton } from "./row-delete";
 import { initialsFrom } from "@/lib/initials";
+import { ExportExcelButton } from "@/components/ui/export-excel";
 
 export const dynamic = "force-dynamic";
 
@@ -42,10 +43,16 @@ export default async function ClientsPage() {
             pour pré-remplir les informations du client.
           </p>
         </div>
-        <Link href="/clients/new" className="pill pill-primary self-start">
-          <Plus size={16} />
-          Nouveau client
-        </Link>
+        <div className="flex flex-wrap gap-2 self-start">
+          <ExportExcelButton
+            endpoint="/api/export/clients"
+            label="Exporter"
+          />
+          <Link href="/clients/new" className="pill pill-primary">
+            <Plus size={16} />
+            Nouveau client
+          </Link>
+        </div>
       </div>
 
       <div className="surface p-2">
