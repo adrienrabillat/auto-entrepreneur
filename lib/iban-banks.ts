@@ -65,7 +65,7 @@ const BANK_BY_CODE: Record<string, Omit<BankInfo, "via">> = {
   "15589": { name: "Crédit Mutuel", glyph: "CM" },
   // Néo-banques et services Fintech
   "16958": { name: "Boursorama Banque", glyph: "Bo" },
-  "40618": { name: "Hello Bank!", glyph: "Hb" },
+  "40618": { name: "Boursorama Banque", glyph: "Bo" },
   "21110": { name: "Allianz Banque", glyph: "Az" },
   "23700": { name: "Monabanq", glyph: "Mb" },
   "13168": { name: "Revolut", glyph: "R" },
@@ -121,22 +121,27 @@ export function extractFrenchBankCode(iban: string): string | null {
 }
 
 /**
- * Identifie la banque depuis IBAN en priorité, BIC en fallback.
- * Retourne null si aucun des deux ne matche la table.
+ * Identifie la banque depuis BIC en PRIORITÉ (c'est l'identifiant SWIFT
+ * standardisé, sans ambiguïté), IBAN en fallback.
+ *
+ * Raison : les codes IBAN banque sont partagés entre plusieurs filiales
+ * (ex: le même code peut être assigné à Boursorama et Hello Bank selon
+ * l'année), alors que le BIC est strictement lié à l'établissement.
+ * Quand on a les deux, le BIC gagne toujours.
  */
 export function identifyBank(iban: string, bic?: string): BankInfo | null {
-  // 1. Via IBAN
-  const code = extractFrenchBankCode(iban);
-  if (code && BANK_BY_CODE[code]) {
-    return { ...BANK_BY_CODE[code], via: "iban" };
-  }
-  // 2. Fallback via BIC (préfixe 4 chars)
+  // 1. Priorité au BIC (préfixe 4 chars) s'il est fourni et reconnu
   const cleanBic = (bic ?? "").replace(/\s+/g, "").toUpperCase();
   if (cleanBic.length >= 4) {
     const prefix = cleanBic.slice(0, 4);
     if (BANK_BY_BIC_PREFIX[prefix]) {
       return { ...BANK_BY_BIC_PREFIX[prefix], via: "bic" };
     }
+  }
+  // 2. Fallback via IBAN (utile quand le BIC n'est pas encore saisi)
+  const code = extractFrenchBankCode(iban);
+  if (code && BANK_BY_CODE[code]) {
+    return { ...BANK_BY_CODE[code], via: "iban" };
   }
   return null;
 }
