@@ -45,14 +45,18 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-// Applique le thème choisi AVANT le render React pour éviter un flash
-// clair→sombre au premier paint. Lit localStorage.ae-theme ("dark"|"light")
-// et, à défaut, respecte la préférence système (prefers-color-scheme).
+// Applique le thème ET l'accent choisis AVANT le render React pour éviter
+// un flash au premier paint.
+//  - ae-theme  : "dark" | "light" (défaut = préférence système)
+//  - ae-accent : id d'accent (blue, purple, teal, rose, amber, slate)
 const themeBootScript = `
 (function(){try{
   var t=localStorage.getItem('ae-theme');
   if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
   if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}
+  var a=localStorage.getItem('ae-accent');
+  var VALID=['blue','purple','teal','rose','amber','slate'];
+  if(a&&VALID.indexOf(a)>=0&&a!=='blue'){document.documentElement.setAttribute('data-accent',a);}
 }catch(e){}})();
 `;
 

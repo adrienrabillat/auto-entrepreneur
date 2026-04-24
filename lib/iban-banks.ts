@@ -1,75 +1,118 @@
 /**
- * Identification des banques françaises à partir d'un IBAN.
+ * Identification des banques françaises depuis IBAN ou BIC.
  *
- * Structure d'un IBAN FR : FR76 3000 4001 23X X X X X X X X X 97
- *                            ^^ ^^^^ ^^^^
- *                            │  └────┴─── code établissement (5 chiffres)
- *                            │
- *                            pays + clé
+ * Deux tables :
+ *  - BANK_BY_CODE : code banque (5 chiffres, positions 4-8 d'un IBAN FR)
+ *  - BANK_BY_BIC_PREFIX : préfixe BIC (4 premiers caractères du BIC, ex "REVO", "BNPA")
  *
- * On extrait le code banque (positions 4-8, 5 chiffres) et on le mappe vers
- * le nom de la banque. Table des 25 banques qui couvrent ~95% des comptes
- * auto-entrepreneurs en France.
+ * Flow de lookup :
+ *  1. On tente d'abord via IBAN (plus précis, distingue parfois plusieurs banques
+ *     d'un même groupe ou régions).
+ *  2. Fallback via BIC — couvre les IBAN inconnus de la table (ex : Revolut
+ *     génère plusieurs codes banque selon ton pays d'enregistrement).
  *
- * Source : Fichier des Établissements de Crédit de la Banque de France
- * (mis à jour avril 2025). Pour les codes manquants, on renvoie null —
- * l'utilisateur peut toujours saisir à la main.
+ * Pour les logos, les initiales tiennent dans un badge 20×20 (ex "BNP",
+ * "SG", "CE", "LCL"). Pas de fichier image à héberger.
  */
 
 export type BankInfo = {
-  code: string;         // 5 chiffres
   name: string;
-  /** Emoji ou initiales pour un mini-logo dans l'UI. */
-  glyph?: string;
+  /** Initiales / mini-glyph à afficher dans un badge coloré. */
+  glyph: string;
+  /** Source d'identification (pour debug / UI). */
+  via?: "iban" | "bic";
 };
 
-// Code banque → nom. Ordre d'ajout ≈ fréquence d'usage.
-const BANKS: Record<string, BankInfo> = {
-  "30004": { code: "30004", name: "BNP Paribas", glyph: "BNP" },
-  "30003": { code: "30003", name: "Société Générale", glyph: "SG" },
-  "20041": { code: "20041", name: "La Banque Postale", glyph: "LBP" },
-  "10107": { code: "10107", name: "BRED Banque Populaire", glyph: "BP" },
-  "10207": { code: "10207", name: "CIC", glyph: "CIC" },
-  "30056": { code: "30056", name: "HSBC France", glyph: "HSBC" },
-  "30077": { code: "30077", name: "Crédit du Nord", glyph: "CdN" },
-  "30066": { code: "30066", name: "CIC", glyph: "CIC" },
-  "30076": { code: "30076", name: "Crédit du Nord", glyph: "CdN" },
-  "30027": { code: "30027", name: "BNP Paribas", glyph: "BNP" },
-  "17907": { code: "17907", name: "BforBank", glyph: "B" },
-  "17906": { code: "17906", name: "BforBank", glyph: "B" },
-  "14445": { code: "14445", name: "Caisse d'Épargne", glyph: "CE" },
-  "13335": { code: "13335", name: "Caisse d'Épargne", glyph: "CE" },
-  "13507": { code: "13507", name: "Caisse d'Épargne Île-de-France", glyph: "CE" },
-  "18206": { code: "18206", name: "Crédit Mutuel", glyph: "CM" },
-  "18306": { code: "18306", name: "Crédit Mutuel", glyph: "CM" },
-  "10278": { code: "10278", name: "Crédit Mutuel", glyph: "CM" },
-  "10096": { code: "10096", name: "CIC Est", glyph: "CIC" },
-  "10057": { code: "10057", name: "CIC Ouest", glyph: "CIC" },
-  "30002": { code: "30002", name: "LCL (Le Crédit Lyonnais)", glyph: "LCL" },
-  "11315": { code: "11315", name: "Crédit Agricole", glyph: "CA" },
-  "12135": { code: "12135", name: "Crédit Agricole", glyph: "CA" },
-  "19106": { code: "19106", name: "Crédit Agricole", glyph: "CA" },
-  "19306": { code: "19306", name: "Crédit Agricole", glyph: "CA" },
-  "16958": { code: "16958", name: "Boursorama Banque", glyph: "Bo" },
-  "40618": { code: "40618", name: "Hello Bank!", glyph: "Hb" },
-  "21110": { code: "21110", name: "Allianz Banque", glyph: "Az" },
-  "30087": { code: "30087", name: "CRCAM (Crédit Agricole)", glyph: "CA" },
-  "23700": { code: "23700", name: "Monabanq", glyph: "Mb" },
-  "13168": { code: "13168", name: "Revolut", glyph: "R" },
-  "12548": { code: "12548", name: "N26", glyph: "N26" },
-  "17418": { code: "17418", name: "Qonto", glyph: "Q" },
-  "16798": { code: "16798", name: "Shine", glyph: "Sh" },
-  "17098": { code: "17098", name: "Wise", glyph: "W" },
-  "13338": { code: "13338", name: "Banque Populaire", glyph: "BP" },
-  "14265": { code: "14265", name: "Banque Populaire Rives de Paris", glyph: "BP" },
-  "10548": { code: "10548", name: "Banque Populaire Val de France", glyph: "BP" },
+// ─── Table codes IBAN FR (positions 4-8) ──────────────────────────────────
+// Clé = 5 chiffres. Source : Fichier des Établissements de Crédit (2025).
+const BANK_BY_CODE: Record<string, Omit<BankInfo, "via">> = {
+  // Grandes banques historiques
+  "30004": { name: "BNP Paribas", glyph: "BNP" },
+  "30027": { name: "BNP Paribas", glyph: "BNP" },
+  "30003": { name: "Société Générale", glyph: "SG" },
+  "30066": { name: "CIC", glyph: "CIC" },
+  "30076": { name: "Crédit du Nord", glyph: "CdN" },
+  "30077": { name: "Crédit du Nord", glyph: "CdN" },
+  "30056": { name: "HSBC France", glyph: "HSB" },
+  "30002": { name: "LCL (Le Crédit Lyonnais)", glyph: "LCL" },
+  "30087": { name: "Crédit Agricole", glyph: "CA" },
+  "20041": { name: "La Banque Postale", glyph: "LBP" },
+  // Crédit Agricole régionaux (échantillon)
+  "11315": { name: "Crédit Agricole", glyph: "CA" },
+  "12135": { name: "Crédit Agricole", glyph: "CA" },
+  "19106": { name: "Crédit Agricole", glyph: "CA" },
+  "19306": { name: "Crédit Agricole", glyph: "CA" },
+  "19806": { name: "Crédit Agricole", glyph: "CA" },
+  "17906": { name: "BforBank", glyph: "Bf" },
+  "17907": { name: "BforBank", glyph: "Bf" },
+  // Caisses d'Épargne (BPCE)
+  "13335": { name: "Caisse d'Épargne", glyph: "CE" },
+  "13507": { name: "Caisse d'Épargne Île-de-France", glyph: "CE" },
+  "14445": { name: "Caisse d'Épargne", glyph: "CE" },
+  "13825": { name: "Caisse d'Épargne", glyph: "CE" },
+  // Banques Populaires
+  "10107": { name: "BRED Banque Populaire", glyph: "BP" },
+  "13338": { name: "Banque Populaire", glyph: "BP" },
+  "14265": { name: "Banque Populaire Rives de Paris", glyph: "BP" },
+  "10548": { name: "Banque Populaire Val de France", glyph: "BP" },
+  // Crédit Mutuel / CIC
+  "10207": { name: "CIC", glyph: "CIC" },
+  "10057": { name: "CIC Ouest", glyph: "CIC" },
+  "10096": { name: "CIC Est", glyph: "CIC" },
+  "10278": { name: "Crédit Mutuel", glyph: "CM" },
+  "18206": { name: "Crédit Mutuel", glyph: "CM" },
+  "18306": { name: "Crédit Mutuel", glyph: "CM" },
+  "15589": { name: "Crédit Mutuel", glyph: "CM" },
+  // Néo-banques et services Fintech
+  "16958": { name: "Boursorama Banque", glyph: "Bo" },
+  "40618": { name: "Hello Bank!", glyph: "Hb" },
+  "21110": { name: "Allianz Banque", glyph: "Az" },
+  "23700": { name: "Monabanq", glyph: "Mb" },
+  "13168": { name: "Revolut", glyph: "R" },
+  "28232": { name: "Revolut", glyph: "R" }, // Revolut via SBE Inc / Lemonway
+  "14508": { name: "Revolut", glyph: "R" },
+  "12548": { name: "N26", glyph: "N26" },
+  "16718": { name: "N26", glyph: "N26" },
+  "17418": { name: "Qonto", glyph: "Q" },
+  "16798": { name: "Shine", glyph: "Sh" },
+  "17098": { name: "Wise", glyph: "W" },
+  "12778": { name: "Fortuneo", glyph: "Ft" },
+  "30489": { name: "ING France", glyph: "IN" },
+  "11989": { name: "Crédit Coopératif", glyph: "CC" },
 };
 
-/**
- * Extrait le code banque d'un IBAN français (5 chiffres après les 4 premiers
- * caractères "FR" + clé).
- * Retourne `null` si l'IBAN n'est pas français ou trop court.
- */
+// ─── Table préfixes BIC ─────────────────────────────────────────────────────
+// Clé = 4 premiers caractères du BIC (institution). Source : SWIFT / banques FR.
+const BANK_BY_BIC_PREFIX: Record<string, Omit<BankInfo, "via">> = {
+  BNPA: { name: "BNP Paribas", glyph: "BNP" },
+  SOGE: { name: "Société Générale", glyph: "SG" },
+  AGRI: { name: "Crédit Agricole", glyph: "CA" },
+  CRLY: { name: "LCL (Le Crédit Lyonnais)", glyph: "LCL" },
+  CMCI: { name: "CIC", glyph: "CIC" },
+  CCBP: { name: "Banque Populaire (BPCE)", glyph: "BP" },
+  CEPA: { name: "Caisse d'Épargne (BPCE)", glyph: "CE" },
+  CMBR: { name: "Crédit Mutuel", glyph: "CM" },
+  CMBS: { name: "Crédit Mutuel Sud-Ouest", glyph: "CM" },
+  CMMV: { name: "Crédit Mutuel", glyph: "CM" },
+  PSST: { name: "La Banque Postale", glyph: "LBP" },
+  BOUS: { name: "Boursorama Banque", glyph: "Bo" },
+  BOUR: { name: "Boursorama Banque", glyph: "Bo" },
+  HELA: { name: "Hello Bank!", glyph: "Hb" },
+  MONA: { name: "Monabanq", glyph: "Mb" },
+  REVO: { name: "Revolut", glyph: "R" },
+  NTSB: { name: "N26", glyph: "N26" },
+  QNTO: { name: "Qonto", glyph: "Q" },
+  SHIN: { name: "Shine", glyph: "Sh" },
+  TRWI: { name: "Wise", glyph: "W" },
+  FTNO: { name: "Fortuneo", glyph: "Ft" },
+  INGB: { name: "ING France", glyph: "IN" },
+  COOP: { name: "Crédit Coopératif", glyph: "CC" },
+  HSBC: { name: "HSBC France", glyph: "HSB" },
+  NORD: { name: "Crédit du Nord", glyph: "CdN" },
+  ALLI: { name: "Allianz Banque", glyph: "Az" },
+  BFOR: { name: "BforBank", glyph: "Bf" },
+};
+
 export function extractFrenchBankCode(iban: string): string | null {
   const clean = (iban || "").replace(/\s+/g, "").toUpperCase();
   if (!clean.startsWith("FR") || clean.length < 9) return null;
@@ -78,10 +121,22 @@ export function extractFrenchBankCode(iban: string): string | null {
 }
 
 /**
- * Retourne les infos banque depuis un IBAN, ou null si non identifié.
+ * Identifie la banque depuis IBAN en priorité, BIC en fallback.
+ * Retourne null si aucun des deux ne matche la table.
  */
-export function identifyBank(iban: string): BankInfo | null {
+export function identifyBank(iban: string, bic?: string): BankInfo | null {
+  // 1. Via IBAN
   const code = extractFrenchBankCode(iban);
-  if (!code) return null;
-  return BANKS[code] ?? null;
+  if (code && BANK_BY_CODE[code]) {
+    return { ...BANK_BY_CODE[code], via: "iban" };
+  }
+  // 2. Fallback via BIC (préfixe 4 chars)
+  const cleanBic = (bic ?? "").replace(/\s+/g, "").toUpperCase();
+  if (cleanBic.length >= 4) {
+    const prefix = cleanBic.slice(0, 4);
+    if (BANK_BY_BIC_PREFIX[prefix]) {
+      return { ...BANK_BY_BIC_PREFIX[prefix], via: "bic" };
+    }
+  }
+  return null;
 }

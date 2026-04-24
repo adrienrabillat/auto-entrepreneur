@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { identifyBank } from "@/lib/iban-banks";
 import { createClient } from "@/lib/supabase/browser";
+import { Check, Loader2 } from "lucide-react";
 import {
   User,
   MapPin,
@@ -77,45 +77,95 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setState("saving");
+  // Auto-save : après 700 ms sans frappe on envoie un update Supabase.
+  // Un useRef saute le premier render pour ne pas re-persister les valeurs
+  // qu'on vient de charger depuis la DB.
+  const initializedRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      return;
+    }
+    if (timerRef.current) clearTimeout(timerRef.current);
     setError(null);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setError("Session expirée");
+    timerRef.current = setTimeout(() => { void save(); }, 700);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v]);
+
+  async function save() {
+    // Si un save est encore en vol, on l'abandonne silencieusement.
+    inFlightRef.current?.abort();
+    const ctrl = new AbortController();
+    inFlightRef.current = ctrl;
+
+    setState("saving");
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Session expirée");
+      if (ctrl.signal.aborted) return;
+
+      const day = Math.min(28, Math.max(1, Number(v.urssaf_declaration_day) || 3));
+      const cleanSiren = v.siren.replace(/\s/g, "");
+      const cleanSiret = v.siret.replace(/\s/g, "");
+      const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
+      const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          ...v,
+          siren: cleanSiren,
+          siret: cleanSiret,
+          iban: cleanIban,
+          bic: cleanBic,
+          urssaf_declaration_day: day,
+        })
+        .eq("id", user.id);
+
+      if (ctrl.signal.aborted) return;
+      if (error) {
+        setError(error.message);
+        setState("error");
+        return;
+      }
+      setState("saved");
+      router.refresh();
+      // Revient à "idle" après 2 s pour ne pas laisser un 'Enregistré ✓' permanent.
+      setTimeout(() => {
+        setState((s) => (s === "saved" ? "idle" : s));
+      }, 2000);
+    } catch (e) {
+      if (ctrl.signal.aborted) return;
+      setError(e instanceof Error ? e.message : "Erreur inattendue");
       setState("error");
-      return;
     }
-    const day = Math.min(28, Math.max(1, Number(v.urssaf_declaration_day) || 3));
-    const cleanSiren = v.siren.replace(/\s/g, "");
-    const cleanSiret = v.siret.replace(/\s/g, "");
-    const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
-    const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        ...v,
-        siren: cleanSiren,
-        siret: cleanSiret,
-        iban: cleanIban,
-        bic: cleanBic,
-        urssaf_declaration_day: day,
-      })
-      .eq("id", user.id);
-    if (error) {
-      setError(error.message);
-      setState("error");
-      return;
-    }
-    setState("saved");
-    router.refresh();
-    setTimeout(() => setState("idle"), 1500);
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <div className="space-y-6">
+      {/* Indicateur auto-save sticky, en haut à droite du bloc */}
+      <div className="sticky top-2 z-10 flex justify-end -mb-3 pointer-events-none">
+        {state === "saving" ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-surface shadow-hair px-3 py-1 text-xs text-ink-500 pointer-events-auto">
+            <Loader2 size={12} className="animate-spin" /> Enregistrement…
+          </span>
+        ) : state === "saved" ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-success-500/10 px-3 py-1 text-xs text-success-600 pointer-events-auto">
+            <Check size={12} /> Enregistré
+          </span>
+        ) : state === "error" ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-500/10 px-3 py-1 text-xs text-danger-600 pointer-events-auto">
+            Erreur : {error}
+          </span>
+        ) : null}
+      </div>
       <Card className="space-y-5">
         <SectionHeader
           icon={<User size={18} />}
@@ -234,7 +284,7 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
             <Label htmlFor="iban">IBAN</Label>
             <Input id="iban" required value={v.iban} onChange={(e) => setV({ ...v, iban: e.target.value })} />
             {(() => {
-              const bank = identifyBank(v.iban);
+              const bank = identifyBank(v.iban, v.bic);
               return bank ? (
                 <p className="mt-1.5 text-xs text-ink-500 flex items-center gap-2">
                   <span className="inline-grid place-items-center h-5 w-5 rounded-md bg-brand-500/10 text-brand-600 text-[9px] font-semibold">
@@ -346,16 +396,7 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
             ))}
           </select>
         </div>
-
-        {error ? <p className="text-small text-danger-600">{error}</p> : null}
-
-        <div className="flex items-center justify-end gap-3 pt-2">
-          {state === "saved" ? <span className="text-small text-success-600">Enregistré ✓</span> : null}
-          <Button type="submit" disabled={state === "saving"}>
-            {state === "saving" ? "Enregistrement…" : "Enregistrer"}
-          </Button>
-        </div>
       </Card>
-    </form>
+    </div>
   );
 }

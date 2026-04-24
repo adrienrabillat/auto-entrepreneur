@@ -76,6 +76,75 @@
     --shadow-hair: 0 1px 2px rgba(0,0,0,0.35);
   }
 
+  /* ──────────────────────────────────────────────────────────────────────
+   * Accents de couleur. L'accent par défaut (bleu) est déjà défini plus
+   * haut dans :root et html[data-theme="dark"]. Les overrides ci-dessous
+   * s'appliquent quand html porte data-accent="X".
+   * Ordre : light d'abord, puis dark. Les deux sélecteurs ciblent UNIQUEMENT
+   * --c-accent / --c-accent-ink / les rgba --accent-soft/--accent-ring,
+   * le reste de la palette reste inchangé.
+   * ──────────────────────────────────────────────────────────────────── */
+  html[data-accent="purple"] {
+    --c-accent: 139 92 246; --c-accent-ink: 67 56 202;
+    --accent-soft: rgba(139,92,246,0.08);
+    --accent-ring: rgba(139,92,246,0.16);
+    --shadow-pop: 0 8px 28px rgba(139,92,246,0.22);
+  }
+  html[data-theme="dark"][data-accent="purple"] {
+    --c-accent: 167 139 250; --c-accent-ink: 237 233 254;
+    --accent-soft: rgba(167,139,250,0.18);
+    --accent-ring: rgba(167,139,250,0.28);
+    --shadow-pop: 0 8px 28px rgba(167,139,250,0.32);
+  }
+  html[data-accent="teal"] {
+    --c-accent: 20 184 166; --c-accent-ink: 15 118 110;
+    --accent-soft: rgba(20,184,166,0.08);
+    --accent-ring: rgba(20,184,166,0.16);
+    --shadow-pop: 0 8px 28px rgba(20,184,166,0.22);
+  }
+  html[data-theme="dark"][data-accent="teal"] {
+    --c-accent: 45 212 191; --c-accent-ink: 204 251 241;
+    --accent-soft: rgba(45,212,191,0.18);
+    --accent-ring: rgba(45,212,191,0.28);
+    --shadow-pop: 0 8px 28px rgba(45,212,191,0.32);
+  }
+  html[data-accent="rose"] {
+    --c-accent: 236 72 153; --c-accent-ink: 157 23 77;
+    --accent-soft: rgba(236,72,153,0.08);
+    --accent-ring: rgba(236,72,153,0.16);
+    --shadow-pop: 0 8px 28px rgba(236,72,153,0.22);
+  }
+  html[data-theme="dark"][data-accent="rose"] {
+    --c-accent: 244 114 182; --c-accent-ink: 252 231 243;
+    --accent-soft: rgba(244,114,182,0.18);
+    --accent-ring: rgba(244,114,182,0.28);
+    --shadow-pop: 0 8px 28px rgba(244,114,182,0.32);
+  }
+  html[data-accent="amber"] {
+    --c-accent: 245 158 11; --c-accent-ink: 120 53 15;
+    --accent-soft: rgba(245,158,11,0.1);
+    --accent-ring: rgba(245,158,11,0.2);
+    --shadow-pop: 0 8px 28px rgba(245,158,11,0.22);
+  }
+  html[data-theme="dark"][data-accent="amber"] {
+    --c-accent: 251 191 36; --c-accent-ink: 254 243 199;
+    --accent-soft: rgba(251,191,36,0.18);
+    --accent-ring: rgba(251,191,36,0.28);
+    --shadow-pop: 0 8px 28px rgba(251,191,36,0.32);
+  }
+  html[data-accent="slate"] {
+    --c-accent: 71 85 105; --c-accent-ink: 15 23 42;
+    --accent-soft: rgba(71,85,105,0.08);
+    --accent-ring: rgba(71,85,105,0.16);
+    --shadow-pop: 0 8px 28px rgba(71,85,105,0.22);
+  }
+  html[data-theme="dark"][data-accent="slate"] {
+    --c-accent: 148 163 184; --c-accent-ink: 226 232 240;
+    --accent-soft: rgba(148,163,184,0.18);
+    --accent-ring: rgba(148,163,184,0.28);
+    --shadow-pop: 0 8px 28px rgba(148,163,184,0.32);
+  }
+
   html, body {
     background: rgb(var(--c-bg));
     color: rgb(var(--c-ink-1));

@@ -58,13 +58,15 @@ export default async function SettingsPage() {
         </div>
       </div>
 
-      <div className="surface p-5 flex items-center gap-4">
-        <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600">
-          <Palette size={18} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="font-medium text-ink-900">Apparence</div>
-          <div className="text-small text-ink-500">Clair par défaut · bascule en sombre à tout moment</div>
+      <div className="surface p-5 space-y-4">
+        <div className="flex items-start gap-4">
+          <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600">
+            <Palette size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-ink-900">Thèmes</div>
+            <div className="text-small text-ink-500">Couleur d&apos;accent et mode clair / sombre — appliqués instantanément.</div>
+          </div>
         </div>
         <ThemeToggle />
       </div>
