@@ -10,13 +10,16 @@
  * @layer base {html[data-accent="..."] {...}} dans globals.css.
  */
 
+// Palette unifiée : 6 couleurs saturées, de même niveau de vivacité
+// (équivalent du stop 500/600 Tailwind). Les previews hex correspondent
+// EXACTEMENT aux --c-accent appliqués en light mode (voir globals.css).
 export const ACCENTS = [
-  { id: "blue",   name: "Bleu",      preview: "#2F6BFF" }, // défaut
-  { id: "purple", name: "Violet",    preview: "#8B5CF6" },
-  { id: "teal",   name: "Émeraude",  preview: "#14B8A6" },
-  { id: "rose",   name: "Rose",      preview: "#EC4899" },
-  { id: "amber",  name: "Ambre",     preview: "#F59E0B" },
-  { id: "slate",  name: "Graphite",  preview: "#475569" },
+  { id: "blue",   name: "Bleu",    preview: "#2F6BFF" }, // défaut
+  { id: "purple", name: "Violet",  preview: "#7C3AED" },
+  { id: "green",  name: "Vert",    preview: "#10B981" },
+  { id: "rose",   name: "Rose",    preview: "#EC4899" },
+  { id: "orange", name: "Orange",  preview: "#F97316" },
+  { id: "red",    name: "Rouge",   preview: "#EF4444" },
 ] as const;
 
 export type AccentId = (typeof ACCENTS)[number]["id"];

@@ -55,7 +55,7 @@ const themeBootScript = `
   if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
   if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}
   var a=localStorage.getItem('ae-accent');
-  var VALID=['blue','purple','teal','rose','amber','slate'];
+  var VALID=['blue','purple','green','rose','orange','red'];
   if(a&&VALID.indexOf(a)>=0&&a!=='blue'){document.documentElement.setAttribute('data-accent',a);}
 }catch(e){}})();
 `;

@@ -84,65 +84,78 @@
    * --c-accent / --c-accent-ink / les rgba --accent-soft/--accent-ring,
    * le reste de la palette reste inchangé.
    * ──────────────────────────────────────────────────────────────────── */
+  /* Palette harmonisée — chaque --c-accent correspond au hex de preview de lib/themes.ts.
+     Formule : accent = couleur pure vivant (~ Tailwind 500), accent-ink = variante
+     foncée (~ Tailwind 800) pour le texte sur fond accent clair. */
+
+  /* Violet — #7C3AED (violet-600) */
   html[data-accent="purple"] {
-    --c-accent: 139 92 246; --c-accent-ink: 67 56 202;
-    --accent-soft: rgba(139,92,246,0.08);
-    --accent-ring: rgba(139,92,246,0.16);
-    --shadow-pop: 0 8px 28px rgba(139,92,246,0.22);
+    --c-accent: 124 58 237; --c-accent-ink: 76 29 149;
+    --accent-soft: rgba(124,58,237,0.08);
+    --accent-ring: rgba(124,58,237,0.18);
+    --shadow-pop: 0 8px 28px rgba(124,58,237,0.24);
   }
   html[data-theme="dark"][data-accent="purple"] {
     --c-accent: 167 139 250; --c-accent-ink: 237 233 254;
     --accent-soft: rgba(167,139,250,0.18);
     --accent-ring: rgba(167,139,250,0.28);
-    --shadow-pop: 0 8px 28px rgba(167,139,250,0.32);
+    --shadow-pop: 0 8px 28px rgba(167,139,250,0.34);
   }
-  html[data-accent="teal"] {
-    --c-accent: 20 184 166; --c-accent-ink: 15 118 110;
-    --accent-soft: rgba(20,184,166,0.08);
-    --accent-ring: rgba(20,184,166,0.16);
-    --shadow-pop: 0 8px 28px rgba(20,184,166,0.22);
+
+  /* Vert — #10B981 (emerald-500) */
+  html[data-accent="green"] {
+    --c-accent: 16 185 129; --c-accent-ink: 6 95 70;
+    --accent-soft: rgba(16,185,129,0.1);
+    --accent-ring: rgba(16,185,129,0.2);
+    --shadow-pop: 0 8px 28px rgba(16,185,129,0.24);
   }
-  html[data-theme="dark"][data-accent="teal"] {
-    --c-accent: 45 212 191; --c-accent-ink: 204 251 241;
-    --accent-soft: rgba(45,212,191,0.18);
-    --accent-ring: rgba(45,212,191,0.28);
-    --shadow-pop: 0 8px 28px rgba(45,212,191,0.32);
+  html[data-theme="dark"][data-accent="green"] {
+    --c-accent: 52 211 153; --c-accent-ink: 209 250 229;
+    --accent-soft: rgba(52,211,153,0.18);
+    --accent-ring: rgba(52,211,153,0.28);
+    --shadow-pop: 0 8px 28px rgba(52,211,153,0.34);
   }
+
+  /* Rose — #EC4899 (pink-500) */
   html[data-accent="rose"] {
-    --c-accent: 236 72 153; --c-accent-ink: 157 23 77;
-    --accent-soft: rgba(236,72,153,0.08);
-    --accent-ring: rgba(236,72,153,0.16);
-    --shadow-pop: 0 8px 28px rgba(236,72,153,0.22);
+    --c-accent: 236 72 153; --c-accent-ink: 131 24 67;
+    --accent-soft: rgba(236,72,153,0.1);
+    --accent-ring: rgba(236,72,153,0.2);
+    --shadow-pop: 0 8px 28px rgba(236,72,153,0.24);
   }
   html[data-theme="dark"][data-accent="rose"] {
     --c-accent: 244 114 182; --c-accent-ink: 252 231 243;
     --accent-soft: rgba(244,114,182,0.18);
     --accent-ring: rgba(244,114,182,0.28);
-    --shadow-pop: 0 8px 28px rgba(244,114,182,0.32);
+    --shadow-pop: 0 8px 28px rgba(244,114,182,0.34);
   }
-  html[data-accent="amber"] {
-    --c-accent: 245 158 11; --c-accent-ink: 120 53 15;
-    --accent-soft: rgba(245,158,11,0.1);
-    --accent-ring: rgba(245,158,11,0.2);
-    --shadow-pop: 0 8px 28px rgba(245,158,11,0.22);
+
+  /* Orange — #F97316 (orange-500) */
+  html[data-accent="orange"] {
+    --c-accent: 249 115 22; --c-accent-ink: 124 45 18;
+    --accent-soft: rgba(249,115,22,0.1);
+    --accent-ring: rgba(249,115,22,0.2);
+    --shadow-pop: 0 8px 28px rgba(249,115,22,0.26);
   }
-  html[data-theme="dark"][data-accent="amber"] {
-    --c-accent: 251 191 36; --c-accent-ink: 254 243 199;
-    --accent-soft: rgba(251,191,36,0.18);
-    --accent-ring: rgba(251,191,36,0.28);
-    --shadow-pop: 0 8px 28px rgba(251,191,36,0.32);
+  html[data-theme="dark"][data-accent="orange"] {
+    --c-accent: 251 146 60; --c-accent-ink: 254 215 170;
+    --accent-soft: rgba(251,146,60,0.18);
+    --accent-ring: rgba(251,146,60,0.28);
+    --shadow-pop: 0 8px 28px rgba(251,146,60,0.36);
   }
-  html[data-accent="slate"] {
-    --c-accent: 71 85 105; --c-accent-ink: 15 23 42;
-    --accent-soft: rgba(71,85,105,0.08);
-    --accent-ring: rgba(71,85,105,0.16);
-    --shadow-pop: 0 8px 28px rgba(71,85,105,0.22);
+
+  /* Rouge — #EF4444 (red-500) */
+  html[data-accent="red"] {
+    --c-accent: 239 68 68; --c-accent-ink: 127 29 29;
+    --accent-soft: rgba(239,68,68,0.1);
+    --accent-ring: rgba(239,68,68,0.2);
+    --shadow-pop: 0 8px 28px rgba(239,68,68,0.24);
   }
-  html[data-theme="dark"][data-accent="slate"] {
-    --c-accent: 148 163 184; --c-accent-ink: 226 232 240;
-    --accent-soft: rgba(148,163,184,0.18);
-    --accent-ring: rgba(148,163,184,0.28);
-    --shadow-pop: 0 8px 28px rgba(148,163,184,0.32);
+  html[data-theme="dark"][data-accent="red"] {
+    --c-accent: 248 113 113; --c-accent-ink: 254 226 226;
+    --accent-soft: rgba(248,113,113,0.18);
+    --accent-ring: rgba(248,113,113,0.28);
+    --shadow-pop: 0 8px 28px rgba(248,113,113,0.34);
   }
 
   html, body {
