@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Input, Label } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
-import { identifyBank } from "@/lib/iban-banks";
+import { identifyBank, formatIbanForDisplay, formatBicForDisplay } from "@/lib/iban-banks";
 import { createClient } from "@/lib/supabase/browser";
 import { Check, Loader2 } from "lucide-react";
 import {
@@ -290,7 +290,13 @@ export function SettingsForm({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="iban">IBAN</Label>
-            <Input id="iban" required value={v.iban} onChange={(e) => setV({ ...v, iban: e.target.value })} />
+            <Input
+              id="iban"
+              required
+              autoComplete="off"
+              value={v.iban}
+              onChange={(e) => setV({ ...v, iban: formatIbanForDisplay(e.target.value) })}
+            />
             {(() => {
               const bank = identifyBank(v.iban, v.bic);
               return bank ? (
@@ -305,7 +311,13 @@ export function SettingsForm({
           </div>
           <div>
             <Label htmlFor="bic">BIC</Label>
-            <Input id="bic" required value={v.bic} onChange={(e) => setV({ ...v, bic: e.target.value })} />
+            <Input
+              id="bic"
+              required
+              autoComplete="off"
+              value={v.bic}
+              onChange={(e) => setV({ ...v, bic: formatBicForDisplay(e.target.value) })}
+            />
           </div>
         </div>
       </Card>

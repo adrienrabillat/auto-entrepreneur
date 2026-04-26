@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { Loader2, Check, AlertCircle, ArrowLeft, ArrowRight, User, Building2, MapPin, Landmark, ShieldAlert, Briefcase, ShoppingBag, Wrench, GraduationCap, Layers } from "lucide-react";
 import { lookupSiren } from "@/lib/sirene";
-import { identifyBank } from "@/lib/iban-banks";
+import { identifyBank, formatIbanForDisplay, formatBicForDisplay } from "@/lib/iban-banks";
 import { createClient } from "@/lib/supabase/browser";
 
 // Asthia ne supporte qu'un seul cas d'usage : l'Entrepreneur Individuel au
@@ -105,7 +105,12 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
     try {
       const raw = window.localStorage.getItem(STEP_LS_KEY);
       const n = raw ? parseInt(raw, 10) : 1;
-      if (n >= 1 && n <= 4) saved = n as StepId;
+      // BORNE 1-5 (et pas 1-4 !) — l'onboarding a 5 étapes depuis l'ajout
+      // de "Activité & URSSAF". Bug historique : la borne avait été oubliée
+      // lors du passage à 5 étapes, ce qui faisait retomber les comptes
+      // arrivés à l'étape 5 silencieusement à l'étape 1 au reload (l'user
+      // avait l'impression d'une "boucle infinie" sur l'onboarding).
+      if (n >= 1 && n <= 5) saved = n as StepId;
     } catch { /* storage off, reste à 1 */ }
     // On plafonne à la première étape incomplète. Un step "mémorisé" plus
     // grand est ramené ici, ce qui force l'user à revoir ce qu'il manque.
@@ -839,11 +844,6 @@ function StepActivity({ v, setV }: { v: Values; setV: (v: Values) => void }) {
     },
   ];
 
-  // Aperçu live du format de numéro : on remplace les tokens par des valeurs
-  // d'exemple. Aide l'user à voir ce que donnera son prochain numéro avant
-  // de valider.
-  const previewInvoiceNumber = renderNumberPreview(v.invoice_number_format, 1);
-
   return (
     <>
       <div className="flex items-center gap-3">
@@ -936,24 +936,10 @@ function StepActivity({ v, setV }: { v: Values; setV: (v: Values) => void }) {
       </div>
 
       {/* ─── Format des numéros de facture ────────────────────────── */}
-      <div>
-        <Label htmlFor="invoice_number_format" hint="tokens : {year}, {seq:N}">
-          Format de tes numéros de facture
-        </Label>
-        <Input
-          id="invoice_number_format"
-          required
-          value={v.invoice_number_format}
-          onChange={(e) => setV({ ...v, invoice_number_format: e.target.value })}
-          placeholder="F-{year}-{seq:4}"
-        />
-        <p className="mt-1.5 text-xs text-ink-500">
-          Aperçu de ta première facture :{" "}
-          <span className="font-mono text-ink-900">{previewInvoiceNumber}</span>
-          . Tu pourras saisir le numéro de ta dernière facture émise (si tu en as déjà) après
-          l&apos;onboarding, à la première ouverture de l&apos;app.
-        </p>
-      </div>
+      <InvoiceFormatPicker
+        value={v.invoice_number_format}
+        onChange={(fmt) => setV({ ...v, invoice_number_format: fmt })}
+      />
 
       {/* ─── A déjà facturé cette année ? ─────────────────────────── */}
       <label
@@ -978,6 +964,126 @@ function StepActivity({ v, setV }: { v: Values; setV: (v: Values) => void }) {
         </div>
       </label>
     </>
+  );
+}
+
+/**
+ * Sélecteur de format de numéro de facture, version "user-friendly".
+ *
+ * Plutôt que d'exposer la syntaxe technique avec ses tokens {year} / {seq:N},
+ * on propose 4 presets visuels avec aperçu live :
+ *   - F-2026-0001  (préfixe + année + séquence 4 chiffres)
+ *   - 2026-0001    (année + séquence)
+ *   - 2026-001     (année + séquence courte)
+ *   - 0001         (juste un compteur)
+ *
+ * Un mode "Personnalisé" déplie un input avec la syntaxe brute pour les
+ * power users qui veulent un format spécifique (ex: leur préfixe métier).
+ */
+function InvoiceFormatPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (fmt: string) => void;
+}) {
+  const PRESETS: { id: string; format: string; label: string }[] = [
+    { id: "F-year-4",   format: "F-{year}-{seq:4}", label: "Préfixe + année + séquence" },
+    { id: "year-4",     format: "{year}-{seq:4}",   label: "Année + séquence (4 chiffres)" },
+    { id: "year-3",     format: "{year}-{seq:3}",   label: "Année + séquence (3 chiffres)" },
+    { id: "seq-4",      format: "{seq:4}",          label: "Compteur simple" },
+  ];
+  const matchingPreset = PRESETS.find((p) => p.format === value);
+  const [showAdvanced, setShowAdvanced] = useState(!matchingPreset);
+
+  return (
+    <div className="space-y-3">
+      <Label htmlFor="invoice_format_preset">
+        Format de tes numéros de facture
+      </Label>
+
+      {/* Grille des presets — chaque option affiche le RENDU concret en
+          gros, son label en petit. C'est ce que l'user verra réellement. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {PRESETS.map((p) => {
+          const selected = !showAdvanced && p.format === value;
+          return (
+            <label
+              key={p.id}
+              className={
+                "flex items-center justify-between gap-3 rounded-2xl p-3.5 cursor-pointer transition-colors border " +
+                (selected
+                  ? "bg-brand-500/10 border-brand-500/40"
+                  : "bg-surface border-ink-100 hover:bg-surface-2")
+              }
+            >
+              <input
+                type="radio"
+                name="invoice_format_preset"
+                checked={selected}
+                onChange={() => {
+                  setShowAdvanced(false);
+                  onChange(p.format);
+                }}
+                className="sr-only"
+              />
+              <div className="min-w-0">
+                <div className="font-mono text-body text-ink-900 tabular-nums">
+                  {renderNumberPreview(p.format, 1)}
+                </div>
+                <div className="text-xs text-ink-500 mt-0.5">{p.label}</div>
+              </div>
+              {selected ? (
+                <Check size={16} className="text-brand-600 shrink-0" />
+              ) : null}
+            </label>
+          );
+        })}
+      </div>
+
+      {/* Toggle vers le mode avancé. On l'ouvre par défaut si le format
+          actuel ne match aucun preset (cas d'un user qui a déjà customisé). */}
+      <button
+        type="button"
+        onClick={() => setShowAdvanced((s) => !s)}
+        className="text-xs text-ink-500 hover:text-ink-900 transition-colors underline-offset-4 hover:underline"
+      >
+        {showAdvanced ? "← Revenir aux formats prédéfinis" : "Personnaliser le format →"}
+      </button>
+
+      {/* Mode avancé : input libre + tokens dispos en aide. */}
+      {showAdvanced ? (
+        <div className="rounded-2xl bg-surface-2 border border-ink-100 p-4 space-y-2">
+          <div className="text-xs text-ink-500">
+            Tokens disponibles :{" "}
+            <code className="text-ink-900 bg-surface px-1.5 py-0.5 rounded">{"{year}"}</code>{" "}
+            (année en cours) et{" "}
+            <code className="text-ink-900 bg-surface px-1.5 py-0.5 rounded">{"{seq:4}"}</code>{" "}
+            (séquence avec N zéros de padding). Le{" "}
+            <code className="text-ink-900 bg-surface px-1.5 py-0.5 rounded">{"{seq}"}</code>{" "}
+            est obligatoire.
+          </div>
+          <Input
+            id="invoice_number_format_custom"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <div className="text-xs text-ink-500">
+            Aperçu de ta première facture :{" "}
+            <span className="font-mono text-ink-900 tabular-nums">
+              {renderNumberPreview(value, 1) || "—"}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      <p className="text-xs text-ink-500">
+        Tu pourras saisir le numéro de ta dernière facture émise (si tu en as déjà) à
+        la première ouverture de l&apos;app.
+      </p>
+    </div>
   );
 }
 
@@ -1017,12 +1123,17 @@ function StepBank({ v, setV }: { v: Values; setV: (v: Values) => void }) {
 
       <div>
         <Label htmlFor="iban">IBAN</Label>
+        {/* On reformate à chaque frappe en groupes de 4 (convention ISO 13616).
+            Saisie tolérante : que tu colles avec ou sans espaces, le résultat
+            est uniformisé. La valeur stockée en BDD sera nettoyée à la fin
+            via cleanIban dans finish() (espaces retirés, majuscules). */}
         <Input
           id="iban"
           required
+          inputMode="text"
+          autoComplete="off"
           value={v.iban}
-          onChange={(e) => setV({ ...v, iban: e.target.value })}
-          placeholder="FR76 2823 2300 0014 4312 1519 4229"
+          onChange={(e) => setV({ ...v, iban: formatIbanForDisplay(e.target.value) })}
         />
         {bank ? (
           <p className="mt-1.5 text-xs text-ink-500 flex items-center gap-2">
@@ -1039,9 +1150,10 @@ function StepBank({ v, setV }: { v: Values; setV: (v: Values) => void }) {
         <Input
           id="bic"
           required
+          inputMode="text"
+          autoComplete="off"
           value={v.bic}
-          onChange={(e) => setV({ ...v, bic: e.target.value })}
-          placeholder="REVOFRP2"
+          onChange={(e) => setV({ ...v, bic: formatBicForDisplay(e.target.value) })}
         />
       </div>
     </>

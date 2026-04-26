@@ -121,6 +121,34 @@ export function extractFrenchBankCode(iban: string): string | null {
 }
 
 /**
+ * Formate un IBAN pour l'affichage en groupes de 4 caractères séparés
+ * d'espaces — convention internationale ISO 13616 et la plus lisible.
+ *
+ * Exemples :
+ *   "FR7628232300001443121519422" → "FR76 2823 2300 0014 4312 1519 422"
+ *   "fr76 2823 2300 0014 4312"     → "FR76 2823 2300 0014 4312"
+ *
+ * À utiliser comme handler onChange d'un input pour reformater à la volée
+ * pendant la saisie. Le caret peut sauter d'1 caractère sur un copier-
+ * coller mal collé — c'est acceptable pour le bénéfice de lisibilité.
+ */
+export function formatIbanForDisplay(raw: string): string {
+  const clean = (raw || "").replace(/\s+/g, "").toUpperCase();
+  // Découpe en groupes de 4 et rejoint avec un espace.
+  return clean.replace(/(.{4})/g, "$1 ").trim();
+}
+
+/**
+ * Formate un BIC pour la saisie. Un BIC fait 8 ou 11 caractères, sans
+ * espace canonique. On normalise juste en majuscules + retire les espaces.
+ * Pas de découpe artificielle (les conventions varient et la plupart des
+ * banques l'écrivent en bloc).
+ */
+export function formatBicForDisplay(raw: string): string {
+  return (raw || "").replace(/\s+/g, "").toUpperCase();
+}
+
+/**
  * Identifie la banque depuis BIC en PRIORITÉ (c'est l'identifiant SWIFT
  * standardisé, sans ambiguïté), IBAN en fallback.
  *
