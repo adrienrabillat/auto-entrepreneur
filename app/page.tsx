@@ -13,7 +13,17 @@ export default async function LandingPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (user) redirect("/dashboard");
+  if (user) {
+    // On regarde si l'onboarding est terminé pour router proprement.
+    // Si l'utilisateur a quitté en plein milieu du wizard, le flag
+    // `onboarded` est encore false → on le ramène sur le formulaire.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("onboarded")
+      .eq("id", user.id)
+      .maybeSingle();
+    redirect(profile?.onboarded ? "/dashboard" : "/onboarding");
+  }
 
   const err = searchParams.error;
   const isPkceError = err?.toLowerCase().includes("pkce") || err?.toLowerCase().includes("code verifier");

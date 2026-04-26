@@ -10,12 +10,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const supabase = createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, email")
+    .select("display_name, email, onboarded")
     .eq("id", user.id)
     .maybeSingle();
 
-  const displayName = profile?.display_name || user.email?.split("@")[0] || "Moi";
-  const email = profile?.email || user.email || "";
+  // Si l'onboarding n'est pas terminé (Terminer pas cliqué sur l'étape 4),
+  // on bloque l'accès à tout l'espace authentifié et on renvoie sur le
+  // wizard pour que l'utilisateur le finisse.
+  if (!profile?.onboarded) redirect("/onboarding");
+
+  const displayName = profile.display_name || user.email?.split("@")[0] || "Moi";
+  const email = profile.email || user.email || "";
 
   return (
     <div className="min-h-dvh flex flex-col md:flex-row">
