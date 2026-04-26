@@ -38,12 +38,85 @@ const STEPS: { id: StepId; label: string; icon: typeof User }[] = [
   { id: 4, label: "Bancaire",   icon: Landmark },
 ];
 
+// Clé localStorage pour mémoriser l'étape courante du wizard.
+// Les valeurs des champs sont elles persistées côté Supabase via auto-save.
+const STEP_LS_KEY = "ae-onboarding-step";
+
 export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
   const router = useRouter();
   const [v, setV] = useState<Values>(defaultValues);
-  const [step, setStep] = useState<StepId>(1);
+  const [step, setStep] = useState<StepId>(() => {
+    if (typeof window === "undefined") return 1;
+    try {
+      const saved = window.localStorage.getItem(STEP_LS_KEY);
+      const n = saved ? parseInt(saved, 10) : 1;
+      return n >= 1 && n <= 4 ? (n as StepId) : 1;
+    } catch {
+      return 1;
+    }
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved">("idle");
+
+  // Persiste l'étape courante en localStorage. À l'ouverture suivante,
+  // l'utilisateur retombe au même endroit.
+  useEffect(() => {
+    try { window.localStorage.setItem(STEP_LS_KEY, String(step)); } catch { /* storage off */ }
+  }, [step]);
+
+  // ─── Draft auto-save Supabase (débouncé) ────────────────────────────
+  // À chaque modification des champs, on programme une sauvegarde à 800ms.
+  // On met onboarded=false explicitement pour ne pas laisser un demi-profil
+  // déclenchant la redirection /dashboard. Le passage à true se fait
+  // uniquement dans finish().
+  const initializedRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!initializedRef.current) { initializedRef.current = true; return; }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      saveAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      saveAbortRef.current = ctrl;
+      setDraftStatus("saving");
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || ctrl.signal.aborted) return;
+        const cleanSiren = v.siren.replace(/\s/g, "");
+        const cleanSiret = v.siret.replace(/\s/g, "");
+        const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
+        const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
+        await supabase
+          .from("profiles")
+          .update({
+            ...v,
+            siren: cleanSiren,
+            siret: cleanSiret,
+            iban: cleanIban,
+            bic: cleanBic,
+            onboarded: false,
+          })
+          .eq("id", user.id);
+        if (ctrl.signal.aborted) return;
+        setDraftStatus("saved");
+        // Auto-revient à idle après 1.5s pour ne pas laisser
+        // l'indicateur permanent.
+        setTimeout(() => setDraftStatus((s) => (s === "saved" ? "idle" : s)), 1500);
+      } catch {
+        // On échoue silencieusement — le draft auto-save ne doit jamais
+        // bloquer l'utilisateur. La validation finale dans finish() fait foi.
+        setDraftStatus("idle");
+      }
+    }, 800);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v]);
 
   // SIRET auto-fill — déclenché à l'étape 2
   const [sirenStatus, setSirenStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
@@ -160,6 +233,10 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
         })
         .eq("id", user.id);
       if (error) throw error;
+      // Onboarding terminé : on nettoie le step mémorisé pour qu'un éventuel
+      // retour futur sur /onboarding (ex: clic depuis settings) reparte de
+      // l'étape 1 plutôt que de la dernière étape consultée.
+      try { window.localStorage.removeItem(STEP_LS_KEY); } catch { /* storage off */ }
       router.replace("/dashboard");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur inattendue");
@@ -169,6 +246,21 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
 
   return (
     <div className="space-y-6 animate-fade-in-up">
+      {/* Indicateur de brouillon — s'affiche pendant et après l'auto-save */}
+      <div className="h-5 flex items-center justify-end gap-1.5 -mb-2 text-xs text-ink-500">
+        {draftStatus === "saving" ? (
+          <>
+            <Loader2 size={11} className="animate-spin" />
+            <span>Enregistrement du brouillon…</span>
+          </>
+        ) : draftStatus === "saved" ? (
+          <>
+            <Check size={11} className="text-success-600" />
+            <span className="text-success-600">Brouillon enregistré</span>
+          </>
+        ) : null}
+      </div>
+
       {/* Stepper segmenté */}
       <div className="grid grid-cols-4 gap-2">
         {STEPS.map((s) => {
