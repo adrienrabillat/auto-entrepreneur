@@ -33,9 +33,11 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
   const [error, setError] = useState<string | null>(null);
 
   // SIRET / SIREN auto-fill : interroge l'API Recherche d'entreprises dès
-  // qu'on a un SIREN à 9 chiffres et pré-remplit nom commercial, activité,
-  // code APE et adresse. On track le dernier SIREN résolu pour ne pas
-  // ré-écraser les éditions manuelles ensuite.
+  // qu'on a un SIREN à 9 chiffres. Le résultat ÉCRASE systématiquement les
+  // champs entreprise (nom commercial, activité, APE, adresse, forme
+  // juridique) — c'est la source officielle, on lui fait confiance.
+  // L'utilisateur peut éditer ensuite, on ne re-fetch plus tant qu'il
+  // ne change pas le SIREN (lastResolvedSirenRef).
   const [sirenStatus, setSirenStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
   const lastResolvedSirenRef = useRef<string>(defaultValues.siren?.replace(/\D/g, "") ?? "");
   const abortRef = useRef<AbortController | null>(null);
@@ -59,19 +61,17 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
         setSirenStatus("not_found");
         return;
       }
-      // Écrase les champs entreprise depuis la base officielle. Le user
-      // peut éditer ensuite — on ne re-fetch plus tant qu'il ne change
-      // pas le SIREN.
+      // Override : la valeur API gagne sur ce que l'user a tapé. On garde
+      // la valeur précédente uniquement si l'API renvoie vide pour ce champ.
       setV((prev) => ({
         ...prev,
-        // Pour un EI le "nom complet" est souvent "PRENOM NOM", on le laisse
-        // si le user a déjà saisi son nom. Idem business_name.
-        business_name: prev.business_name || (company.name && company.name !== prev.display_name ? company.name : ""),
-        metier: prev.metier || company.activityLabel || "",
-        ape_naf: prev.ape_naf || company.apeNaf || "",
-        address_line1: prev.address_line1 || company.addressLine1 || "",
-        postal_code: prev.postal_code || company.postalCode || "",
-        city: prev.city || company.city || "",
+        legal_form: company.legalFormNormalized || prev.legal_form,
+        business_name: company.name || prev.business_name,
+        metier: company.activityLabel || prev.metier,
+        ape_naf: company.apeNaf || prev.ape_naf,
+        address_line1: company.addressLine1 || prev.address_line1,
+        postal_code: company.postalCode || prev.postal_code,
+        city: company.city || prev.city,
       }));
       lastResolvedSirenRef.current = clean;
       setSirenStatus("found");
@@ -127,41 +127,7 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
   return (
     <form onSubmit={onSubmit}>
       <Card className="space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <Label htmlFor="display_name">Nom & prénom</Label>
-            <Input
-              id="display_name"
-              required
-              value={v.display_name}
-              onChange={(e) => setV({ ...v, display_name: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label htmlFor="legal_form">Forme juridique</Label>
-            <select
-              id="legal_form"
-              value={v.legal_form}
-              onChange={(e) => setV({ ...v, legal_form: e.target.value as Values["legal_form"] })}
-              className="h-10 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
-            >
-              <option value="EI">EI (Entrepreneur Individuel)</option>
-              <option value="EURL">EURL</option>
-              <option value="SASU">SASU</option>
-              <option value="Autre">Autre</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <Label htmlFor="business_name" hint="optionnel">Nom commercial</Label>
-          <Input
-            id="business_name"
-            value={v.business_name}
-            onChange={(e) => setV({ ...v, business_name: e.target.value })}
-          />
-        </div>
-
+        {/* SIRET / SIREN en TOUT premier — pré-remplit le reste du formulaire */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="siret" hint="14 chiffres — on remplit le reste automatiquement">SIRET</Label>
@@ -198,6 +164,42 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               onChange={(e) => setV({ ...v, siren: e.target.value.replace(/\D/g, "").slice(0, 9) })}
             />
           </div>
+        </div>
+
+        {/* Identité — pré-remplie après le SIRET */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2">
+            <Label htmlFor="display_name">Nom & prénom</Label>
+            <Input
+              id="display_name"
+              required
+              value={v.display_name}
+              onChange={(e) => setV({ ...v, display_name: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label htmlFor="legal_form">Forme juridique</Label>
+            <select
+              id="legal_form"
+              value={v.legal_form}
+              onChange={(e) => setV({ ...v, legal_form: e.target.value as Values["legal_form"] })}
+              className="h-10 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
+            >
+              <option value="EI">EI (Entrepreneur Individuel)</option>
+              <option value="EURL">EURL</option>
+              <option value="SASU">SASU</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="business_name" hint="optionnel">Nom commercial</Label>
+          <Input
+            id="business_name"
+            value={v.business_name}
+            onChange={(e) => setV({ ...v, business_name: e.target.value })}
+          />
         </div>
 
         <div>

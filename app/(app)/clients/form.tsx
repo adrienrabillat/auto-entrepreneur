@@ -166,15 +166,7 @@ export function ClientForm({
 
         {v.is_pro ? (
           <>
-            <div>
-              <Label htmlFor="company_name">Raison sociale</Label>
-              <Input
-                id="company_name"
-                required
-                value={v.company_name}
-                onChange={(e) => setV({ ...v, company_name: e.target.value })}
-              />
-            </div>
+            {/* SIREN en TOUT premier — pré-remplit raison sociale + adresse */}
             <div>
               <Label htmlFor="siren" hint="9 chiffres — on remplit le reste automatiquement">SIREN</Label>
               <div className="relative">
@@ -198,6 +190,15 @@ export function ClientForm({
               ) : sirenStatus === "not_found" ? (
                 <p className="mt-1.5 text-xs text-warn-600">SIREN introuvable — tu peux saisir les infos à la main ci-dessous.</p>
               ) : null}
+            </div>
+            <div>
+              <Label htmlFor="company_name">Raison sociale</Label>
+              <Input
+                id="company_name"
+                required
+                value={v.company_name}
+                onChange={(e) => setV({ ...v, company_name: e.target.value })}
+              />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>

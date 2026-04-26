@@ -15,8 +15,35 @@ export type SireneCompany = {
   city: string | null;
   apeNaf: string | null;      // code APE, ex "6201Z"
   activityLabel: string | null; // libellé en clair, ex "Programmation informatique"
-  legalForm: string | null;   // forme juridique, ex "SARL"
+  legalForm: string | null;   // libellé brut, ex "SARL"
+  /** Forme juridique normalisée pour notre enum applicatif (EI/EURL/SASU/Autre).
+   *  Utile pour pré-remplir un <select> sans deviner depuis le libellé brut. */
+  legalFormNormalized: "EI" | "EURL" | "SASU" | "Autre";
 };
+
+/**
+ * Mappe le libellé/code de nature juridique INSEE vers notre enum
+ * applicatif. Couvre les cas usuels — tout ce qui n'est pas reconnu
+ * tombe sur "Autre".
+ *
+ * Codes INSEE de référence :
+ *  - 1000      Entrepreneur individuel
+ *  - 5485      SARL unipersonnelle (= EURL)
+ *  - 5499      SARL autre
+ *  - 5710      SAS (associé unique = SASU)
+ *  - 5720      SASU
+ */
+function mapLegalForm(
+  code: string | null | undefined,
+  libelle: string | null | undefined
+): "EI" | "EURL" | "SASU" | "Autre" {
+  const c = (code ?? "").trim();
+  const l = (libelle ?? "").toLowerCase();
+  if (c === "1000" || l.includes("entrepreneur individuel") || l === "ei") return "EI";
+  if (c === "5485" || l.includes("eurl") || l.includes("unipersonnelle à responsabilité")) return "EURL";
+  if (c === "5720" || c === "5710" || l.includes("sasu") || l.includes("simplifiée unipersonnelle")) return "SASU";
+  return "Autre";
+}
 
 type RawApiResult = {
   results?: Array<{
@@ -97,6 +124,7 @@ export async function lookupSiren(siren: string, signal?: AbortSignal): Promise<
       apeNaf: hit.siege?.activite_principale ?? hit.activite_principale ?? null,
       activityLabel: hit.siege?.libelle_activite_principale ?? null,
       legalForm: hit.libelle_nature_juridique ?? hit.nature_juridique ?? null,
+      legalFormNormalized: mapLegalForm(hit.nature_juridique, hit.libelle_nature_juridique),
     };
   } catch {
     // AbortError ou réseau KO → on laisse passer, saisie manuelle disponible.
