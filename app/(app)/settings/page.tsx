@@ -75,7 +75,9 @@ export default async function SettingsPage() {
         defaultValues={{
           display_name: profile.display_name ?? "",
           business_name: profile.business_name ?? "",
-          legal_form: (profile.legal_form as "EI" | "EURL" | "SARL" | "SAS" | "SASU" | "SA" | "SCI" | "Autre") ?? "EI",
+          // legal_form n'est plus exposé en UI : c'est verrouillé à 'EI'
+          // côté DB (CHECK) et l'onboarding force la valeur. Voir
+          // app/onboarding/form.tsx + migration 2026-04-26b.
           metier: profile.metier ?? "",
           siren: profile.siren ?? "",
           siret: profile.siret ?? "",

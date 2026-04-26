@@ -28,7 +28,10 @@ export default async function OnboardingPage() {
           defaultValues={{
             display_name: profile?.display_name ?? "",
             business_name: profile?.business_name ?? "",
-            legal_form: (profile?.legal_form as "EI" | "EURL" | "SARL" | "SAS" | "SASU" | "SA" | "SCI" | "Autre") ?? "EI",
+            // legal_form n'est plus demandé : Asthia est verrouillé sur EI
+            // au régime micro. La valeur est forcée à 'EI' au moment de
+            // l'UPDATE dans form.tsx (et la contrainte CHECK Postgres
+            // rejetterait toute autre valeur de toute façon).
             metier: profile?.metier ?? "",
             siren: profile?.siren ?? "",
             siret: profile?.siret ?? "",
@@ -39,6 +42,10 @@ export default async function OnboardingPage() {
             city: profile?.city ?? "",
             iban: profile?.iban ?? "",
             bic: profile?.bic ?? "",
+            // Confirmation explicite du régime micro. Pré-cochée si l'user
+            // revient sur l'onboarding après avoir déjà validé une fois,
+            // sinon décochée par défaut pour forcer une action volontaire.
+            is_micro: Boolean(profile?.onboarded),
           }}
         />
       </div>

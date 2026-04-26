@@ -47,7 +47,9 @@ function SectionHeader({
 type Values = {
   display_name: string;
   business_name: string;
-  legal_form: "EI" | "EURL" | "SARL" | "SAS" | "SASU" | "SA" | "SCI" | "Autre";
+  // legal_form n'est plus exposé : Asthia ne supporte que EI au régime
+  // micro, c'est verrouillé côté DB (CHECK = 'EI'). Le profil garde la
+  // valeur 'EI' héritée de l'onboarding.
   metier: string;
   siren: string;
   siret: string;
@@ -172,29 +174,9 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
           title="Identité"
           description="Ce qui apparaît en haut de tes factures."
         />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <Label htmlFor="display_name">Nom & prénom</Label>
-            <Input id="display_name" required value={v.display_name} onChange={(e) => setV({ ...v, display_name: e.target.value })} />
-          </div>
-          <div>
-            <Label htmlFor="legal_form">Forme juridique</Label>
-            <select
-              id="legal_form"
-              value={v.legal_form}
-              onChange={(e) => setV({ ...v, legal_form: e.target.value as Values["legal_form"] })}
-              className="h-10 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
-            >
-              <option value="EI">EI (Entrepreneur Individuel)</option>
-              <option value="EURL">EURL</option>
-              <option value="SARL">SARL</option>
-              <option value="SAS">SAS</option>
-              <option value="SASU">SASU</option>
-              <option value="SA">SA</option>
-              <option value="SCI">SCI</option>
-              <option value="Autre">Autre</option>
-            </select>
-          </div>
+        <div>
+          <Label htmlFor="display_name">Nom & prénom</Label>
+          <Input id="display_name" required value={v.display_name} onChange={(e) => setV({ ...v, display_name: e.target.value })} />
         </div>
         <div>
           <Label htmlFor="business_name" hint="optionnel">Nom commercial</Label>

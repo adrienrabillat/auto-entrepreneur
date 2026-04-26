@@ -18,7 +18,11 @@ create table if not exists public.profiles (
   email text not null,
   display_name text,
   business_name text,                                -- optional trade name ("nom commercial")
-  legal_form text not null default 'EI' check (legal_form in ('EI','EURL','SARL','SAS','SASU','SA','SCI','Autre')),
+  -- Asthia ne supporte que les Entrepreneurs Individuels (EI). La régime
+  -- fiscal supporté est 'micro' (= micro-entrepreneur / auto-entrepreneur).
+  -- Voir migration 2026-04-26b_lock_to_micro_entrepreneur.sql.
+  legal_form text not null default 'EI' check (legal_form = 'EI'),
+  tax_regime text not null default 'micro' check (tax_regime in ('micro')),
   metier text,                                       -- "Sophrologue", "Manutention", ...
   siren text,                                        -- 9 digits, printed next to "EI"
   siret text,                                        -- 14 digits = SIREN + 5 (NIC)
