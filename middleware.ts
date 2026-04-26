@@ -5,7 +5,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
  * Refreshes the Supabase auth cookie on every request and redirects
  * unauthenticated users away from protected pages.
  */
-const PROTECTED_PREFIXES = ["/dashboard", "/invoices", "/clients", "/declarations", "/settings", "/onboarding"];
+const PROTECTED_PREFIXES = ["/dashboard", "/invoices", "/quotes", "/clients", "/declarations", "/settings", "/onboarding", "/import"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } });

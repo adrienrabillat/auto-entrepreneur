@@ -25,8 +25,13 @@ export type OperationType = "service" | "vente" | "mixte";
 
 export type InvoicePdfData = {
   number: string;
+  /** Type de document. 'invoice' = facture (par défaut, comportement
+   *  historique). 'quote' = devis : titre "DEVIS", date d'échéance affichée
+   *  comme "Validité" et bandeau légal adapté. Les autres pans du PDF
+   *  (mentions légales vendeur, ligne de prestation, totaux) sont identiques. */
+  documentKind?: "invoice" | "quote";
   issuedOn: string;              // ISO date (YYYY-MM-DD)
-  dueOn?: string;                // optional ISO date — date de règlement
+  dueOn?: string;                // optional ISO date — date de règlement (facture) OU validité (devis)
   executionDate?: string;        // ISO date — date de réalisation / livraison
   description: string;
   quantity: number;
@@ -96,9 +101,16 @@ const C_PAID_SOFT= rgb(0.925, 0.972, 0.933); // #ECF8EE
 
 export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
-  pdf.setTitle(`Facture ${data.number}`);
+  // Devis ou facture : on adapte uniquement les libellés visibles. Le
+  // reste du layout (en-tête, bloc vendeur, bloc client, prestations,
+  // totaux, mentions légales) reste strictement identique pour cohérence
+  // visuelle entre les deux types de documents.
+  const isQuote = data.documentKind === "quote";
+  const docNoun = isQuote ? "Devis" : "Facture";
+  const docTitle = isQuote ? "DEVIS" : "FACTURE";
+  pdf.setTitle(`${docNoun} ${data.number}`);
   pdf.setAuthor(sellerLegalLabel(data));
-  pdf.setSubject(`Facture ${data.number} — ${sellerLegalLabel(data)}`);
+  pdf.setSubject(`${docNoun} ${data.number} — ${sellerLegalLabel(data)}`);
   pdf.setProducer("auto-entrepreneur app");
   pdf.setCreator("auto-entrepreneur app");
   pdf.setCreationDate(new Date());
@@ -150,7 +162,7 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   // TITRE — "FACTURE" à gauche, numéro à droite.
   // Si acquittée : tampon vert "ACQUITTÉE" sous le titre.
   // ----------------------------------------------------------------
-  draw("FACTURE", marginX, y, { size: 28, font: bold, color: C_INK_900 });
+  draw(docTitle, marginX, y, { size: 28, font: bold, color: C_INK_900 });
   draw(`#${data.number}`, rightX, y + 6, {
     size: 13,
     font: regular,

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
-import { Loader2, Check, AlertCircle, ArrowLeft, ArrowRight, User, Building2, MapPin, Landmark, ShieldAlert } from "lucide-react";
+import { Loader2, Check, AlertCircle, ArrowLeft, ArrowRight, User, Building2, MapPin, Landmark, ShieldAlert, Briefcase, ShoppingBag, Wrench, GraduationCap, Layers } from "lucide-react";
 import { lookupSiren } from "@/lib/sirene";
 import { identifyBank } from "@/lib/iban-banks";
 import { createClient } from "@/lib/supabase/browser";
@@ -16,6 +16,9 @@ import { createClient } from "@/lib/supabase/browser";
 // alimenter la BDD (legal_form = 'EI', tax_regime = 'micro') et pour bloquer
 // les comptes qui ne correspondent pas (SARL, SAS, EURL…).
 const SUPPORTED_LEGAL_FORM = "EI" as const;
+
+type ActivityKind = "vente" | "service_bic" | "liberal_bnc" | "mixte";
+type UrssafFrequency = "monthly" | "quarterly";
 
 type Values = {
   display_name: string;
@@ -28,6 +31,15 @@ type Values = {
   address_line2: string;
   postal_code: string;
   city: string;
+  // Activité & URSSAF (étape 4)
+  activity_kind: ActivityKind | "";
+  urssaf_frequency: UrssafFrequency;
+  urssaf_declaration_day: number;
+  invoice_number_format: string;
+  // L'user déclare s'il a déjà facturé cette année. Si oui, un modal au
+  // 1er dashboard collectera les derniers numéros + proposera un import.
+  had_prior_activity: boolean;
+  // Bancaire (étape 5)
   iban: string;
   bic: string;
   // Confirmation explicite du régime micro. Pas envoyé en BDD (tax_regime est
@@ -35,13 +47,14 @@ type Values = {
   is_micro: boolean;
 };
 
-type StepId = 1 | 2 | 3 | 4;
+type StepId = 1 | 2 | 3 | 4 | 5;
 
 const STEPS: { id: StepId; label: string; icon: typeof User }[] = [
   { id: 1, label: "Identité",   icon: User },
   { id: 2, label: "Entreprise", icon: Building2 },
   { id: 3, label: "Adresse",    icon: MapPin },
-  { id: 4, label: "Bancaire",   icon: Landmark },
+  { id: 4, label: "Activité",   icon: Briefcase },
+  { id: 5, label: "Bancaire",   icon: Landmark },
 ];
 
 // Clé localStorage pour mémoriser l'étape courante du wizard.
@@ -67,9 +80,13 @@ function firstIncompleteStep(d: Values): StepId {
   if (!d.metier?.trim() || !d.ape_naf?.trim()) return 2;
   if (!d.is_micro) return 2;
   if (!d.address_line1?.trim() || !d.postal_code?.trim() || !d.city?.trim()) return 3;
-  if (d.iban.replace(/\s/g, "").length < 15) return 4;
-  if (d.bic.replace(/\s/g, "").length < 8) return 4;
-  return 4;
+  // Étape 4 : on exige au minimum la catégorie d'activité (le reste a un
+  // default sain). Si vide, on ramène l'user ici.
+  if (!d.activity_kind) return 4;
+  if (!d.invoice_number_format?.trim()) return 4;
+  if (d.iban.replace(/\s/g, "").length < 15) return 5;
+  if (d.bic.replace(/\s/g, "").length < 8) return 5;
+  return 5;
 }
 
 export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
@@ -110,53 +127,93 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
   // On met onboarded=false explicitement pour ne pas laisser un demi-profil
   // déclenchant la redirection /dashboard. Le passage à true se fait
   // uniquement dans finish().
+  //
+  // ATTENTION race condition : finish() doit IMPÉRATIVEMENT annuler tout
+  // auto-save en attente ou en cours, sinon un timer planifié juste avant
+  // le clic "Terminer" peut écraser onboarded=true en onboarded=false 800ms
+  // plus tard. C'est ce qui causait le bug "je clique Terminer et je
+  // reviens à l'étape 1" — l'utilisateur retombait sur /onboarding car
+  // onboarded était repassé à false par le timer en retard.
   const initializedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveAbortRef = useRef<AbortController | null>(null);
+  // Quand true, on bloque toute nouvelle planification d'auto-save. Mis à
+  // true au tout début de finish() et jamais remis à false (le composant
+  // sera démonté par le router.replace).
+  const finishingRef = useRef(false);
+  // Promesse de la sauvegarde actuellement en vol (s'il y en a une). On
+  // l'utilise dans finish() pour ATTENDRE qu'elle se termine avant de
+  // commit onboarded=true. Sans ça, le supabase-js ignore les AbortSignals
+  // et un save en cours peut atterrir à Postgres APRÈS notre commit final.
+  const inFlightSaveRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (!initializedRef.current) { initializedRef.current = true; return; }
+    // Si finish() est en cours, on n'écrit plus rien depuis l'auto-save.
+    if (finishingRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
+    saveTimerRef.current = setTimeout(() => {
+      // Double-check au moment du fire : finish() a pu être appelé pendant
+      // les 800ms de debounce.
+      if (finishingRef.current) return;
       saveAbortRef.current?.abort();
       const ctrl = new AbortController();
       saveAbortRef.current = ctrl;
       setDraftStatus("saving");
-      try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || ctrl.signal.aborted) return;
-        const cleanSiren = v.siren.replace(/\s/g, "");
-        const cleanSiret = v.siret.replace(/\s/g, "");
-        const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
-        const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
-        // is_micro est purement UI — Supabase n'a pas cette colonne, on la
-        // retire avant l'UPDATE pour éviter un PGRST204 ("column not found").
-        // tax_regime est figé à 'micro' côté Postgres (CHECK + default), on
-        // ne l'envoie donc jamais depuis le client.
-        const { is_micro: _ignored, ...persistable } = v;
-        await supabase
-          .from("profiles")
-          .update({
-            ...persistable,
-            legal_form: SUPPORTED_LEGAL_FORM,
-            siren: cleanSiren,
-            siret: cleanSiret,
-            iban: cleanIban,
-            bic: cleanBic,
-            onboarded: false,
-          })
-          .eq("id", user.id);
-        if (ctrl.signal.aborted) return;
-        setDraftStatus("saved");
-        // Auto-revient à idle après 1.5s pour ne pas laisser
-        // l'indicateur permanent.
-        setTimeout(() => setDraftStatus((s) => (s === "saved" ? "idle" : s)), 1500);
-      } catch {
-        // On échoue silencieusement — le draft auto-save ne doit jamais
-        // bloquer l'utilisateur. La validation finale dans finish() fait foi.
-        setDraftStatus("idle");
-      }
+      // On encapsule l'IIFE async dans une promesse exposée via inFlightSaveRef
+      // pour que finish() puisse l'await avant son propre commit.
+      const promise: Promise<void> = (async () => {
+        try {
+          const supabase = createClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user || ctrl.signal.aborted || finishingRef.current) return;
+          const cleanSiren = v.siren.replace(/\s/g, "");
+          const cleanSiret = v.siret.replace(/\s/g, "");
+          const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
+          const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
+          // is_micro est purement UI — Supabase n'a pas cette colonne, on la
+          // retire avant l'UPDATE pour éviter un PGRST204 ("column not found").
+          // tax_regime est figé à 'micro' côté Postgres (CHECK + default), on
+          // ne l'envoie donc jamais depuis le client.
+          const { is_micro: _ignored, ...persistable } = v;
+          // Dernière barrière avant l'écriture : si finish() a été déclenché
+          // pendant le getUser() ci-dessus, on n'écrit pas. Cette vérif
+          // évite le scénario "auto-save écrase onboarded=true" même si
+          // l'abort signal est ignoré par supabase-js.
+          if (finishingRef.current) return;
+          await supabase
+            .from("profiles")
+            .update({
+              ...persistable,
+              legal_form: SUPPORTED_LEGAL_FORM,
+              siren: cleanSiren,
+              siret: cleanSiret,
+              iban: cleanIban,
+              bic: cleanBic,
+              onboarded: false,
+            })
+            .eq("id", user.id);
+          if (ctrl.signal.aborted) return;
+          setDraftStatus("saved");
+          // Auto-revient à idle après 1.5s pour ne pas laisser
+          // l'indicateur permanent.
+          setTimeout(() => setDraftStatus((s) => (s === "saved" ? "idle" : s)), 1500);
+        } catch {
+          // On échoue silencieusement — le draft auto-save ne doit jamais
+          // bloquer l'utilisateur. La validation finale dans finish() fait foi.
+          setDraftStatus("idle");
+        }
+      })();
+      inFlightSaveRef.current = promise;
+      // On nettoie la ref une fois la promesse résolue, MAIS uniquement si
+      // c'est toujours nous qui sommes référencés (un save plus récent peut
+      // nous avoir remplacés entretemps). Découplé du try/finally pour
+      // éviter une référence circulaire à `promise` que TS refuse.
+      void promise.finally(() => {
+        if (inFlightSaveRef.current === promise) {
+          inFlightSaveRef.current = null;
+        }
+      });
     }, 800);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -262,6 +319,20 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
       return null;
     }
     if (s === 4) {
+      // Activité & URSSAF
+      if (!v.activity_kind) return "Choisis ta catégorie d'activité.";
+      if (!["monthly", "quarterly"].includes(v.urssaf_frequency)) return "Précise la fréquence URSSAF.";
+      if (v.urssaf_declaration_day < 1 || v.urssaf_declaration_day > 28) return "Jour de déclaration : entre 1 et 28.";
+      if (!v.invoice_number_format.trim()) return "Format de numéro de facture requis.";
+      // Le format doit contenir au minimum {seq} ou {seq:N} pour pouvoir
+      // incrémenter. On ne valide pas plus précisément ici (les autres
+      // tokens sont optionnels).
+      if (!/\{seq(?::\d+)?\}/.test(v.invoice_number_format)) {
+        return "Le format doit contenir {seq} (numéro qui s'incrémente).";
+      }
+      return null;
+    }
+    if (s === 5) {
       const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
       const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
       if (cleanIban.length < 15) return "IBAN requis (15 caractères minimum).";
@@ -275,7 +346,7 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
     const err = validateStep(step);
     if (err) { setError(err); return; }
     setError(null);
-    setStep((s) => (s < 4 ? ((s + 1) as StepId) : s));
+    setStep((s) => (s < 5 ? ((s + 1) as StepId) : s));
   }
   function back() {
     setError(null);
@@ -287,13 +358,32 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
     // refuser tout profil incomplet ou contournement (modif devtools, retour
     // arrière étrange…). validateStep(2) couvre le blocage SARL et la
     // confirmation régime micro.
-    for (const stepId of [1, 2, 3, 4] as const) {
+    for (const stepId of [1, 2, 3, 4, 5] as const) {
       const err = validateStep(stepId);
       if (err) {
         setStep(stepId);
         setError(err);
         return;
       }
+    }
+    // ─── Anti-race avec l'auto-save ────────────────────────────────────
+    // 1. On verrouille pour empêcher la planification de nouveaux saves.
+    // 2. On annule le timer en attente (si l'user a tapé un caractère il y
+    //    a moins de 800ms, un save est programmé mais pas encore parti).
+    // 3. On abort un éventuel save déjà en vol et on attend qu'il se
+    //    termine — supabase-js ignore l'AbortSignal donc le PATCH HTTP
+    //    part de toute façon ; on attend pour être sûr de commit
+    //    onboarded=true APRÈS et pas avant.
+    finishingRef.current = true;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    saveAbortRef.current?.abort();
+    saveAbortRef.current = null;
+    if (inFlightSaveRef.current) {
+      try { await inFlightSaveRef.current; } catch { /* ignore */ }
+      inFlightSaveRef.current = null;
     }
     setSaving(true);
     setError(null);
@@ -352,8 +442,8 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
         ) : null}
       </div>
 
-      {/* Stepper segmenté */}
-      <div className="grid grid-cols-4 gap-2">
+      {/* Stepper segmenté — 5 étapes */}
+      <div className="grid grid-cols-5 gap-2">
         {STEPS.map((s) => {
           const done = s.id < step;
           const active = s.id === step;
@@ -397,7 +487,8 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
           />
         ) : null}
         {step === 3 ? <StepAddress v={v} setV={setV} /> : null}
-        {step === 4 ? <StepBank v={v} setV={setV} /> : null}
+        {step === 4 ? <StepActivity v={v} setV={setV} /> : null}
+        {step === 5 ? <StepBank v={v} setV={setV} /> : null}
 
         {error ? (
           <p className="text-small text-danger-600 bg-danger-500/10 rounded-2xl px-4 py-2.5">
@@ -419,7 +510,7 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
         ) : (
           <span />
         )}
-        {step < 4 ? (
+        {step < 5 ? (
           <Button
             type="button"
             onClick={next}
@@ -707,7 +798,207 @@ function StepAddress({ v, setV }: { v: Values; setV: (v: Values) => void }) {
   );
 }
 
-// ─── Étape 4 : Bancaire ──────────────────────────────────────────────
+// ─── Étape 4 : Activité & URSSAF ─────────────────────────────────────
+// Pilote tous les calculs URSSAF (taux, abattement, seuil annuel) et la
+// numérotation des factures. C'est l'étape la plus dense — on la structure
+// en 4 sous-blocs visuels pour rester lisible.
+function StepActivity({ v, setV }: { v: Values; setV: (v: Values) => void }) {
+  // Catalogue figé des catégories d'activité au sens URSSAF. Les chiffres
+  // (taux, abattement, seuil) sont indicatifs au moment du choix — ils
+  // n'apparaîtront pas en BDD, ils servent juste à aider l'user à se
+  // reconnaître. Les vrais calculs se font ailleurs (lib/declaration-service).
+  const ACTIVITIES: {
+    id: ActivityKind;
+    label: string;
+    desc: string;
+    icon: typeof User;
+  }[] = [
+    {
+      id: "vente",
+      label: "Vente de marchandises",
+      desc: "Achat-revente, e-commerce, restauration à emporter… Seuil 188 700 €/an, cotisations 12,3 %.",
+      icon: ShoppingBag,
+    },
+    {
+      id: "service_bic",
+      label: "Prestations de services BIC",
+      desc: "Artisanat, commerce de services, location meublée… Seuil 77 700 €/an, cotisations 21,2 %.",
+      icon: Wrench,
+    },
+    {
+      id: "liberal_bnc",
+      label: "Profession libérale (BNC)",
+      desc: "Conseil, formation, freelance, métiers du soin non réglementés… Seuil 77 700 €, cotisations 23,1 % (ou 23,2 % CIPAV).",
+      icon: GraduationCap,
+    },
+    {
+      id: "mixte",
+      label: "Activité mixte",
+      desc: "Tu fais à la fois de la vente ET du service. La ventilation se fera facture par facture.",
+      icon: Layers,
+    },
+  ];
+
+  // Aperçu live du format de numéro : on remplace les tokens par des valeurs
+  // d'exemple. Aide l'user à voir ce que donnera son prochain numéro avant
+  // de valider.
+  const previewInvoiceNumber = renderNumberPreview(v.invoice_number_format, 1);
+
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <div className="h-11 w-11 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600">
+          <Briefcase size={18} />
+        </div>
+        <div>
+          <h2 className="text-h3 text-ink-900">Ton activité & ta déclaration URSSAF</h2>
+          <p className="text-small text-ink-500 mt-0.5">
+            Ces choix pilotent le calcul de tes cotisations et la numérotation de tes factures.
+          </p>
+        </div>
+      </div>
+
+      {/* ─── Catégorie d'activité ─────────────────────────────────── */}
+      <div className="space-y-2">
+        <Label htmlFor="activity_kind">Catégorie d&apos;activité</Label>
+        <div className="grid grid-cols-1 gap-2">
+          {ACTIVITIES.map((a) => {
+            const selected = v.activity_kind === a.id;
+            const Icon = a.icon;
+            return (
+              <label
+                key={a.id}
+                className={
+                  "flex items-start gap-3 rounded-2xl p-3.5 cursor-pointer transition-colors border " +
+                  (selected
+                    ? "bg-brand-500/10 border-brand-500/40"
+                    : "bg-surface border-ink-100 hover:bg-surface-2")
+                }
+              >
+                <input
+                  type="radio"
+                  name="activity_kind"
+                  value={a.id}
+                  checked={selected}
+                  onChange={() => setV({ ...v, activity_kind: a.id })}
+                  className="sr-only"
+                />
+                <div
+                  className={
+                    "h-9 w-9 shrink-0 grid place-items-center rounded-xl " +
+                    (selected ? "bg-brand-500 text-white" : "bg-surface-2 text-ink-500")
+                  }
+                >
+                  <Icon size={16} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-small font-medium text-ink-900">{a.label}</div>
+                  <div className="text-xs text-ink-500 mt-0.5">{a.desc}</div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ─── Fréquence URSSAF + jour ──────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="urssaf_frequency">Fréquence de déclaration URSSAF</Label>
+          <select
+            id="urssaf_frequency"
+            value={v.urssaf_frequency}
+            onChange={(e) => setV({ ...v, urssaf_frequency: e.target.value as UrssafFrequency })}
+            className="h-12 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
+          >
+            <option value="monthly">Mensuelle</option>
+            <option value="quarterly">Trimestrielle</option>
+          </select>
+          <p className="mt-1.5 text-xs text-ink-500">
+            Choisi à ton inscription URSSAF. Modifiable une fois par an avant le 31 octobre.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="urssaf_declaration_day" hint="entre 1 et 28">Jour de la déclaration</Label>
+          <select
+            id="urssaf_declaration_day"
+            value={v.urssaf_declaration_day}
+            onChange={(e) => setV({ ...v, urssaf_declaration_day: Number(e.target.value) })}
+            className="h-12 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
+          >
+            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                Le {d} du mois
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* ─── Format des numéros de facture ────────────────────────── */}
+      <div>
+        <Label htmlFor="invoice_number_format" hint="tokens : {year}, {seq:N}">
+          Format de tes numéros de facture
+        </Label>
+        <Input
+          id="invoice_number_format"
+          required
+          value={v.invoice_number_format}
+          onChange={(e) => setV({ ...v, invoice_number_format: e.target.value })}
+          placeholder="F-{year}-{seq:4}"
+        />
+        <p className="mt-1.5 text-xs text-ink-500">
+          Aperçu de ta première facture :{" "}
+          <span className="font-mono text-ink-900">{previewInvoiceNumber}</span>
+          . Tu pourras saisir le numéro de ta dernière facture émise (si tu en as déjà) après
+          l&apos;onboarding, à la première ouverture de l&apos;app.
+        </p>
+      </div>
+
+      {/* ─── A déjà facturé cette année ? ─────────────────────────── */}
+      <label
+        htmlFor="had_prior_activity"
+        className="flex items-start gap-3 rounded-2xl bg-surface-2 border border-ink-100 p-4 cursor-pointer hover:bg-surface-3 transition-colors"
+      >
+        <input
+          id="had_prior_activity"
+          type="checkbox"
+          checked={v.had_prior_activity}
+          onChange={(e) => setV({ ...v, had_prior_activity: e.target.checked })}
+          className="mt-0.5 h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+        />
+        <div className="space-y-0.5">
+          <p className="text-small font-medium text-ink-900">
+            J&apos;ai déjà émis des factures cette année (avant d&apos;utiliser Asthia).
+          </p>
+          <p className="text-xs text-ink-500">
+            On te demandera tes derniers numéros de facture et de devis dès ta première
+            visite, et on te proposera d&apos;importer ta compta passée.
+          </p>
+        </div>
+      </label>
+    </>
+  );
+}
+
+/**
+ * Remplace les tokens d'un format de numéro par des valeurs concrètes pour
+ * affichage. Utilisé dans l'onboarding (preview) et dans nextInvoiceNumber()
+ * (génération réelle). Tokens supportés :
+ *   {year}      — année en cours sur 4 chiffres
+ *   {seq}       — séquence brute, sans padding
+ *   {seq:N}     — séquence avec padding zéros sur N caractères
+ */
+function renderNumberPreview(format: string, seq: number): string {
+  if (!format) return "";
+  const year = String(new Date().getFullYear());
+  return format
+    .replace(/\{year\}/g, year)
+    .replace(/\{seq:(\d+)\}/g, (_, n) => String(seq).padStart(parseInt(n, 10), "0"))
+    .replace(/\{seq\}/g, String(seq));
+}
+
+// ─── Étape 5 : Bancaire ──────────────────────────────────────────────
 function StepBank({ v, setV }: { v: Values; setV: (v: Values) => void }) {
   const bank = identifyBank(v.iban, v.bic);
   return (

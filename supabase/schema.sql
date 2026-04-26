@@ -49,7 +49,24 @@ create table if not exists public.profiles (
   mediator_website text,                             -- URL publique du médiateur
   gmail_refresh_token text,                          -- encrypted at rest by Supabase, never sent to browser
   gmail_connected_email text,
+  -- Activité (vente / service BIC / libéral BNC / mixte). Pilote tous les
+  -- calculs URSSAF (taux, abattement, seuil annuel).
+  activity_kind text check (activity_kind in ('vente', 'service_bic', 'liberal_bnc', 'mixte')),
+  urssaf_frequency text not null default 'monthly' check (urssaf_frequency in ('monthly', 'quarterly')),
   urssaf_declaration_day smallint default 3 check (urssaf_declaration_day between 1 and 28),
+  -- Numérotation factures et devis. Le format supporte les tokens {year}
+  -- et {seq:N}. Le seed mémorise le dernier numéro émis ; le prochain
+  -- sera seed+1. Permet à un AE qui démarre en cours d'année avec déjà
+  -- des factures émises de redémarrer à la bonne valeur.
+  invoice_number_format text not null default 'F-{year}-{seq:4}',
+  invoice_number_seed integer not null default 0 check (invoice_number_seed >= 0),
+  quote_number_format text not null default 'D-{year}-{seq:4}',
+  quote_number_seed integer not null default 0 check (quote_number_seed >= 0),
+  -- Flag "j'ai déjà facturé cette année" coché à l'onboarding. Déclenche
+  -- un modal bloquant au 1er dashboard pour saisir les derniers numéros
+  -- et proposer l'import de compta.
+  had_prior_activity boolean not null default false,
+  prior_activity_resolved boolean not null default false,
   onboarded boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

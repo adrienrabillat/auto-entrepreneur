@@ -1,0 +1,194 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
+import { formatDate, formatEUR } from "@/lib/format";
+import { FileText, Plus } from "lucide-react";
+import { initialsFrom } from "@/lib/initials";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Liste des devis avec filtre par statut. Calque /invoices mais sans
+ * bouton de suppression inline (la suppression se fait depuis le détail,
+ * et seulement si le devis n'est pas converti en facture).
+ */
+
+type Quote = {
+  id: string;
+  number: string;
+  client_name: string | null;
+  client_email: string;
+  description: string;
+  amount_cents: number;
+  status: "draft" | "sent" | "accepted" | "rejected" | "expired";
+  issued_on: string;
+  valid_until: string | null;
+  sent_at: string | null;
+  accepted_at: string | null;
+  converted_invoice_id: string | null;
+};
+
+const STATUS_FILTERS = [
+  { key: "all",      label: "Tous" },
+  { key: "draft",    label: "Brouillons" },
+  { key: "sent",     label: "Envoyés" },
+  { key: "accepted", label: "Acceptés" },
+  { key: "rejected", label: "Refusés" },
+] as const;
+
+export default async function QuotesPage({
+  searchParams,
+}: {
+  searchParams: { status?: string };
+}) {
+  const supabase = createClient();
+  const user = await getCurrentUser();
+
+  const filter = (searchParams.status ?? "all") as (typeof STATUS_FILTERS)[number]["key"];
+  let q = supabase
+    .from("quotes")
+    .select("*")
+    .eq("user_id", user!.id)
+    .order("issued_on", { ascending: false });
+  if (filter !== "all") q = q.eq("status", filter);
+
+  const { data: quotes = [] } = await q;
+  const list = (quotes ?? []) as Quote[];
+
+  return (
+    <div className="space-y-5 animate-fade-in-up">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-h1">Devis</h1>
+          <p className="mt-1 text-small text-ink-500">
+            Tes devis envoyés, leur statut et la conversion en facture quand ils sont acceptés.
+          </p>
+        </div>
+        <Link href="/quotes/new" className="pill pill-primary">
+          <Plus size={16} />
+          Nouveau devis
+        </Link>
+      </div>
+
+      <div className="inline-flex bg-surface-2 p-1 rounded-full overflow-x-auto max-w-full">
+        {STATUS_FILTERS.map((f) => {
+          const active = filter === f.key;
+          return (
+            <Link
+              key={f.key}
+              href={f.key === "all" ? "/quotes" : `/quotes?status=${f.key}`}
+              className={
+                "px-4 py-1.5 rounded-full text-small font-medium whitespace-nowrap transition-all " +
+                (active
+                  ? "bg-surface text-ink-900 shadow-hair"
+                  : "text-ink-500 hover:text-ink-900")
+              }
+            >
+              {f.label}
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className="surface p-2">
+        {list.length === 0 ? (
+          <EmptyState filter={filter} />
+        ) : (
+          <ul>
+            {list.map((q) => {
+              const displayName = q.client_name || q.client_email;
+              return (
+                <li key={q.id}>
+                  <Link
+                    href={`/quotes/${q.id}`}
+                    className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
+                  >
+                    <div className="avatar">{initialsFrom(displayName)}</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="font-medium text-ink-900 truncate">{q.description}</span>
+                        <StatusDot status={q.status} converted={Boolean(q.converted_invoice_id)} />
+                      </div>
+                      <div className="mt-0.5 text-xs text-ink-500 truncate">
+                        <span className="tabular-nums">{q.number}</span> · {displayName} · {formatDate(q.issued_on)}
+                        {q.valid_until ? ` · valable jusqu'au ${formatDate(q.valid_until)}` : ""}
+                      </div>
+                    </div>
+                    <div className="text-body font-bold tabular-nums tracking-tight text-ink-900 shrink-0">
+                      {formatEUR(q.amount_cents)}
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Mêmes status-dots que les factures pour cohérence visuelle, plus un
+ * cas spécifique "converti" (devis accepté ET facture créée).
+ */
+function StatusDot({
+  status,
+  converted,
+}: {
+  status: Quote["status"];
+  converted: boolean;
+}) {
+  if (converted) {
+    return (
+      <span className="status-dot paid">
+        <span className="d" aria-hidden />
+        Converti en facture
+      </span>
+    );
+  }
+  const map: Record<Quote["status"], { cls: string; label: string }> = {
+    accepted: { cls: "paid",   label: "Accepté" },
+    sent:     { cls: "sent",   label: "Envoyé" },
+    draft:    { cls: "draft",  label: "Brouillon" },
+    rejected: { cls: "cancel", label: "Refusé" },
+    expired:  { cls: "cancel", label: "Expiré" },
+  };
+  const { cls, label } = map[status];
+  return (
+    <span className={`status-dot ${cls}`}>
+      <span className="d" aria-hidden />
+      {label}
+    </span>
+  );
+}
+
+function EmptyState({ filter }: { filter: string }) {
+  const msg =
+    filter === "draft"
+      ? "Aucun brouillon pour l'instant."
+      : filter === "sent"
+        ? "Aucun devis envoyé en attente de réponse."
+        : filter === "accepted"
+          ? "Aucun devis accepté pour l'instant."
+          : filter === "rejected"
+            ? "Aucun devis refusé."
+            : "Aucun devis pour le moment.";
+  return (
+    <div className="p-10 text-center">
+      <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-brand-500/10 text-brand-600">
+        <FileText size={22} />
+      </div>
+      <p className="text-body font-medium text-ink-900">{msg}</p>
+      <p className="mt-1 text-small text-ink-500">
+        Un devis se crée en moins d&apos;une minute.
+      </p>
+      <div className="mt-4">
+        <Link href="/quotes/new" className="pill pill-primary">
+          <Plus size={16} />
+          Nouveau devis
+        </Link>
+      </div>
+    </div>
+  );
+}

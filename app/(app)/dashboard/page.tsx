@@ -6,6 +6,7 @@ import { formatDate, formatEUR } from "@/lib/format";
 import { Plus, UserPlus, Download } from "lucide-react";
 import { HeroAmount } from "./hero-amount";
 import { initialsFrom } from "@/lib/initials";
+import { PriorActivityModal } from "./prior-activity-modal";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +42,19 @@ export default async function DashboardPage() {
       .limit(100),
     supabase
       .from("profiles")
-      .select("display_name")
+      .select("display_name, had_prior_activity, prior_activity_resolved, invoice_number_format, quote_number_format")
       .eq("id", user!.id)
       .maybeSingle(),
   ]);
   const all = (invoicesRes.data ?? []) as Invoice[];
   const profile = profileRes.data;
+  // Modal "tu as déjà facturé cette année" : on l'affiche tant que l'user
+  // a coché la case à l'onboarding (had_prior_activity) sans avoir saisi
+  // ses derniers numéros (prior_activity_resolved). C'est volontairement
+  // bloquant — pas de bouton "Plus tard" — pour garantir l'intégrité de
+  // la numérotation avant qu'il commence à émettre de nouvelles factures.
+  const showPriorActivity =
+    Boolean(profile?.had_prior_activity) && !Boolean(profile?.prior_activity_resolved);
 
   const sumBetween = (from: Date, to?: Date) =>
     all
@@ -77,6 +85,18 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-5 animate-fade-in-up">
+      {/* Modal bloquant "j'ai déjà facturé cette année" — apparaît UNE seule
+          fois après l'onboarding pour saisir les derniers numéros de
+          facture/devis. Tant qu'il n'est pas résolu, le user le revoit
+          à chaque visite (volontaire — on ne peut pas se permettre de
+          laisser un compteur vide alors qu'il a déjà émis des factures). */}
+      {showPriorActivity ? (
+        <PriorActivityModal
+          invoiceFormat={profile?.invoice_number_format ?? "F-{year}-{seq:4}"}
+          quoteFormat={profile?.quote_number_format ?? "D-{year}-{seq:4}"}
+        />
+      ) : null}
+
       {/* HERO KPI */}
       <section className="surface relative overflow-hidden p-6 md:p-9">
         <div

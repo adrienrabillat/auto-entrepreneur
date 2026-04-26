@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { FileText, LayoutDashboard, Receipt, Settings, Users } from "lucide-react";
+import { FileText, FilePen, LayoutDashboard, Receipt, Settings, Users } from "lucide-react";
 
+// Items de navigation principaux (sidebar desktop + bottom-nav mobile).
+// Ordre : Accueil → Devis → Factures → Clients → URSSAF → Profil.
+// "Devis" est avant "Factures" parce que dans le flow naturel d'un AE
+// on émet un devis AVANT la facture (sauf vente directe). 6 items au
+// total → la grid mobile passe de grid-cols-5 à grid-cols-6.
 const items = [
   { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
+  { href: "/quotes", label: "Devis", icon: FilePen },
   { href: "/invoices", label: "Factures", icon: FileText },
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/declarations", label: "URSSAF", icon: Receipt },
@@ -70,7 +76,7 @@ export function MobileBottomNav() {
       className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-surface shadow-card"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="grid grid-cols-5">
+      <ul className="grid grid-cols-6">
         {items.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (

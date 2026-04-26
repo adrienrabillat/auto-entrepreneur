@@ -18,6 +18,17 @@ export default async function SettingsPage() {
     .eq("id", user!.id)
     .single();
 
+  // Pour décider si le format de numéro de facture est encore modifiable :
+  // on vérifie qu'aucune facture n'a été émise (on regarde l'existence,
+  // pas le contenu, donc on demande juste l'id de la 1ère).
+  const { data: firstInvoice } = await supabase
+    .from("invoices")
+    .select("id")
+    .eq("user_id", user!.id)
+    .limit(1)
+    .maybeSingle();
+  const invoicesAlreadyEmitted = Boolean(firstInvoice);
+
   const gmailActive = Boolean(profile.gmail_refresh_token);
 
   return (
@@ -72,6 +83,7 @@ export default async function SettingsPage() {
       </div>
 
       <SettingsForm
+        invoicesAlreadyEmitted={invoicesAlreadyEmitted}
         defaultValues={{
           display_name: profile.display_name ?? "",
           business_name: profile.business_name ?? "",
@@ -98,7 +110,12 @@ export default async function SettingsPage() {
           insurance_coverage: profile.insurance_coverage ?? "",
           mediator_name: profile.mediator_name ?? "",
           mediator_website: profile.mediator_website ?? "",
+          // Activité & URSSAF (colonnes ajoutées dans 2026-04-26c).
+          activity_kind: (profile.activity_kind as "vente" | "service_bic" | "liberal_bnc" | "mixte" | undefined) ?? "",
+          urssaf_frequency: (profile.urssaf_frequency as "monthly" | "quarterly" | undefined) ?? "monthly",
           urssaf_declaration_day: profile.urssaf_declaration_day ?? 3,
+          invoice_number_format: profile.invoice_number_format ?? "F-{year}-{seq:4}",
+          quote_number_format: profile.quote_number_format ?? "D-{year}-{seq:4}",
         }}
       />
 

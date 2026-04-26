@@ -16,6 +16,8 @@ import {
   ShieldCheck,
   Scale,
   CalendarClock,
+  Briefcase,
+  Hash,
 } from "lucide-react";
 
 /**
@@ -70,10 +72,30 @@ type Values = {
   insurance_coverage: string;
   mediator_name: string;
   mediator_website: string;
+  // Activité & URSSAF (étape 4 onboarding, modifiables ici sauf cas
+  // particulier : la fréquence URSSAF n'est officiellement modifiable
+  // qu'une fois par an avant le 31 octobre — on ne durcit pas l'UI mais
+  // on prévient l'user).
+  activity_kind: "vente" | "service_bic" | "liberal_bnc" | "mixte" | "";
+  urssaf_frequency: "monthly" | "quarterly";
   urssaf_declaration_day: number;
+  // Format facture : modifiable UNIQUEMENT tant qu'aucune facture n'a
+  // été émise. Sinon ça crée des incohérences dans la séquence légale.
+  // Le composant gère ce verrou via la prop `invoicesAlreadyEmitted`.
+  invoice_number_format: string;
+  quote_number_format: string;
 };
 
-export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
+export function SettingsForm({
+  defaultValues,
+  invoicesAlreadyEmitted,
+}: {
+  defaultValues: Values;
+  /** Vrai si au moins une facture a été émise depuis ce profil. Verrouille
+   *  le format de numéro de facture (contrainte légale : on ne peut pas
+   *  changer le format au milieu de la séquence sans casser la continuité). */
+  invoicesAlreadyEmitted: boolean;
+}) {
   const router = useRouter();
   const [v, setV] = useState<Values>(defaultValues);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -363,24 +385,99 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
 
       <Card className="space-y-5">
         <SectionHeader
-          icon={<CalendarClock size={18} />}
-          title="URSSAF"
-          description="Chaque mois, l'app déclare automatiquement ton CA encaissé du mois précédent."
+          icon={<Briefcase size={18} />}
+          title="Activité & URSSAF"
+          description="Choix qui pilotent le calcul de tes cotisations et la cadence des déclarations."
         />
         <div>
-          <Label htmlFor="urssaf_declaration_day" hint="entre 1 et 28">Jour de la déclaration URSSAF</Label>
+          <Label htmlFor="activity_kind">Catégorie d&apos;activité</Label>
           <select
-            id="urssaf_declaration_day"
-            value={v.urssaf_declaration_day}
-            onChange={(e) => setV({ ...v, urssaf_declaration_day: Number(e.target.value) })}
+            id="activity_kind"
+            value={v.activity_kind}
+            onChange={(e) => setV({ ...v, activity_kind: e.target.value as Values["activity_kind"] })}
             className="h-12 w-full rounded-xl bg-surface px-4 text-body text-ink-900 shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
           >
-            {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-              <option key={d} value={d}>
-                Le {d} du mois
-              </option>
-            ))}
+            <option value="">— Choisir —</option>
+            <option value="vente">Vente de marchandises (BIC) — seuil 188 700 €</option>
+            <option value="service_bic">Prestations de services BIC — seuil 77 700 €</option>
+            <option value="liberal_bnc">Profession libérale BNC — seuil 77 700 €</option>
+            <option value="mixte">Activité mixte (vente + service)</option>
           </select>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="urssaf_frequency">Fréquence de déclaration</Label>
+            <select
+              id="urssaf_frequency"
+              value={v.urssaf_frequency}
+              onChange={(e) => setV({ ...v, urssaf_frequency: e.target.value as Values["urssaf_frequency"] })}
+              className="h-12 w-full rounded-xl bg-surface px-4 text-body text-ink-900 shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
+            >
+              <option value="monthly">Mensuelle</option>
+              <option value="quarterly">Trimestrielle</option>
+            </select>
+            <p className="mt-1.5 text-xs text-ink-500">
+              Modifiable une fois par an avant le 31 octobre côté URSSAF.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="urssaf_declaration_day" hint="entre 1 et 28">Jour de la déclaration</Label>
+            <select
+              id="urssaf_declaration_day"
+              value={v.urssaf_declaration_day}
+              onChange={(e) => setV({ ...v, urssaf_declaration_day: Number(e.target.value) })}
+              className="h-12 w-full rounded-xl bg-surface px-4 text-body text-ink-900 shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
+            >
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>
+                  Le {d} du mois
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="space-y-5">
+        <SectionHeader
+          icon={<Hash size={18} />}
+          title="Numérotation"
+          description={
+            invoicesAlreadyEmitted
+              ? "Format figé une fois la première facture émise (contrainte légale : la séquence doit rester continue et sans trou)."
+              : "Tu peux encore changer ce format tant qu'aucune facture n'a été émise. Ensuite il sera verrouillé."
+          }
+        />
+        <div>
+          <Label htmlFor="invoice_number_format" hint="tokens : {year}, {seq:N}">
+            Format des numéros de facture
+          </Label>
+          <Input
+            id="invoice_number_format"
+            value={v.invoice_number_format}
+            onChange={(e) => setV({ ...v, invoice_number_format: e.target.value })}
+            // disabled bloque l'écriture côté UI ; on revérifie côté DB via
+            // un trigger éventuel ou par défaut on fait confiance car le
+            // verrou métier est ici.
+            disabled={invoicesAlreadyEmitted}
+            placeholder="F-{year}-{seq:4}"
+            aria-describedby="invoice_number_format_hint"
+          />
+        </div>
+        <div>
+          <Label htmlFor="quote_number_format" hint="tokens : {year}, {seq:N}">
+            Format des numéros de devis
+          </Label>
+          <Input
+            id="quote_number_format"
+            value={v.quote_number_format}
+            onChange={(e) => setV({ ...v, quote_number_format: e.target.value })}
+            placeholder="D-{year}-{seq:4}"
+          />
+          <p className="mt-1.5 text-xs text-ink-500">
+            Les devis ne sont pas soumis à la même contrainte légale que les factures —
+            tu peux changer leur format quand tu veux.
+          </p>
         </div>
       </Card>
     </div>

@@ -80,6 +80,13 @@ export default async function OnboardingPage() {
             address_line2: profile?.address_line2 ?? "",
             postal_code: profile?.postal_code ?? "",
             city: profile?.city ?? "",
+            // Étape 4 — Activité & URSSAF (defaults safe pour démarrer)
+            activity_kind: (profile?.activity_kind as "vente" | "service_bic" | "liberal_bnc" | "mixte" | undefined) ?? "",
+            urssaf_frequency: (profile?.urssaf_frequency as "monthly" | "quarterly" | undefined) ?? "monthly",
+            urssaf_declaration_day: profile?.urssaf_declaration_day ?? 3,
+            invoice_number_format: profile?.invoice_number_format ?? "F-{year}-{seq:4}",
+            had_prior_activity: Boolean(profile?.had_prior_activity),
+            // Étape 5 — Bancaire
             iban: profile?.iban ?? "",
             bic: profile?.bic ?? "",
             // Confirmation explicite du régime micro. Pré-cochée si l'user
