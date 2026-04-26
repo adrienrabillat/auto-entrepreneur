@@ -5,7 +5,13 @@
  * - Gratuite, sans authentification, pas de rate-limit bloquant pour notre usage.
  * - Retourne les mêmes données que le Répertoire Sirene de l'INSEE.
  * - Appelée directement depuis le navigateur (CORS autorisé par l'API).
+ *
+ * À noter : l'API renvoie les CODES (nature_juridique, activite_principale)
+ * mais PAS les libellés. On les résout localement via les référentiels INSEE
+ * embarqués dans lib/insee/.
  */
+import { legalFormLabel, normalizeLegalForm } from "@/lib/insee/legal-forms";
+import { nafLabel } from "@/lib/insee/naf";
 
 export type SireneCompany = {
   siren: string;
@@ -21,29 +27,8 @@ export type SireneCompany = {
   legalFormNormalized: "EI" | "EURL" | "SASU" | "Autre";
 };
 
-/**
- * Mappe le libellé/code de nature juridique INSEE vers notre enum
- * applicatif. Couvre les cas usuels — tout ce qui n'est pas reconnu
- * tombe sur "Autre".
- *
- * Codes INSEE de référence :
- *  - 1000      Entrepreneur individuel
- *  - 5485      SARL unipersonnelle (= EURL)
- *  - 5499      SARL autre
- *  - 5710      SAS (associé unique = SASU)
- *  - 5720      SASU
- */
-function mapLegalForm(
-  code: string | null | undefined,
-  libelle: string | null | undefined
-): "EI" | "EURL" | "SASU" | "Autre" {
-  const c = (code ?? "").trim();
-  const l = (libelle ?? "").toLowerCase();
-  if (c === "1000" || l.includes("entrepreneur individuel") || l === "ei") return "EI";
-  if (c === "5485" || l.includes("eurl") || l.includes("unipersonnelle à responsabilité")) return "EURL";
-  if (c === "5720" || c === "5710" || l.includes("sasu") || l.includes("simplifiée unipersonnelle")) return "SASU";
-  return "Autre";
-}
+// La normalisation de la forme juridique et la résolution des libellés
+// sont déléguées aux dictionnaires INSEE locaux (lib/insee/).
 
 type RawApiResult = {
   results?: Array<{
@@ -115,16 +100,25 @@ export async function lookupSiren(siren: string, signal?: AbortSignal): Promise<
     const hit = data.results?.[0];
     if (!hit || !hit.siren) return null;
 
+    const apeCode = hit.siege?.activite_principale ?? hit.activite_principale ?? null;
+    const naturejCode = hit.nature_juridique ?? null;
+
     return {
       siren: hit.siren,
       name: hit.nom_raison_sociale || hit.nom_complet || "",
       addressLine1: composeStreet(hit.siege),
       postalCode: hit.siege?.code_postal ?? null,
       city: hit.siege?.libelle_commune ?? null,
-      apeNaf: hit.siege?.activite_principale ?? hit.activite_principale ?? null,
-      activityLabel: hit.siege?.libelle_activite_principale ?? null,
-      legalForm: hit.libelle_nature_juridique ?? hit.nature_juridique ?? null,
-      legalFormNormalized: mapLegalForm(hit.nature_juridique, hit.libelle_nature_juridique),
+      apeNaf: apeCode,
+      // Libellé activité : on prend ce que renvoie l'API si présent, sinon
+      // on résout via le dictionnaire NAF local (qui est le cas habituel
+      // car l'API ne renvoie quasiment jamais le libellé).
+      activityLabel:
+        hit.siege?.libelle_activite_principale ?? (apeCode ? nafLabel(apeCode) : null),
+      // Idem pour le libellé de la forme juridique.
+      legalForm:
+        hit.libelle_nature_juridique ?? (naturejCode ? legalFormLabel(naturejCode) : null),
+      legalFormNormalized: normalizeLegalForm(naturejCode),
     };
   } catch {
     // AbortError ou réseau KO → on laisse passer, saisie manuelle disponible.
