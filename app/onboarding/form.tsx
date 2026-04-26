@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
+import { Loader2, Check, AlertCircle } from "lucide-react";
+import { lookupSiren } from "@/lib/sirene";
 import { createClient } from "@/lib/supabase/browser";
 
 type Values = {
@@ -30,6 +32,53 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // SIRET / SIREN auto-fill : interroge l'API Recherche d'entreprises dès
+  // qu'on a un SIREN à 9 chiffres et pré-remplit nom commercial, activité,
+  // code APE et adresse. On track le dernier SIREN résolu pour ne pas
+  // ré-écraser les éditions manuelles ensuite.
+  const [sirenStatus, setSirenStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
+  const lastResolvedSirenRef = useRef<string>(defaultValues.siren?.replace(/\D/g, "") ?? "");
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const clean = v.siren.replace(/\D/g, "");
+    if (clean.length !== 9) {
+      if (sirenStatus !== "idle") setSirenStatus("idle");
+      return;
+    }
+    if (clean === lastResolvedSirenRef.current) return;
+
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    setSirenStatus("loading");
+    lookupSiren(clean, ctrl.signal).then((company) => {
+      if (ctrl.signal.aborted) return;
+      if (!company) {
+        setSirenStatus("not_found");
+        return;
+      }
+      // Écrase les champs entreprise depuis la base officielle. Le user
+      // peut éditer ensuite — on ne re-fetch plus tant qu'il ne change
+      // pas le SIREN.
+      setV((prev) => ({
+        ...prev,
+        // Pour un EI le "nom complet" est souvent "PRENOM NOM", on le laisse
+        // si le user a déjà saisi son nom. Idem business_name.
+        business_name: prev.business_name || (company.name && company.name !== prev.display_name ? company.name : ""),
+        metier: prev.metier || company.activityLabel || "",
+        ape_naf: prev.ape_naf || company.apeNaf || "",
+        address_line1: prev.address_line1 || company.addressLine1 || "",
+        postal_code: prev.postal_code || company.postalCode || "",
+        city: prev.city || company.city || "",
+      }));
+      lastResolvedSirenRef.current = clean;
+      setSirenStatus("found");
+    });
+    return () => ctrl.abort();
+  }, [v.siren, sirenStatus]);
+
   function onSiretChange(raw: string) {
     const digits = raw.replace(/\D/g, "").slice(0, 14);
     const auto = digits.length >= 9 ? digits.slice(0, 9) : v.siren;
@@ -43,16 +92,28 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
 
     const cleanSiren = v.siren.replace(/\s/g, "");
     const cleanSiret = v.siret.replace(/\s/g, "");
+    const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
+    const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
     if (!/^\d{9}$/.test(cleanSiren)) return fail("SIREN : 9 chiffres attendus.");
     if (!/^\d{14}$/.test(cleanSiret)) return fail("SIRET : 14 chiffres attendus.");
     if (!cleanSiret.startsWith(cleanSiren)) return fail("Le SIRET doit commencer par le SIREN.");
+    if (!v.ape_naf.trim()) return fail("Code APE / NAF requis.");
+    if (cleanIban.length < 15) return fail("IBAN requis (15 caractères minimum).");
+    if (cleanBic.length < 8) return fail("BIC requis (8 caractères minimum).");
 
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return fail("Session expirée");
     const { error } = await supabase
       .from("profiles")
-      .update({ ...v, siren: cleanSiren, siret: cleanSiret, onboarded: true })
+      .update({
+        ...v,
+        siren: cleanSiren,
+        siret: cleanSiret,
+        iban: cleanIban,
+        bic: cleanBic,
+        onboarded: true,
+      })
       .eq("id", user.id);
     if (error) return fail(error.message);
     router.replace("/dashboard");
@@ -82,7 +143,7 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
               id="legal_form"
               value={v.legal_form}
               onChange={(e) => setV({ ...v, legal_form: e.target.value as Values["legal_form"] })}
-              className="h-10 w-full rounded-md bg-white px-3 text-body shadow-hair focus:outline-none focus:ring-2 focus:ring-ink-400/70"
+              className="h-10 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
             >
               <option value="EI">EI (Entrepreneur Individuel)</option>
               <option value="EURL">EURL</option>
@@ -101,26 +162,31 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
           />
         </div>
 
-        <div>
-          <Label htmlFor="metier">Activité</Label>
-          <Input
-            id="metier"
-            required
-            value={v.metier}
-            onChange={(e) => setV({ ...v, metier: e.target.value })}
-          />
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="siret" hint="14 chiffres">SIRET</Label>
-            <Input
-              id="siret"
-              required
-              inputMode="numeric"
-              value={v.siret}
-              onChange={(e) => onSiretChange(e.target.value)}
-            />
+            <Label htmlFor="siret" hint="14 chiffres — on remplit le reste automatiquement">SIRET</Label>
+            <div className="relative">
+              <Input
+                id="siret"
+                required
+                inputMode="numeric"
+                value={v.siret}
+                onChange={(e) => onSiretChange(e.target.value)}
+                className="pr-10"
+              />
+              {sirenStatus === "loading" ? (
+                <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 animate-spin" />
+              ) : sirenStatus === "found" ? (
+                <Check size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-success-600" />
+              ) : sirenStatus === "not_found" ? (
+                <AlertCircle size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-warn-600" />
+              ) : null}
+            </div>
+            {sirenStatus === "found" ? (
+              <p className="mt-1.5 text-xs text-success-600">Entreprise trouvée, infos remplies automatiquement.</p>
+            ) : sirenStatus === "not_found" ? (
+              <p className="mt-1.5 text-xs text-warn-600">SIREN introuvable — saisis tes infos à la main ci-dessous.</p>
+            ) : null}
           </div>
           <div>
             <Label htmlFor="siren" hint="9 premiers chiffres du SIRET">SIREN</Label>
@@ -135,9 +201,20 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
         </div>
 
         <div>
-          <Label htmlFor="ape_naf" hint="optionnel">Code APE / NAF</Label>
+          <Label htmlFor="metier">Activité</Label>
+          <Input
+            id="metier"
+            required
+            value={v.metier}
+            onChange={(e) => setV({ ...v, metier: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="ape_naf" hint="ex: 6201Z">Code APE / NAF</Label>
           <Input
             id="ape_naf"
+            required
             value={v.ape_naf}
             onChange={(e) => setV({ ...v, ape_naf: e.target.value })}
           />
@@ -184,17 +261,19 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="iban" hint="optionnel">IBAN</Label>
+            <Label htmlFor="iban">IBAN</Label>
             <Input
               id="iban"
+              required
               value={v.iban}
               onChange={(e) => setV({ ...v, iban: e.target.value })}
             />
           </div>
           <div>
-            <Label htmlFor="bic" hint="optionnel">BIC</Label>
+            <Label htmlFor="bic">BIC</Label>
             <Input
               id="bic"
+              required
               value={v.bic}
               onChange={(e) => setV({ ...v, bic: e.target.value })}
             />
