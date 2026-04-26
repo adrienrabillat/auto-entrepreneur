@@ -241,7 +241,7 @@ const SUBCLASSES: Record<string, string> = {
   "9602B": "Soins de beauté",
   "9603Z": "Services funéraires",
   "9604Z": "Entretien corporel",
-  "9609Z": "Autres services personnels n.c.a. (sophrologie, coaching…)",
+  "9609Z": "Autres services personnels n.c.a.",
 
   // Arts (90.xx)
   "9001Z": "Arts du spectacle vivant",
