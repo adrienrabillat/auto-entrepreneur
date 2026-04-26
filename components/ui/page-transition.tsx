@@ -21,8 +21,14 @@ import { usePathname } from "next/navigation";
  */
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // animate-page-in : keyframe défini dans tailwind.config.ts. Slide
+  // horizontal de 16px depuis la droite + fade, 240ms ease-out-expo.
+  // Plus "Revolut-like" que le fade-in-up (qui était un simple
+  // translate-Y discret). Volontairement court : au-delà de 300ms
+  // l'app donne une impression de lenteur, surtout sur navigation
+  // rapide entre modules.
   return (
-    <div key={pathname} className="animate-fade-in-up">
+    <div key={pathname} className="animate-page-in">
       {children}
     </div>
   );

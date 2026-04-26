@@ -149,6 +149,13 @@ const config: Config = {
           "70%": { opacity: "1", transform: "scale(1.05)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        // Transition de page style Revolut : la nouvelle vue arrive
+        // depuis la droite (16px → 0) en s'estompant. Court et discret,
+        // pas de "whoosh" exagéré.
+        "page-in": {
+          "0%":   { opacity: "0", transform: "translateX(16px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
         "pulse-dot": {
           "0%":   { boxShadow: "0 0 0 0 rgb(var(--c-green) / 0.5)" },
           "70%":  { boxShadow: "0 0 0 10px rgb(var(--c-green) / 0)" },
@@ -159,6 +166,12 @@ const config: Config = {
         "fade-in-up": "fade-in-up 280ms ease-out both",
         "fade-in":    "fade-in 200ms ease-out both",
         "pop-in":     "pop-in 420ms cubic-bezier(.34,1.56,.64,1) both",
+        // Page transition entre modules : 240ms ease-out cubic-bezier
+        // "ease-out-expo" pour démarrer vif puis ralentir doucement.
+        // Slide horizontal + fade. Volontairement court (240ms) pour
+        // que la navigation reste réactive — au-delà de 350ms l'app
+        // commence à donner l'impression de ramer.
+        "page-in":    "page-in 240ms cubic-bezier(.16,1,.3,1) both",
         // Laisse Tailwind garder son `animate-pulse` par défaut (opacity 0.5 → 1)
         // pour les skeletons. Notre onde verte est désormais exposée comme
         // `animate-pulse-dot` et n'est utilisée QUE sur le dot "Encaissé ce mois".

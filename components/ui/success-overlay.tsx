@@ -57,7 +57,11 @@ export function SuccessOverlay({
       role="dialog"
       aria-modal="true"
       aria-labelledby="success-title"
-      className="fixed inset-0 z-50 grid place-items-center bg-ink-900/50 backdrop-blur-sm p-4 animate-fade-in"
+      // Fond clair (couleur de la page) au lieu du backdrop sombre.
+      // L'effet "modal flottant sur fond white" est volontaire : ça donne
+      // une sensation de douceur et de finalité (vs un overlay sombre qui
+      // suggère du transitoire/bloquant).
+      className="fixed inset-0 z-50 grid place-items-center bg-page p-4 animate-fade-in"
     >
       <div className="w-full max-w-md surface p-6 md:p-8 text-center">
         <div
