@@ -13,7 +13,15 @@
  *    (EI / EURL / SASU / Autre)
  */
 
-export type NormalizedLegalForm = "EI" | "EURL" | "SASU" | "Autre";
+export type NormalizedLegalForm =
+  | "EI"     // Entrepreneur individuel (incl. micro-entrepreneur)
+  | "EURL"   // SARL à associé unique
+  | "SARL"   // SARL classique (multi-associés)
+  | "SAS"    // Société par actions simplifiée
+  | "SASU"   // SAS à associé unique
+  | "SA"     // Société anonyme
+  | "SCI"    // Société civile immobilière
+  | "Autre";
 
 type LegalFormEntry = {
   label: string;
@@ -25,62 +33,62 @@ const LEGAL_FORMS: Record<string, LegalFormEntry> = {
   "1000": { label: "Entrepreneur individuel", normalized: "EI" },
 
   // ─── SARL et apparentés ───────────────────────────────────────────
-  "5410": { label: "SARL nationale", normalized: "Autre" },
-  "5415": { label: "SARL d'économie mixte", normalized: "Autre" },
-  "5422": { label: "SARL immobilière de gestion", normalized: "Autre" },
-  "5426": { label: "SARL immobilière de construction", normalized: "Autre" },
-  "5430": { label: "SARL d'économie sociale", normalized: "Autre" },
-  "5431": { label: "SARL de presse", normalized: "Autre" },
-  "5432": { label: "SARL d'aménagement foncier", normalized: "Autre" },
-  "5442": { label: "SARL d'attribution", normalized: "Autre" },
-  "5443": { label: "SARL coopérative ouvrière (SCOP)", normalized: "Autre" },
-  "5451": { label: "SARL coopérative de consommation", normalized: "Autre" },
-  "5453": { label: "SARL coopérative artisanale", normalized: "Autre" },
-  "5454": { label: "SARL coopérative d'intérêt maritime", normalized: "Autre" },
-  "5455": { label: "SARL coopérative de transport", normalized: "Autre" },
-  "5458": { label: "SARL coopérative ouvrière de production (SCOP)", normalized: "Autre" },
-  "5459": { label: "SARL union de sociétés coopératives", normalized: "Autre" },
-  "5460": { label: "Autre SARL coopérative", normalized: "Autre" },
-  "5470": { label: "SARL de presse", normalized: "Autre" },
+  "5410": { label: "SARL nationale", normalized: "SARL" },
+  "5415": { label: "SARL d'économie mixte", normalized: "SARL" },
+  "5422": { label: "SARL immobilière de gestion", normalized: "SARL" },
+  "5426": { label: "SARL immobilière de construction", normalized: "SARL" },
+  "5430": { label: "SARL d'économie sociale", normalized: "SARL" },
+  "5431": { label: "SARL de presse", normalized: "SARL" },
+  "5432": { label: "SARL d'aménagement foncier", normalized: "SARL" },
+  "5442": { label: "SARL d'attribution", normalized: "SARL" },
+  "5443": { label: "SARL coopérative ouvrière (SCOP)", normalized: "SARL" },
+  "5451": { label: "SARL coopérative de consommation", normalized: "SARL" },
+  "5453": { label: "SARL coopérative artisanale", normalized: "SARL" },
+  "5454": { label: "SARL coopérative d'intérêt maritime", normalized: "SARL" },
+  "5455": { label: "SARL coopérative de transport", normalized: "SARL" },
+  "5458": { label: "SARL coopérative ouvrière de production (SCOP)", normalized: "SARL" },
+  "5459": { label: "SARL union de sociétés coopératives", normalized: "SARL" },
+  "5460": { label: "Autre SARL coopérative", normalized: "SARL" },
+  "5470": { label: "SARL de presse", normalized: "SARL" },
   "5485": { label: "EURL — SARL unipersonnelle", normalized: "EURL" },
   "5498": { label: "SARL unipersonnelle", normalized: "EURL" },
-  "5499": { label: "SARL", normalized: "Autre" },
+  "5499": { label: "SARL", normalized: "SARL" },
 
   // ─── SA à conseil d'administration ────────────────────────────────
-  "5505": { label: "SA à participation ouvrière", normalized: "Autre" },
-  "5510": { label: "SA nationale à conseil d'administration", normalized: "Autre" },
-  "5515": { label: "SA d'économie mixte à conseil d'administration", normalized: "Autre" },
-  "5522": { label: "SA immobilière de gestion à conseil d'administration", normalized: "Autre" },
-  "5532": { label: "SA d'attribution à conseil d'administration", normalized: "Autre" },
-  "5542": { label: "SA d'attribution à conseil d'administration", normalized: "Autre" },
-  "5543": { label: "SA coopérative ouvrière (SCOP) à CA", normalized: "Autre" },
-  "5547": { label: "SA coopérative HLM à conseil d'administration", normalized: "Autre" },
-  "5548": { label: "SA de crédit immobilier à conseil d'administration", normalized: "Autre" },
-  "5551": { label: "SA coopérative de consommation à CA", normalized: "Autre" },
-  "5552": { label: "SA coopérative artisanale à CA", normalized: "Autre" },
-  "5553": { label: "SA coopérative ouvrière de production à CA (SCOP)", normalized: "Autre" },
-  "5554": { label: "SA coopérative agricole à CA", normalized: "Autre" },
-  "5555": { label: "SA coopérative d'intérêt collectif (SCIC) à CA", normalized: "Autre" },
-  "5558": { label: "SA coopérative à CA", normalized: "Autre" },
-  "5559": { label: "SA union de coopératives à CA", normalized: "Autre" },
-  "5560": { label: "Autre SA coopérative à CA", normalized: "Autre" },
-  "5570": { label: "SA nationalisée à conseil d'administration", normalized: "Autre" },
-  "5585": { label: "SA à conseil d'administration", normalized: "Autre" },
-  "5599": { label: "SA à conseil d'administration", normalized: "Autre" },
+  "5505": { label: "SA à participation ouvrière", normalized: "SA" },
+  "5510": { label: "SA nationale à conseil d'administration", normalized: "SA" },
+  "5515": { label: "SA d'économie mixte à conseil d'administration", normalized: "SA" },
+  "5522": { label: "SA immobilière de gestion à conseil d'administration", normalized: "SA" },
+  "5532": { label: "SA d'attribution à conseil d'administration", normalized: "SA" },
+  "5542": { label: "SA d'attribution à conseil d'administration", normalized: "SA" },
+  "5543": { label: "SA coopérative ouvrière (SCOP) à CA", normalized: "SA" },
+  "5547": { label: "SA coopérative HLM à conseil d'administration", normalized: "SA" },
+  "5548": { label: "SA de crédit immobilier à conseil d'administration", normalized: "SA" },
+  "5551": { label: "SA coopérative de consommation à CA", normalized: "SA" },
+  "5552": { label: "SA coopérative artisanale à CA", normalized: "SA" },
+  "5553": { label: "SA coopérative ouvrière de production à CA (SCOP)", normalized: "SA" },
+  "5554": { label: "SA coopérative agricole à CA", normalized: "SA" },
+  "5555": { label: "SA coopérative d'intérêt collectif (SCIC) à CA", normalized: "SA" },
+  "5558": { label: "SA coopérative à CA", normalized: "SA" },
+  "5559": { label: "SA union de coopératives à CA", normalized: "SA" },
+  "5560": { label: "Autre SA coopérative à CA", normalized: "SA" },
+  "5570": { label: "SA nationalisée à conseil d'administration", normalized: "SA" },
+  "5585": { label: "SA à conseil d'administration", normalized: "SA" },
+  "5599": { label: "SA à conseil d'administration", normalized: "SA" },
 
   // ─── SA à directoire ───────────────────────────────────────────────
-  "5605": { label: "SA à participation ouvrière à directoire", normalized: "Autre" },
-  "5610": { label: "SA nationale à directoire", normalized: "Autre" },
-  "5615": { label: "SA d'économie mixte à directoire", normalized: "Autre" },
-  "5622": { label: "SA immobilière de gestion à directoire", normalized: "Autre" },
-  "5632": { label: "SA d'attribution à directoire", normalized: "Autre" },
-  "5642": { label: "SA d'attribution à directoire", normalized: "Autre" },
-  "5670": { label: "SA nationalisée à directoire", normalized: "Autre" },
-  "5685": { label: "SA à directoire", normalized: "Autre" },
-  "5699": { label: "SA à directoire", normalized: "Autre" },
+  "5605": { label: "SA à participation ouvrière à directoire", normalized: "SA" },
+  "5610": { label: "SA nationale à directoire", normalized: "SA" },
+  "5615": { label: "SA d'économie mixte à directoire", normalized: "SA" },
+  "5622": { label: "SA immobilière de gestion à directoire", normalized: "SA" },
+  "5632": { label: "SA d'attribution à directoire", normalized: "SA" },
+  "5642": { label: "SA d'attribution à directoire", normalized: "SA" },
+  "5670": { label: "SA nationalisée à directoire", normalized: "SA" },
+  "5685": { label: "SA à directoire", normalized: "SA" },
+  "5699": { label: "SA à directoire", normalized: "SA" },
 
   // ─── SAS / SASU ────────────────────────────────────────────────────
-  "5710": { label: "SAS — Société par actions simplifiée", normalized: "Autre" },
+  "5710": { label: "SAS — Société par actions simplifiée", normalized: "SAS" },
   "5720": { label: "SASU — SAS à associé unique", normalized: "SASU" },
 
   // ─── Sociétés européennes ──────────────────────────────────────────
@@ -97,8 +105,8 @@ const LEGAL_FORMS: Record<string, LegalFormEntry> = {
 
   // ─── Sociétés civiles ─────────────────────────────────────────────
   "6411": { label: "Société d'assurance mutuelle", normalized: "Autre" },
-  "6511": { label: "SCPI — Société civile de placement immobilier", normalized: "Autre" },
-  "6521": { label: "SCI — Société civile immobilière", normalized: "Autre" },
+  "6511": { label: "SCPI — Société civile de placement immobilier", normalized: "SCI" },
+  "6521": { label: "SCI — Société civile immobilière", normalized: "SCI" },
   "6532": { label: "SCP — Société civile professionnelle", normalized: "Autre" },
   "6533": { label: "Société civile particulière", normalized: "Autre" },
   "6534": { label: "Société civile foncière", normalized: "Autre" },

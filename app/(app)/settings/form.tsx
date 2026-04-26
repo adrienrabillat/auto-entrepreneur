@@ -47,7 +47,7 @@ function SectionHeader({
 type Values = {
   display_name: string;
   business_name: string;
-  legal_form: "EI" | "EURL" | "SASU" | "Autre";
+  legal_form: "EI" | "EURL" | "SARL" | "SAS" | "SASU" | "SA" | "SCI" | "Autre";
   metier: string;
   siren: string;
   siret: string;
@@ -187,7 +187,11 @@ export function SettingsForm({ defaultValues }: { defaultValues: Values }) {
             >
               <option value="EI">EI (Entrepreneur Individuel)</option>
               <option value="EURL">EURL</option>
+              <option value="SARL">SARL</option>
+              <option value="SAS">SAS</option>
               <option value="SASU">SASU</option>
+              <option value="SA">SA</option>
+              <option value="SCI">SCI</option>
               <option value="Autre">Autre</option>
             </select>
           </div>

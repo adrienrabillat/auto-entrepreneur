@@ -18,7 +18,7 @@ create table if not exists public.profiles (
   email text not null,
   display_name text,
   business_name text,                                -- optional trade name ("nom commercial")
-  legal_form text not null default 'EI' check (legal_form in ('EI','EURL','SASU','Autre')),
+  legal_form text not null default 'EI' check (legal_form in ('EI','EURL','SARL','SAS','SASU','SA','SCI','Autre')),
   metier text,                                       -- "Sophrologue", "Manutention", ...
   siren text,                                        -- 9 digits, printed next to "EI"
   siret text,                                        -- 14 digits = SIREN + 5 (NIC)

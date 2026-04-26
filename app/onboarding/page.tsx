@@ -28,7 +28,7 @@ export default async function OnboardingPage() {
           defaultValues={{
             display_name: profile?.display_name ?? "",
             business_name: profile?.business_name ?? "",
-            legal_form: (profile?.legal_form as "EI" | "EURL" | "SASU" | "Autre") ?? "EI",
+            legal_form: (profile?.legal_form as "EI" | "EURL" | "SARL" | "SAS" | "SASU" | "SA" | "SCI" | "Autre") ?? "EI",
             metier: profile?.metier ?? "",
             siren: profile?.siren ?? "",
             siret: profile?.siret ?? "",

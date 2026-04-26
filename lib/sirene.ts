@@ -10,7 +10,7 @@
  * mais PAS les libellés. On les résout localement via les référentiels INSEE
  * embarqués dans lib/insee/.
  */
-import { legalFormLabel, normalizeLegalForm } from "@/lib/insee/legal-forms";
+import { legalFormLabel, normalizeLegalForm, type NormalizedLegalForm } from "@/lib/insee/legal-forms";
 import { nafLabel } from "@/lib/insee/naf";
 
 export type SireneCompany = {
@@ -22,9 +22,9 @@ export type SireneCompany = {
   apeNaf: string | null;      // code APE, ex "6201Z"
   activityLabel: string | null; // libellé en clair, ex "Programmation informatique"
   legalForm: string | null;   // libellé brut, ex "SARL"
-  /** Forme juridique normalisée pour notre enum applicatif (EI/EURL/SASU/Autre).
-   *  Utile pour pré-remplir un <select> sans deviner depuis le libellé brut. */
-  legalFormNormalized: "EI" | "EURL" | "SASU" | "Autre";
+  /** Forme juridique normalisée pour notre enum applicatif.
+   *  Voir lib/insee/legal-forms.ts pour la liste complète des valeurs. */
+  legalFormNormalized: NormalizedLegalForm;
 };
 
 // La normalisation de la forme juridique et la résolution des libellés

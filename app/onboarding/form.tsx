@@ -10,10 +10,12 @@ import { Loader2, Check, AlertCircle } from "lucide-react";
 import { lookupSiren } from "@/lib/sirene";
 import { createClient } from "@/lib/supabase/browser";
 
+type LegalForm = "EI" | "EURL" | "SARL" | "SAS" | "SASU" | "SA" | "SCI" | "Autre";
+
 type Values = {
   display_name: string;
   business_name: string;
-  legal_form: "EI" | "EURL" | "SASU" | "Autre";
+  legal_form: LegalForm;
   metier: string;
   siren: string;
   siret: string;
@@ -187,7 +189,11 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
             >
               <option value="EI">EI (Entrepreneur Individuel)</option>
               <option value="EURL">EURL</option>
+              <option value="SARL">SARL</option>
+              <option value="SAS">SAS</option>
               <option value="SASU">SASU</option>
+              <option value="SA">SA</option>
+              <option value="SCI">SCI</option>
               <option value="Autre">Autre</option>
             </select>
           </div>
