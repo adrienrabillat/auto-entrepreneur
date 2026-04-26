@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { SuccessOverlay } from "@/components/ui/success-overlay";
+import { formatEUR } from "@/lib/format";
 import { Loader2, Send, Save, AlertCircle } from "lucide-react";
 
 type ClientLite = {
@@ -61,6 +63,17 @@ export function NewQuoteForm({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Modal de confirmation post-création — même look que pour les factures
+  // pour garder l'uniformité entre modules. On stocke ici l'id + le numéro
+  // + le booléen "envoyé" pour adapter le message.
+  const [success, setSuccess] = useState<{
+    id: string;
+    number: string;
+    sent: boolean;
+    clientLabel: string;
+    clientEmail: string;
+    totalCents: number;
+  } | null>(null);
 
   // ─── Derived ─────────────────────────────────────────────────────
   const qty = Number(quantity) || 0;
@@ -124,13 +137,45 @@ export function NewQuoteForm({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur création devis");
-      // Redirection vers la page détail du devis créé.
-      router.push(`/quotes/${data.id}`);
-      router.refresh();
+      // Affiche le modal de confirmation. La navigation vers la page de
+      // détail se fera via le bouton CTA du modal (pas de redirection
+      // automatique — l'user voit ce qu'il vient de créer).
+      setSuccess({
+        id: data.id,
+        number: data.number,
+        sent: send,
+        clientLabel: clientName.trim() || clientEmail.trim(),
+        clientEmail: clientEmail.trim(),
+        totalCents: totalCents,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur inattendue");
       setSubmitting(false);
     }
+  }
+
+  // Si le devis vient d'être créé avec succès, on affiche UNIQUEMENT le
+  // modal de confirmation (le formulaire est masqué pour ne pas que
+  // l'user re-clique par erreur sur "Créer").
+  if (success) {
+    return (
+      <SuccessOverlay
+        title={success.sent ? "Devis envoyé" : "Brouillon enregistré"}
+        subtitle={`N° ${success.number}`}
+        rows={[
+          { label: "Client", value: success.clientLabel, sub: success.clientEmail },
+          { label: "Montant", value: formatEUR(success.totalCents) },
+          { label: "Statut", value: success.sent ? "Envoyé par Gmail" : "Brouillon" },
+        ]}
+        cta={{
+          label: "Voir le devis",
+          onClick: () => {
+            router.push(`/quotes/${success.id}`);
+            router.refresh();
+          },
+        }}
+      />
+    );
   }
 
   return (

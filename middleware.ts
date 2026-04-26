@@ -46,6 +46,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // ─── No-cache sur les pages HTML ────────────────────────────────────
+  // On force "no-store" pour que le navigateur ne ressorte JAMAIS une
+  // version périmée de la page (problème classique en dev : tu push une
+  // modif, l'user voit encore l'ancien code parce que sa session navigateur
+  // garde le HTML en cache).
+  //
+  // ATTENTION : ça ne s'applique QU'aux pages dynamiques (HTML servi par
+  // Next.js). Le matcher ci-dessous exclut déjà /_next/static et les
+  // assets (svg, png, etc.) qui restent cachés normalement — sans ça la
+  // perf s'effondrerait. Donc tu gardes le bénéfice du cache pour les
+  // gros assets, mais le HTML est toujours frais.
+  response.headers.set("Cache-Control", "no-store, must-revalidate");
+  response.headers.set("Pragma", "no-cache");
+  response.headers.set("Expires", "0");
+
   return response;
 }
 

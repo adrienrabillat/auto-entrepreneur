@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { MobileBottomNav, Sidebar } from "@/components/ui/nav";
+import { PageTransition } from "@/components/ui/page-transition";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -26,8 +27,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-dvh flex flex-col md:flex-row">
       <Sidebar displayName={displayName} email={email} />
       <main className="flex-1 min-w-0">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10 animate-fade-in-up">
-          {children}
+        <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
+          {/* PageTransition wrapper avec key={pathname} : déclenche
+              fade-in-up à CHAQUE changement de route, pas seulement au
+              premier mount du layout. Effet subtil pour rendre les
+              transitions entre modules plus fluides visuellement. */}
+          <PageTransition>{children}</PageTransition>
         </div>
       </main>
       <MobileBottomNav />

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { EmailSuggestion } from "@/components/ui/email-suggestion";
+import { SuccessOverlay as SharedSuccessOverlay } from "@/components/ui/success-overlay";
 import {
   ArrowLeft,
   ArrowRight,
@@ -352,8 +353,34 @@ export function NewInvoiceForm({
   }
 
   // ---------- success overlay ----------
+  // Modal partagé via components/ui/success-overlay — même look que pour
+  // les devis et les clients pour garder l'uniformité entre modules.
   if (success) {
-    return <SuccessOverlay s={success} onClose={() => router.push(`/invoices/${success.id}`)} />;
+    const title = success.prepaid
+      ? "Facture acquittée émise"
+      : success.sent
+        ? "Facture envoyée"
+        : "Brouillon enregistré";
+    const statusLabel = success.prepaid
+      ? "Acquittée · paiement reçu"
+      : success.sent
+        ? "Envoyée par Gmail"
+        : "Brouillon";
+    return (
+      <SharedSuccessOverlay
+        title={title}
+        subtitle={`N° ${success.number}`}
+        rows={[
+          { label: "Client", value: success.clientLabel, sub: success.clientEmail },
+          { label: "Montant", value: formatEUR(success.totalCents) },
+          { label: "Statut", value: statusLabel },
+        ]}
+        cta={{
+          label: "Voir la facture",
+          onClick: () => router.push(`/invoices/${success.id}`),
+        }}
+      />
+    );
   }
 
   const recapEmail = effectiveClient?.email || clientEmail;
@@ -921,76 +948,5 @@ function RecapRow({
   );
 }
 
-// ============================== Success overlay ==============================
-
-function SuccessOverlay({
-  s,
-  onClose,
-}: {
-  s: {
-    id: string;
-    number: string;
-    sent: boolean;
-    prepaid: boolean;
-    clientLabel: string;
-    clientEmail: string;
-    totalCents: number;
-  };
-  onClose: () => void;
-}) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 30);
-    return () => clearTimeout(t);
-  }, []);
-
-  const title = s.prepaid
-    ? "Facture acquittée émise"
-    : s.sent
-      ? "Facture envoyée"
-      : "Brouillon enregistré";
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink-900/50 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="w-full max-w-md surface p-6 md:p-8 text-center">
-        <div
-          className={`mx-auto grid h-20 w-20 md:h-24 md:w-24 place-items-center rounded-full bg-brand-500 text-white shadow-pop transition-transform duration-500 ${
-            mounted ? "scale-100" : "scale-0"
-          }`}
-          style={{ transitionTimingFunction: "cubic-bezier(.34,1.56,.64,1)" }}
-        >
-          <Check size={48} strokeWidth={3} />
-        </div>
-        <h2 className="mt-5 text-h2 text-ink-900">{title}</h2>
-        <p className="mt-1 text-small text-ink-500">N° {s.number}</p>
-
-        <div className="mt-6 text-left rounded-2xl bg-surface-2 p-4 divide-y divide-divider">
-          <MiniRow label="Client" value={s.clientLabel} sub={s.clientEmail} />
-          <MiniRow label="Montant" value={formatEUR(s.totalCents)} />
-          <MiniRow
-            label="Statut"
-            value={s.prepaid ? "Acquittée · paiement reçu" : s.sent ? "Envoyée par Gmail" : "Brouillon"}
-          />
-        </div>
-
-        <div className="mt-6 flex flex-col gap-2">
-          <Button onClick={onClose}>
-            Voir la facture <ArrowRight size={14} />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MiniRow({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="flex items-start justify-between gap-3 text-small py-2 first:pt-0 last:pb-0">
-      <span className="text-ink-500">{label}</span>
-      <span className="text-right text-ink-900 font-medium min-w-0 flex-1 break-words">
-        {value}
-        {sub ? <span className="block text-xs text-ink-500 font-normal break-all">{sub}</span> : null}
-      </span>
-    </div>
-  );
-}
+// SuccessOverlay extrait dans components/ui/success-overlay.tsx pour
+// pouvoir être réutilisé identique par les formulaires devis et clients.

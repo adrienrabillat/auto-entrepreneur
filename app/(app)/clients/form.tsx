@@ -7,6 +7,7 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { EmailSuggestion } from "@/components/ui/email-suggestion";
+import { SuccessOverlay } from "@/components/ui/success-overlay";
 import { Loader2, Check, AlertCircle } from "lucide-react";
 import { lookupSiren } from "@/lib/sirene";
 
@@ -55,6 +56,11 @@ export function ClientForm({
   const [v, setV] = useState<Values>(defaultValues ?? EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Modal de confirmation post-création (mêmes patterns que pour les
+  // factures et devis pour l'uniformité visuelle entre modules). On ne
+  // l'affiche qu'en mode 'create' — en mode 'edit' on retourne directement
+  // à la liste sans modal.
+  const [success, setSuccess] = useState<{ id: string; label: string } | null>(null);
 
   // SIREN auto-fill : écrase les champs entreprise à chaque nouveau SIREN
   // valide. On mémorise le dernier SIREN résolu pour ne pas re-fetcher
@@ -125,12 +131,52 @@ export function ClientForm({
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || `Erreur ${res.status}`);
-      router.push("/clients");
-      router.refresh();
+      // En création : on affiche le modal de confirmation et l'user
+      // décide de la suite (voir le client ou retour à la liste). En
+      // édition : redirect direct vers la liste, pas de modal (l'user
+      // sait déjà ce qu'il a modifié).
+      if (mode === "create") {
+        const label = v.is_pro
+          ? (v.company_name.trim() || `${v.first_name} ${v.last_name}`.trim() || v.email.trim())
+          : (`${v.first_name} ${v.last_name}`.trim() || v.email.trim());
+        setSuccess({ id: payload.id, label });
+      } else {
+        router.push("/clients");
+        router.refresh();
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erreur inattendue");
       setBusy(false);
     }
+  }
+
+  // Modal de confirmation : remplace tout le formulaire une fois le client
+  // créé avec succès. L'user peut soit retourner à la liste, soit aller
+  // directement voir la fiche du client qu'il vient de créer.
+  if (success) {
+    return (
+      <SuccessOverlay
+        title="Client ajouté"
+        subtitle={success.label}
+        rows={[
+          { label: "Email", value: v.email.trim() },
+          {
+            label: "Type",
+            value: v.is_pro ? "Professionnel" : "Particulier",
+          },
+          ...(v.city.trim()
+            ? [{ label: "Ville", value: v.city.trim() }]
+            : []),
+        ]}
+        cta={{
+          label: "Voir la fiche client",
+          onClick: () => {
+            router.push(`/clients/${success.id}`);
+            router.refresh();
+          },
+        }}
+      />
+    );
   }
 
   return (
