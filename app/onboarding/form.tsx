@@ -17,6 +17,59 @@ import { createClient } from "@/lib/supabase/browser";
 // les comptes qui ne correspondent pas (SARL, SAS, EURL…).
 const SUPPORTED_LEGAL_FORM = "EI" as const;
 
+/**
+ * Construit le payload à envoyer à Supabase à partir du state v du form.
+ *
+ * Logique critique : certaines colonnes ont une CHECK constraint qui
+ * REJETTE la chaîne vide (notamment `activity_kind` qui n'accepte que
+ * 'vente', 'service_bic', 'liberal_bnc', 'mixte'). Or à l'init du form
+ * on commence avec activity_kind = "" tant que l'user n'a pas choisi.
+ *
+ * Si on envoie ce "" tel quel, Postgres rejette tout l'UPDATE — rien
+ * n'est sauvé, l'auto-save catch silencieusement, et le user croit que
+ * tout va bien jusqu'à ce qu'il clique Terminer et voie une erreur
+ * incompréhensible (ou pire : qu'il soit bloqué dans une boucle
+ * d'onboarding sans comprendre pourquoi).
+ *
+ * Solution : on filtre les chaînes vides AVANT l'envoi. Une colonne
+ * non envoyée garde sa valeur précédente en BDD (ou son default, ou
+ * NULL).
+ */
+function buildPersistablePayload(v: Values, opts: { onboarded: boolean }) {
+  // Champs purement UI qui n'existent pas en BDD.
+  const { is_micro: _ignored, ...rest } = v;
+
+  // Nettoyage : trim sur les strings, normalisation IBAN/BIC.
+  const cleanSiren = rest.siren.replace(/\s/g, "");
+  const cleanSiret = rest.siret.replace(/\s/g, "");
+  const cleanIban = rest.iban.replace(/\s/g, "").toUpperCase();
+  const cleanBic = rest.bic.replace(/\s/g, "").toUpperCase();
+
+  // On part d'un objet plat avec toutes les colonnes potentielles.
+  const payload: Record<string, unknown> = {
+    ...rest,
+    legal_form: SUPPORTED_LEGAL_FORM,
+    siren: cleanSiren,
+    siret: cleanSiret,
+    iban: cleanIban,
+    bic: cleanBic,
+    onboarded: opts.onboarded,
+  };
+
+  // Filtre : tout champ texte vide est RETIRÉ du payload (= laisse la
+  // valeur en BDD intacte, ou NULL si la colonne le permet). Critique pour
+  // activity_kind dont le CHECK rejette "".
+  // On exclut les booléens/nombres/false/0 du filtre — seules les "" sont
+  // problématiques.
+  for (const [k, val] of Object.entries(payload)) {
+    if (typeof val === "string" && val.trim() === "") {
+      delete payload[k];
+    }
+  }
+
+  return payload;
+}
+
 type ActivityKind = "vente" | "service_bic" | "liberal_bnc" | "mixte";
 type UrssafFrequency = "monthly" | "quarterly";
 
@@ -172,41 +225,38 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
           const supabase = createClient();
           const { data: { user } } = await supabase.auth.getUser();
           if (!user || ctrl.signal.aborted || finishingRef.current) return;
-          const cleanSiren = v.siren.replace(/\s/g, "");
-          const cleanSiret = v.siret.replace(/\s/g, "");
-          const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
-          const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
-          // is_micro est purement UI — Supabase n'a pas cette colonne, on la
-          // retire avant l'UPDATE pour éviter un PGRST204 ("column not found").
-          // tax_regime est figé à 'micro' côté Postgres (CHECK + default), on
-          // ne l'envoie donc jamais depuis le client.
-          const { is_micro: _ignored, ...persistable } = v;
+          // Construction du payload avec strip des chaînes vides — voir
+          // doc de buildPersistablePayload pour le pourquoi (CHECK Postgres).
+          const payload = buildPersistablePayload(v, { onboarded: false });
           // Dernière barrière avant l'écriture : si finish() a été déclenché
           // pendant le getUser() ci-dessus, on n'écrit pas. Cette vérif
           // évite le scénario "auto-save écrase onboarded=true" même si
           // l'abort signal est ignoré par supabase-js.
           if (finishingRef.current) return;
-          await supabase
+          const { error } = await supabase
             .from("profiles")
-            .update({
-              ...persistable,
-              legal_form: SUPPORTED_LEGAL_FORM,
-              siren: cleanSiren,
-              siret: cleanSiret,
-              iban: cleanIban,
-              bic: cleanBic,
-              onboarded: false,
-            })
+            .update(payload)
             .eq("id", user.id);
           if (ctrl.signal.aborted) return;
+          if (error) {
+            // Auto-save : on ne bloque pas l'user, mais on AFFICHE le souci
+            // au lieu de le cacher. Avant on catch'ait silencieusement, et
+            // le user pouvait avancer avec "Brouillon enregistré" alors
+            // que rien n'était sauvé en BDD (cas typique : CHECK constraint
+            // sur une colonne).
+            console.error("[onboarding autosave]", error);
+            setError(`Brouillon non sauvé : ${error.message}`);
+            setDraftStatus("idle");
+            return;
+          }
           setDraftStatus("saved");
           // Auto-revient à idle après 1.5s pour ne pas laisser
           // l'indicateur permanent.
           setTimeout(() => setDraftStatus((s) => (s === "saved" ? "idle" : s)), 1500);
-        } catch {
-          // On échoue silencieusement — le draft auto-save ne doit jamais
-          // bloquer l'utilisateur. La validation finale dans finish() fait foi.
+        } catch (e) {
+          console.error("[onboarding autosave]", e);
           setDraftStatus("idle");
+          setError(e instanceof Error ? `Brouillon non sauvé : ${e.message}` : "Brouillon non sauvé");
         }
       })();
       inFlightSaveRef.current = promise;
@@ -239,11 +289,20 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
   const lastResolvedSirenRef = useRef<string>(defaultValues.siren?.replace(/\D/g, "") ?? "");
   const abortRef = useRef<AbortController | null>(null);
 
+  // SIRENE auto-fill — déclenché UNIQUEMENT quand v.siren change.
+  // BUG HISTORIQUE : avant on avait `[v.siren, sirenStatus, blockedLegalForm]`
+  // dans les deps. Or l'effet appelle setSirenStatus / setBlockedLegalForm,
+  // ce qui faisait re-tourner l'effet immédiatement → abort de la requête en
+  // cours → nouvelle requête → re-set state → abort → ... C'est ce qui
+  // provoquait la cascade de requêtes annulées que l'user voyait dans le
+  // panel network. Maintenant on ne dépend QUE de v.siren, et on appelle
+  // les setters de manière inconditionnelle (React skip naturellement le
+  // re-render si la valeur ne change pas).
   useEffect(() => {
     const clean = v.siren.replace(/\D/g, "");
     if (clean.length !== 9) {
-      if (sirenStatus !== "idle") setSirenStatus("idle");
-      if (blockedLegalForm) setBlockedLegalForm(null);
+      setSirenStatus("idle");
+      setBlockedLegalForm(null);
       return;
     }
     if (clean === lastResolvedSirenRef.current) return;
@@ -284,7 +343,8 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
       setSirenStatus("found");
     });
     return () => ctrl.abort();
-  }, [v.siren, sirenStatus, blockedLegalForm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v.siren]);
 
   function onSiretChange(raw: string) {
     const digits = raw.replace(/\D/g, "").slice(0, 14);
@@ -393,40 +453,38 @@ export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
     setSaving(true);
     setError(null);
     try {
-      const cleanSiren = v.siren.replace(/\s/g, "");
-      const cleanSiret = v.siret.replace(/\s/g, "");
-      const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
-      const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
-
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Session expirée");
-      // Cf. commentaire identique dans l'auto-save : on retire is_micro
-      // (champ UI uniquement) et on force legal_form = 'EI'. La contrainte
-      // CHECK côté Postgres rejette tout autre valeur — c'est notre filet
-      // de sécurité serveur.
-      const { is_micro: _ignored, ...persistable } = v;
+      if (!user) throw new Error("Session expirée — reconnecte-toi.");
+      // Payload : strip des chaînes vides + force legal_form='EI' +
+      // onboarded=true. Voir buildPersistablePayload() pour le détail.
+      const payload = buildPersistablePayload(v, { onboarded: true });
       const { error } = await supabase
         .from("profiles")
-        .update({
-          ...persistable,
-          legal_form: SUPPORTED_LEGAL_FORM,
-          siren: cleanSiren,
-          siret: cleanSiret,
-          iban: cleanIban,
-          bic: cleanBic,
-          onboarded: true,
-        })
+        .update(payload)
         .eq("id", user.id);
-      if (error) throw error;
+      if (error) {
+        // On log la stack complète pour debug, mais on affiche un message
+        // clair à l'user (avec le détail de l'erreur Supabase).
+        console.error("[onboarding finish] UPDATE failed", error, "payload:", payload);
+        throw new Error(`Impossible de finaliser : ${error.message}`);
+      }
       // Onboarding terminé : on nettoie le step mémorisé pour qu'un éventuel
       // retour futur sur /onboarding (ex: clic depuis settings) reparte de
       // l'étape 1 plutôt que de la dernière étape consultée.
       try { window.localStorage.removeItem(STEP_LS_KEY); } catch { /* storage off */ }
       router.replace("/dashboard");
     } catch (e) {
+      console.error("[onboarding finish]", e);
       setError(e instanceof Error ? e.message : "Erreur inattendue");
       setSaving(false);
+      // On NE remet PAS finishingRef à false : si l'user retente, il faut
+      // qu'il refasse un cycle Terminer (qui réinitialisera proprement).
+      // Mais si on laisse à true, l'auto-save reste désactivé, ce qui est
+      // OK car l'user est probablement en train de regarder l'erreur.
+      // Quand il modifie un champ, l'auto-save ne re-tournera pas → safe.
+      // Quand il re-clique Terminer, finishingRef est déjà true → idempotent.
+      finishingRef.current = false; // En fait on remet à false pour permettre un retry propre
     }
   }
 

@@ -141,16 +141,30 @@ export function SettingsForm({
       const cleanIban = v.iban.replace(/\s/g, "").toUpperCase();
       const cleanBic = v.bic.replace(/\s/g, "").toUpperCase();
 
+      // Construction du payload : on retire les chaînes vides AVANT
+      // l'envoi, sinon les colonnes avec CHECK constraint (notamment
+      // activity_kind qui n'accepte que 'vente'/'service_bic'/...) font
+      // échouer tout l'UPDATE quand le user n'a pas encore choisi sa
+      // catégorie. Mêmes raisons que dans onboarding/form.tsx.
+      const rawPayload: Record<string, unknown> = {
+        ...v,
+        siren: cleanSiren,
+        siret: cleanSiret,
+        iban: cleanIban,
+        bic: cleanBic,
+        urssaf_declaration_day: day,
+      };
+      const payload: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(rawPayload)) {
+        // Strip uniquement les STRINGS vides — on garde 0/false/null
+        // tels quels (ils peuvent être des valeurs valides).
+        if (typeof val === "string" && val.trim() === "") continue;
+        payload[k] = val;
+      }
+
       const { error } = await supabase
         .from("profiles")
-        .update({
-          ...v,
-          siren: cleanSiren,
-          siret: cleanSiret,
-          iban: cleanIban,
-          bic: cleanBic,
-          urssaf_declaration_day: day,
-        })
+        .update(payload)
         .eq("id", user.id);
 
       if (ctrl.signal.aborted) return;
