@@ -48,18 +48,52 @@ const STEPS: { id: StepId; label: string; icon: typeof User }[] = [
 // Les valeurs des champs sont elles persistées côté Supabase via auto-save.
 const STEP_LS_KEY = "ae-onboarding-step";
 
+/**
+ * Détermine la première étape incomplète à partir des defaultValues chargés
+ * depuis Supabase. Sert à plafonner le step restauré du localStorage : on ne
+ * peut pas se retrouver sur l'étape 4 si l'étape 1 n'a pas été remplie.
+ *
+ * Cette fonction est volontairement TOLÉRANTE — elle ne fait que vérifier
+ * que les champs principaux ont une valeur. Les validations strictes (regex
+ * SIREN, longueur IBAN…) restent dans validateStep() côté composant.
+ */
+function firstIncompleteStep(d: Values): StepId {
+  if (!d.display_name?.trim()) return 1;
+  // Étape 2 : SIREN/SIRET au moins esquissés. La confirmation `is_micro`
+  // est aussi requise mais on ne la teste pas ici car elle est par défaut
+  // décochée pour un nouveau user — on veut quand même qu'il aille à
+  // l'étape 2 pour la cocher, pas qu'il soit bloqué à l'étape 1.
+  if (!/^\d{14}$/.test(d.siret.replace(/\s/g, ""))) return 2;
+  if (!d.metier?.trim() || !d.ape_naf?.trim()) return 2;
+  if (!d.is_micro) return 2;
+  if (!d.address_line1?.trim() || !d.postal_code?.trim() || !d.city?.trim()) return 3;
+  if (d.iban.replace(/\s/g, "").length < 15) return 4;
+  if (d.bic.replace(/\s/g, "").length < 8) return 4;
+  return 4;
+}
+
 export function OnboardingForm({ defaultValues }: { defaultValues: Values }) {
   const router = useRouter();
   const [v, setV] = useState<Values>(defaultValues);
+  // Initialisation de l'étape : on lit le localStorage MAIS on plafonne la
+  // valeur à la première étape qui n'a pas encore de données valides côté
+  // defaultValues. Sans ça, un user qui revient avec un step=4 mémorisé
+  // mais des champs vides (cas typique : défaillance trigger SQL,
+  // déconnexion en cours d'onboarding…) atterrissait sur l'étape Bancaire,
+  // cliquait Terminer, et la validation finale le renvoyait silencieusement
+  // à l'étape 1 — d'où la sensation de "boucle infinie" rapportée.
   const [step, setStep] = useState<StepId>(() => {
     if (typeof window === "undefined") return 1;
+    let saved: StepId = 1;
     try {
-      const saved = window.localStorage.getItem(STEP_LS_KEY);
-      const n = saved ? parseInt(saved, 10) : 1;
-      return n >= 1 && n <= 4 ? (n as StepId) : 1;
-    } catch {
-      return 1;
-    }
+      const raw = window.localStorage.getItem(STEP_LS_KEY);
+      const n = raw ? parseInt(raw, 10) : 1;
+      if (n >= 1 && n <= 4) saved = n as StepId;
+    } catch { /* storage off, reste à 1 */ }
+    // On plafonne à la première étape incomplète. Un step "mémorisé" plus
+    // grand est ramené ici, ce qui force l'user à revoir ce qu'il manque.
+    const firstIncomplete = firstIncompleteStep(defaultValues);
+    return Math.min(saved, firstIncomplete) as StepId;
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
