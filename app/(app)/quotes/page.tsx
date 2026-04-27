@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDate, formatEUR } from "@/lib/format";
-import { FileText, Plus } from "lucide-react";
+import { Download, FileText, Plus } from "lucide-react";
 import { initialsFrom } from "@/lib/initials";
 
 export const dynamic = "force-dynamic";
@@ -64,10 +64,24 @@ export default async function QuotesPage({
             Tes devis envoyés, leur statut et la conversion en facture quand ils sont acceptés.
           </p>
         </div>
-        <Link href="/quotes/new" className="pill pill-primary">
-          <Plus size={16} />
-          Nouveau devis
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/quotes/new" className="pill pill-primary">
+            <Plus size={16} />
+            Nouveau devis
+          </Link>
+          {/* Export XLSX — calque l'UX du bouton "Exporter" du dashboard et de
+              la liste clients : <a href> direct vers la route API qui renvoie
+              le fichier en Content-Disposition: attachment, le navigateur
+              déclenche le téléchargement sans navigation. */}
+          <a
+            href="/api/export/quotes"
+            className="pill pill-ghost"
+            aria-label="Exporter les devis en Excel"
+          >
+            <Download size={16} />
+            Exporter
+          </a>
+        </div>
       </div>
 
       <div className="inline-flex bg-surface-2 p-1 rounded-full overflow-x-auto max-w-full">

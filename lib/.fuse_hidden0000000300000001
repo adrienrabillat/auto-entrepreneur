@@ -739,15 +739,11 @@ function spreadLetters(s: string): string {
 function toWinAnsi(input: string | null | undefined): string {
   if (!input) return "";
   return input
-    // Espaces Unicode hors WinAnsi -> espace ASCII (0x20).
-    // Inclut : NBSP (00A0), OGHAM SPACE (1680), EN QUAD..HAIR SPACE (2000-200A),
-    // LINE SEP (2028), PARA SEP (2029), narrow no-break space (202F),
-    // MEDIUM MATH SPACE (205F), IDEOGRAPHIC SPACE (3000).
-    // \u2028/\u2029 OBLIGATOIREMENT en escape : JS les traite comme line
-    // terminators dans une regex literal et casse le source sinon.
-    .replace(/[\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g, " ")
-    // Zero-width chars -> on retire (200B-200D, WJ 2060, BOM FEFF).
-    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, "")
-    // Tabs -> espace
-    .replace(/\t/g, " ");
+    // Espaces Unicode → espace ASCII
+    .replace(/[   -   　]/g, " ")
+    // Caractères zéro-largeur → rien
+    .replace(/[​-‍⁠﻿]/g, "")
+    // Tabs / line/paragraph separators → espace ou \n
+    .replace(/\t/g, " ")
+    .replace(/[  ]/g, "\n");
 }
