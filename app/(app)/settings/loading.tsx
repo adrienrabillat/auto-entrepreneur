@@ -7,7 +7,7 @@ import { FormCardSkeleton, Skeleton } from "@/components/ui/skeleton";
  */
 export default function SettingsLoading() {
   return (
-    <div className="max-w-2xl space-y-6 animate-fade-in">
+    <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
       <div className="space-y-2">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-4 w-80" />
