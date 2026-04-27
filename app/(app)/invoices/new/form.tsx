@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { EmailSuggestion } from "@/components/ui/email-suggestion";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 import { SuccessOverlay as SharedSuccessOverlay } from "@/components/ui/success-overlay";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { lookupSiren } from "@/lib/sirene";
@@ -624,17 +625,25 @@ export function NewInvoiceForm({
               </div>
               {/* Adresse éclatée — obligatoire dès qu'un SIREN est renseigné.
                   Mentions URSSAF + Factur-X B2B exigent rue + CP + ville sur la
-                  facture, sinon le PDF n'est pas conforme. */}
+                  facture, sinon le PDF n'est pas conforme. La ligne 1 est branchée
+                  sur la Base Adresse Nationale (cf. components/ui/address-autocomplete.tsx)
+                  pour suggérer des adresses existantes au fil de la frappe et
+                  remplir CP + ville d'un clic. */}
               <div className="md:col-span-2">
                 <Label htmlFor="client_address_line1" hint={isManualPro ? "obligatoire pour un pro" : "optionnel"}>
                   Adresse
                 </Label>
-                <Input
+                <AddressAutocomplete
                   id="client_address_line1"
                   required={isManualPro}
                   value={clientAddressLine1}
-                  onChange={(e) => setClientAddressLine1(e.target.value)}
-                  placeholder="N° et rue"
+                  onChange={(val) => setClientAddressLine1(val)}
+                  onSelect={(s) => {
+                    setClientAddressLine1(s.addressLine1);
+                    setClientPostalCode(s.postalCode);
+                    setClientCity(s.city);
+                  }}
+                  placeholder="N° et rue — recherche BAN…"
                 />
               </div>
               <div>
