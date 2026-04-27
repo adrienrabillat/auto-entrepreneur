@@ -8,6 +8,7 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { EmailSuggestion } from "@/components/ui/email-suggestion";
 import { SuccessOverlay as SharedSuccessOverlay } from "@/components/ui/success-overlay";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import {
   ArrowLeft,
   ArrowRight,
@@ -855,35 +856,8 @@ function Stepper({ step }: { step: 1 | 2 | 3 }) {
   );
 }
 
-function ToggleChip({
-  active,
-  disabled,
-  onClick,
-  icon,
-  label,
-}: {
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-all ${
-        active
-          ? "bg-brand-500 text-white shadow-pop"
-          : "bg-surface-2 text-ink-700 hover:bg-brand-500/10 hover:text-brand-600 disabled:opacity-40"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
+// ToggleChip déplacé dans components/ui/toggle-chip.tsx pour partage avec
+// le wizard devis. Strictement identique en style.
 
 function TypeCard({
   active,

@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import Link from "next/link";
 import { EmailSuggestion } from "@/components/ui/email-suggestion";
 import { SuccessOverlay } from "@/components/ui/success-overlay";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import {
   ArrowLeft,
   ArrowRight,
@@ -242,34 +244,36 @@ export function NewQuoteForm({
   }
 
   // ─── AI polish description ──────────────────────────────────────
+  // Strictement identique à la fonction côté factures pour avoir le même
+  // comportement (gestion d'erreur, message "déjà propre", etc.).
   async function polishDescription() {
-    if (!description.trim()) {
-      setPolishError("Tape d'abord ta description.");
+    const trimmed = description.trim();
+    if (!trimmed) {
+      setPolishError("Écris d'abord quelque chose à reformuler.");
       return;
     }
     setPolishing(true);
-    setPolished(null);
     setPolishError(null);
+    setPolished(null);
     try {
       const res = await fetch("/api/ai/polish-description", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: description }),
+        body: JSON.stringify({ text: trimmed }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
-      setPolished(data.polished as string);
-    } catch (e: unknown) {
-      setPolishError(e instanceof Error ? e.message : "L'IA n'a pas pu améliorer ce texte.");
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || `Erreur ${res.status}`);
+      const suggestion = String(payload.polished || "").trim();
+      if (!suggestion) throw new Error("Réponse vide");
+      if (suggestion === trimmed) {
+        setPolishError("Le texte est déjà propre — rien à reformuler.");
+      } else {
+        setPolished(suggestion);
+      }
+    } catch (err) {
+      setPolishError(err instanceof Error ? err.message : "Erreur inattendue");
     } finally {
       setPolishing(false);
-    }
-  }
-
-  function applyPolished() {
-    if (polished) {
-      setDescription(polished);
-      setPolished(null);
     }
   }
 
@@ -290,35 +294,55 @@ export function NewQuoteForm({
       const q = parseFloat(quantity.replace(",", ".")) || 1;
       const pu = Math.round(parseFloat(unitPrice.replace(",", ".")) * 100) || 0;
       const total = Math.round(pu * q);
-      const email = effectiveClient?.email || clientEmail;
-      const cleanSiren = (effectiveClient?.siren ?? clientSiren).replace(/\s/g, "") || null;
 
-      // Création du client si demandé (mode manuel + checkbox cochée).
-      // On ne bloque pas le devis si la création client échoue — le devis
-      // est plus important que le carnet d'adresses.
-      let createdClientId: string | null = effectiveClient?.id ?? null;
-      if (mode === "manual" && saveAsClient) {
-        try {
-          const cRes = await fetch("/api/clients", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              is_pro: Boolean(cleanSiren),
-              email,
-              company_name: cleanSiren ? clientName : null,
-              first_name: cleanSiren ? null : (clientName.split(" ")[0] || null),
-              last_name: cleanSiren ? null : (clientName.split(" ").slice(1).join(" ") || null),
-              siren: cleanSiren,
-              address_line1: clientAddress.split("\n")[0] || null,
-              city: null,
-              postal_code: null,
-            }),
-          });
-          if (cRes.ok) {
-            const d = await cRes.json();
-            createdClientId = d.id;
-          }
-        } catch { /* non-bloquant */ }
+      // Résolution client : on prépare les valeurs finales qui partiront
+      // sur l'API quotes (et éventuellement clients si on doit créer).
+      // Variables miroir de celles utilisées dans le submit factures —
+      // structure strictement identique pour garantir que les deux flows
+      // produisent les MÊMES enregistrements clients (essentiel pour la
+      // compatibilité Factur-X qui s'appuie sur is_pro + siren côté client).
+      let email = clientEmail.trim();
+      let name: string | null = clientName.trim() || null;
+      let siren: string | null = clientSiren.replace(/\s/g, "") || null;
+      let address: string | null = clientAddress.trim() || null;
+      let client_id: string | null = null;
+      let clientLabel = name || email;
+
+      if (effectiveClient) {
+        email = effectiveClient.email;
+        name = effectiveClient.name;
+        siren = effectiveClient.siren;
+        address = effectiveClient.address;
+        client_id = effectiveClient.id;
+        clientLabel = effectiveClient.label;
+      } else if (mode === "manual" && saveAsClient) {
+        // Création du client si demandé (mode manuel + checkbox cochée).
+        // Payload IDENTIQUE à celui du submit factures (cf. invoices/new/form.tsx) :
+        //   - is_pro = Boolean(siren) → un client avec SIREN est typé pro
+        //   - first_name / last_name extraits par split(" ") seulement si pas pro
+        //   - company_name = name si pro (raison sociale), null sinon
+        // C'est la combinaison qui garantit Factur-X compatible (l'XML
+        // Factur-X requiert un BuyerTradeParty.LegalRegistration.ID = SIREN
+        // + un BuyerTradeParty.Name = company_name pour les pros B2B).
+        const res = await fetch("/api/clients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            is_pro: Boolean(siren),
+            first_name: name && !siren ? name.split(" ")[0] : null,
+            last_name: name && !siren ? (name.split(" ").slice(1).join(" ") || null) : null,
+            company_name: siren ? name : null,
+            siren,
+            email,
+            address_line1: address,
+          }),
+        });
+        const payload = await res.json();
+        if (res.ok) {
+          client_id = payload.id;
+        }
+        // Si la création échoue on continue quand même avec les infos saisies —
+        // le devis a la priorité sur l'enregistrement carnet.
       }
 
       const res = await fetch("/api/quotes", {
@@ -329,11 +353,11 @@ export function NewQuoteForm({
           quantity: q,
           unit_price_cents: pu,
           amount_cents: total,
-          client_id: createdClientId,
+          client_id,
           client_email: email,
-          client_name: effectiveClient?.name ?? (clientName.trim() || null),
-          client_siren: cleanSiren,
-          client_address: effectiveClient?.address ?? (clientAddress.trim() || null),
+          client_name: name,
+          client_siren: siren,
+          client_address: address,
           operation_type: operationType,
           valid_until: validUntil || null,
           notes: notes.trim() || null,
@@ -343,7 +367,6 @@ export function NewQuoteForm({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur création devis");
 
-      const clientLabel = effectiveClient?.label || clientName.trim() || email;
       setSuccess({
         id: data.id,
         number: data.number,
@@ -389,155 +412,145 @@ export function NewQuoteForm({
     <div>
       <Stepper step={step} />
 
-      {/* ============================== ÉTAPE 1 — Client ============================== */}
+      {/* ============================== ÉTAPE 1 — Client ==============================
+          UX strictement identique à la création de facture (mêmes
+          composants ToggleChip, EmailSuggestion, mêmes labels, même ordre
+          de champs). Seul changement : "ce devis" au lieu de "cette facture"
+          dans le sous-titre. Tout est partagé via components/ui/ donc une
+          modif visuelle ici se propage à l'autre flow. */}
       {step === 1 ? (
         <Card className="space-y-4">
           <div className="flex items-center gap-2">
-            <Users size={16} className="text-brand-600" />
-            <h2 className="text-h3">Pour qui est ce devis ?</h2>
+            <div className="h-9 w-9 grid place-items-center rounded-xl bg-brand-500/10 text-brand-600">
+              <Users size={16} />
+            </div>
+            <div>
+              <div className="font-medium text-ink-900">Pour qui ?</div>
+              <div className="text-xs text-ink-500">Choisis un client existant ou saisis ses infos à la main.</div>
+            </div>
           </div>
 
-          {clients.length > 0 ? (
-            <div className="inline-flex bg-surface-2 p-1 rounded-full">
-              <button
-                type="button"
-                onClick={() => setMode("existing")}
-                className={
-                  "px-3.5 py-1.5 rounded-full text-small font-medium transition-all " +
-                  (mode === "existing"
-                    ? "bg-surface text-ink-900 shadow-hair"
-                    : "text-ink-500 hover:text-ink-900")
-                }
-              >
-                <Users size={14} className="inline mr-1.5 -mt-0.5" /> Client existant
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("manual")}
-                className={
-                  "px-3.5 py-1.5 rounded-full text-small font-medium transition-all " +
-                  (mode === "manual"
-                    ? "bg-surface text-ink-900 shadow-hair"
-                    : "text-ink-500 hover:text-ink-900")
-                }
-              >
-                <Plus size={14} className="inline mr-1.5 -mt-0.5" /> Nouveau client
-              </button>
-            </div>
-          ) : null}
+          <div className="flex gap-2 pt-1">
+            <ToggleChip
+              active={mode === "existing"}
+              disabled={clients.length === 0}
+              onClick={() => setMode("existing")}
+              icon={<Users size={14} />}
+              label={`Mes clients (${clients.length})`}
+            />
+            <ToggleChip
+              active={mode === "manual"}
+              onClick={() => setMode("manual")}
+              icon={<User size={14} />}
+              label="Saisir à la main"
+            />
+          </div>
 
-          {mode === "existing" && clients.length > 0 ? (
+          {mode === "existing" ? (
             <>
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+                <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-400" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Rechercher un client…"
-                  className="pl-9"
+                  className="pl-10"
                 />
               </div>
-              <div className="max-h-72 overflow-y-auto -mx-2">
+              <div className="max-h-[360px] overflow-y-auto -mx-2 px-2 space-y-1.5">
                 {filteredClients.length === 0 ? (
-                  <p className="text-small text-ink-500 px-2 py-4 text-center">
-                    Aucun client ne correspond.
-                  </p>
+                  <div className="text-center py-8 text-small text-ink-500">
+                    Aucun client trouvé.{" "}
+                    <Link href="/clients/new" className="text-brand-600 font-semibold">
+                      Créer un client
+                    </Link>
+                  </div>
                 ) : (
                   filteredClients.map((c) => {
-                    const sel = c.id === pickedClientId;
+                    const active = c.id === pickedClientId;
                     return (
                       <button
-                        key={c.id}
                         type="button"
+                        key={c.id}
                         onClick={() => setPickedClientId(c.id)}
                         className={
-                          "w-full text-left px-3 py-2.5 rounded-2xl flex items-center gap-3 transition-colors " +
-                          (sel ? "bg-brand-500/10" : "hover:bg-surface-2")
+                          "w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-all " +
+                          (active
+                            ? "bg-brand-500/10 shadow-hair"
+                            : "bg-surface shadow-hair hover:bg-surface-2")
                         }
                       >
-                        <div className="grid place-items-center h-9 w-9 rounded-full bg-brand-500/10 text-brand-600 shrink-0">
-                          {c.is_pro ? <Users size={14} /> : <User size={14} />}
+                        <div className="avatar shrink-0">
+                          {(c.label?.[0] || "?").toUpperCase()}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-small font-medium text-ink-900 truncate">{c.label}</div>
-                          <div className="text-xs text-ink-500 truncate">{c.email}</div>
+                          <div className="font-semibold text-ink-900 truncate">{c.label}</div>
+                          <div className="text-xs text-ink-500 truncate">
+                            {c.email}
+                            {c.is_pro ? " · Pro" : " · Particulier"}
+                          </div>
                         </div>
-                        {sel ? <Check size={16} className="text-brand-600" /> : null}
+                        {active ? <Check size={18} className="text-brand-600 shrink-0" /> : null}
                       </button>
                     );
                   })
                 )}
               </div>
+              <div className="flex justify-between items-center pt-2 text-xs">
+                <Link href="/clients/new" className="inline-flex items-center gap-1 text-brand-600 font-semibold">
+                  <Plus size={14} /> Nouveau client
+                </Link>
+              </div>
             </>
-          ) : null}
-
-          {mode === "manual" || clients.length === 0 ? (
-            <div className="space-y-4 pt-2">
-              <div>
-                <Label htmlFor="client_email">Email du client</Label>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <Label htmlFor="client_name" hint="optionnel — nom du pro ou du particulier">Nom</Label>
+                <Input id="client_name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="client_email">Email</Label>
                 <Input
                   id="client_email"
                   type="email"
                   required
                   value={clientEmail}
                   onChange={(e) => setClientEmail(e.target.value)}
-                  placeholder="contact@exemple.fr"
                 />
-                <EmailSuggestion email={clientEmail} onAccept={setClientEmail} />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="client_name" hint="optionnel">Nom / raison sociale</Label>
-                  <Input
-                    id="client_name"
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    placeholder="Société Dupont"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="client_siren" hint="9 chiffres si pro">SIREN</Label>
-                  <Input
-                    id="client_siren"
-                    inputMode="numeric"
-                    value={clientSiren}
-                    onChange={(e) => setClientSiren(e.target.value)}
-                    placeholder="123 456 789"
-                  />
-                </div>
+                <EmailSuggestion email={clientEmail} onAccept={(fixed) => setClientEmail(fixed)} />
               </div>
               <div>
-                <Label htmlFor="client_address" hint="optionnel">Adresse client</Label>
+                <Label htmlFor="client_siren" hint="si pro">SIREN</Label>
+                <Input
+                  id="client_siren"
+                  inputMode="numeric"
+                  value={clientSiren}
+                  onChange={(e) => setClientSiren(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                />
+              </div>
+              <div className="md:col-span-1">
+                <Label htmlFor="client_address" hint="optionnel">Adresse</Label>
                 <Textarea
                   id="client_address"
                   rows={2}
                   value={clientAddress}
                   onChange={(e) => setClientAddress(e.target.value)}
-                  placeholder="12 rue Léonard de Vinci&#10;75008 Paris"
                 />
               </div>
-              <label
-                htmlFor="save_as_client"
-                className="flex items-start gap-3 rounded-2xl bg-surface-2 border border-ink-100 p-3.5 cursor-pointer hover:bg-surface transition-colors"
-              >
+              <label className="md:col-span-2 flex items-center gap-2 cursor-pointer select-none rounded-2xl bg-surface-2 p-3.5 text-small">
                 <input
-                  id="save_as_client"
                   type="checkbox"
                   checked={saveAsClient}
                   onChange={(e) => setSaveAsClient(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+                  className="h-4 w-4 accent-brand-500"
                 />
-                <div>
-                  <p className="text-small font-medium text-ink-900">
-                    Enregistrer ce client dans mon carnet
-                  </p>
-                  <p className="text-xs text-ink-500">
-                    Décoche pour un devis one-shot — le client ne sera pas ajouté à la liste.
-                  </p>
-                </div>
+                <span className="text-ink-700">
+                  <strong className="text-ink-900 font-medium">Créer aussi comme client</strong>
+                  <span className="text-ink-500 ml-1">· pour le retrouver en un clic la prochaine fois</span>
+                </span>
               </label>
             </div>
-          ) : null}
+          )}
         </Card>
       ) : null}
 
@@ -549,49 +562,59 @@ export function NewQuoteForm({
             <h2 className="text-h3">La prestation</h2>
           </div>
 
+          {/* Description + IA — UI strictement identique à la création de
+              facture pour cohérence totale entre modules. */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
               <Label htmlFor="description">Description</Label>
               <button
                 type="button"
                 onClick={polishDescription}
                 disabled={polishing || !description.trim()}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                title="Améliore la formulation avec l'IA"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white bg-brand-gradient shadow-pop hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
-                {polishing ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                Améliorer avec l&apos;IA
+                {polishing ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+                {polishing ? "Analyse…" : "Améliorer IA"}
               </button>
             </div>
             <Textarea
               id="description"
-              rows={3}
               required
+              rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Refonte du site web — maquettes + intégration"
             />
-            {polishError ? (
-              <p className="mt-1.5 text-xs text-warn-600">{polishError}</p>
-            ) : null}
+            {polishError ? <p className="mt-2 text-xs text-danger-600">{polishError}</p> : null}
             {polished ? (
-              <div className="mt-2 rounded-2xl border border-brand-500/20 bg-brand-500/5 p-3 space-y-2">
-                <div className="text-xs font-medium text-brand-700 flex items-center gap-1">
-                  <Wand2 size={12} /> Suggestion de l&apos;IA
+              <div className="mt-3 rounded-2xl bg-surface-2 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Wand2 size={14} className="text-brand-600" />
+                  <span className="text-xs font-medium text-brand-600 uppercase tracking-wide">Suggestion IA</span>
                 </div>
-                <p className="text-small text-ink-800 whitespace-pre-wrap">{polished}</p>
-                <div className="flex gap-2 pt-1">
-                  <Button type="button" variant="primary" onClick={applyPolished}>
-                    <Check size={14} /> Utiliser
-                  </Button>
-                  <Button
+                <div>
+                  <div className="text-xs font-medium text-ink-900 mb-1">Proposition</div>
+                  <p className="text-small text-ink-900 whitespace-pre-wrap">{polished}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
                     type="button"
-                    variant="ghost"
-                    onClick={() => setPolished(null)}
-                    className="text-ink-500"
+                    onClick={() => {
+                      if (polished) setDescription(polished);
+                      setPolished(null);
+                      setPolishError(null);
+                    }}
+                    className="pill pill-primary text-xs py-1.5 px-3.5"
+                  >
+                    <Check size={14} /> Utiliser
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPolished(null); setPolishError(null); }}
+                    className="pill pill-ghost text-xs py-1.5 px-3.5"
                   >
                     <X size={14} /> Ignorer
-                  </Button>
+                  </button>
                 </div>
               </div>
             ) : null}
