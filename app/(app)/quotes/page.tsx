@@ -1,16 +1,22 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDate, formatEUR } from "@/lib/format";
 import { Download, FileText, Plus } from "lucide-react";
 import { initialsFrom } from "@/lib/initials";
+import { ListRowSkeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Liste des devis avec filtre par statut. Calque /invoices mais sans
- * bouton de suppression inline (la suppression se fait depuis le détail,
- * et seulement si le devis n'est pas converti en facture).
+ * Liste des devis avec filtre par statut. Calque /invoices côté UX et
+ * côté streaming RSC : l'en-tête (titre + boutons + filtres) rend
+ * immédiatement, la liste est isolée dans <QuotesListSection> wrappée
+ * dans <Suspense> pour que les changements de filtre soient quasi-instants.
+ *
+ * Pas de bouton de suppression inline (la suppression se fait depuis le
+ * détail, et seulement si le devis n'est pas converti en facture).
  */
 
 type Quote = {
@@ -36,24 +42,14 @@ const STATUS_FILTERS = [
   { key: "rejected", label: "Refusés" },
 ] as const;
 
-export default async function QuotesPage({
+type FilterKey = (typeof STATUS_FILTERS)[number]["key"];
+
+export default function QuotesPage({
   searchParams,
 }: {
   searchParams: { status?: string };
 }) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  const filter = (searchParams.status ?? "all") as (typeof STATUS_FILTERS)[number]["key"];
-  let q = supabase
-    .from("quotes")
-    .select("*")
-    .eq("user_id", user!.id)
-    .order("issued_on", { ascending: false });
-  if (filter !== "all") q = q.eq("status", filter);
-
-  const { data: quotes = [] } = await q;
-  const list = (quotes ?? []) as Quote[];
+  const filter = (searchParams.status ?? "all") as FilterKey;
 
   return (
     <div className="space-y-5 animate-fade-in-up">
@@ -104,40 +100,74 @@ export default async function QuotesPage({
         })}
       </div>
 
-      <div className="surface p-2">
-        {list.length === 0 ? (
-          <EmptyState filter={filter} />
-        ) : (
-          <ul>
-            {list.map((q) => {
-              const displayName = q.client_name || q.client_email;
-              return (
-                <li key={q.id}>
-                  <Link
-                    href={`/quotes/${q.id}`}
-                    className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
-                  >
-                    <div className="avatar">{initialsFrom(displayName)}</div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="font-medium text-ink-900 truncate">{q.description}</span>
-                        <StatusDot status={q.status} converted={Boolean(q.converted_invoice_id)} />
-                      </div>
-                      <div className="mt-0.5 text-xs text-ink-500 truncate">
-                        <span className="tabular-nums">{q.number}</span> · {displayName} · {formatDate(q.issued_on)}
-                        {q.valid_until ? ` · valable jusqu'au ${formatDate(q.valid_until)}` : ""}
-                      </div>
+      {/* key={filter} → re-suspend à chaque changement d'onglet pour que
+          le skeleton s'affiche pendant la nouvelle requête au lieu de
+          laisser l'ancienne liste figée. */}
+      <Suspense key={filter} fallback={<QuotesListSkeleton />}>
+        <QuotesListSection filter={filter} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function QuotesListSection({ filter }: { filter: FilterKey }) {
+  const supabase = createClient();
+  const user = await getCurrentUser();
+
+  let q = supabase
+    .from("quotes")
+    .select("*")
+    .eq("user_id", user!.id)
+    .order("issued_on", { ascending: false });
+  if (filter !== "all") q = q.eq("status", filter);
+
+  const { data: quotes = [] } = await q;
+  const list = (quotes ?? []) as Quote[];
+
+  return (
+    <div className="surface p-2">
+      {list.length === 0 ? (
+        <EmptyState filter={filter} />
+      ) : (
+        <ul>
+          {list.map((q) => {
+            const displayName = q.client_name || q.client_email;
+            return (
+              <li key={q.id}>
+                <Link
+                  href={`/quotes/${q.id}`}
+                  className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
+                >
+                  <div className="avatar">{initialsFrom(displayName)}</div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-medium text-ink-900 truncate">{q.description}</span>
+                      <StatusDot status={q.status} converted={Boolean(q.converted_invoice_id)} />
                     </div>
-                    <div className="text-body font-bold tabular-nums tracking-tight text-ink-900 shrink-0">
-                      {formatEUR(q.amount_cents)}
+                    <div className="mt-0.5 text-xs text-ink-500 truncate">
+                      <span className="tabular-nums">{q.number}</span> · {displayName} · {formatDate(q.issued_on)}
+                      {q.valid_until ? ` · valable jusqu'au ${formatDate(q.valid_until)}` : ""}
                     </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+                  </div>
+                  <div className="text-body font-bold tabular-nums tracking-tight text-ink-900 shrink-0">
+                    {formatEUR(q.amount_cents)}
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function QuotesListSkeleton() {
+  return (
+    <div className="surface p-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <ListRowSkeleton key={i} />
+      ))}
     </div>
   );
 }

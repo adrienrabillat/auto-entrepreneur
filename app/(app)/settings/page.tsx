@@ -12,21 +12,24 @@ export default async function SettingsPage() {
   const supabase = createClient();
   const user = await getCurrentUser();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user!.id)
-    .single();
-
-  // Pour décider si le format de numéro de facture est encore modifiable :
-  // on vérifie qu'aucune facture n'a été émise (on regarde l'existence,
-  // pas le contenu, donc on demande juste l'id de la 1ère).
-  const { data: firstInvoice } = await supabase
-    .from("invoices")
-    .select("id")
-    .eq("user_id", user!.id)
-    .limit(1)
-    .maybeSingle();
+  // Les deux requêtes étaient séquentielles → 2× round-trip DB sur chaque
+  // navigation vers /settings. Elles sont indépendantes l'une de l'autre,
+  // donc Promise.all économise un aller-retour réseau (~50-150ms typique
+  // sur Supabase EU). Le profile est requis pour le formulaire ; firstInvoice
+  // sert juste à savoir si on peut encore changer le format de numérotation.
+  const [{ data: profile }, { data: firstInvoice }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user!.id)
+      .single(),
+    supabase
+      .from("invoices")
+      .select("id")
+      .eq("user_id", user!.id)
+      .limit(1)
+      .maybeSingle(),
+  ]);
   const invoicesAlreadyEmitted = Boolean(firstInvoice);
 
   const gmailActive = Boolean(profile.gmail_refresh_token);

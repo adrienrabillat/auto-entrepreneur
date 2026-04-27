@@ -2,8 +2,25 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 /**
- * Refreshes the Supabase auth cookie on every request and redirects
- * unauthenticated users away from protected pages.
+ * Middleware Supabase :
+ *   1. Refresh des cookies d'auth (token rotation gérée par @supabase/ssr).
+ *   2. Redirection des utilisateurs non authentifiés sur les routes protégées.
+ *
+ * IMPORTANT — Perf : on utilise auth.getSession() (lecture cookie locale)
+ * et NON auth.getUser() (round-trip réseau vers Supabase Auth ~50-200ms).
+ *
+ * Pourquoi c'est sûr ici :
+ *   - Le middleware ne sert QUE à router (rediriger vers / si pas de session).
+ *   - Toute lecture de données passe ensuite par getCurrentUser() côté server
+ *     component, qui appelle auth.getUser() — JWT vérifié auprès de Supabase
+ *     à ce moment-là.
+ *   - Toutes les tables ont la RLS activée (cf. migration RUN_THIS_ONCE.sql),
+ *     donc même si un cookie corrompu passait le middleware, aucune donnée
+ *     ne pourrait fuiter sans un JWT valide.
+ *
+ * Le warning officiel Supabase contre getSession() en middleware s'applique
+ * aux apps qui basent leur autorisation de DONNÉES sur le résultat. Ici on
+ * fait juste du routing — c'est le cas d'usage légitime documenté.
  */
 const PROTECTED_PREFIXES = ["/dashboard", "/invoices", "/quotes", "/clients", "/declarations", "/settings", "/onboarding", "/import"];
 
@@ -32,14 +49,18 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  // Lecture cookie LOCALE — aucune requête réseau. Si le token est expiré,
+  // @supabase/ssr le refresh automatiquement via les callbacks cookies.set
+  // ci-dessus, ce qui peut déclencher UN round-trip mais uniquement à
+  // l'expiration (toutes les ~heures), pas à chaque navigation.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
   const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
-  if (!user && isProtected) {
+  if (!session && isProtected) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.searchParams.set("next", pathname);

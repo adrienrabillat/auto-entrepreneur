@@ -18,10 +18,15 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const supabase = createClient();
   const user = await getCurrentUser();
 
+  // Embedded select Supabase via la FK converted_invoice_id → invoices(id) :
+  // on récupère le numéro de la facture liée DANS la même requête que le devis,
+  // au lieu d'un round-trip DB conditionnel après. Économie : 1 aller-retour
+  // sur tous les devis convertis en facture (~70-150ms typique).
+  // Le résultat est nesté sous la clé `converted_invoice` (alias choisi).
   const [quoteRes, profileRes] = await Promise.all([
     supabase
       .from("quotes")
-      .select("*")
+      .select("*, converted_invoice:invoices!converted_invoice_id(number)")
       .eq("id", params.id)
       .eq("user_id", user!.id)
       .maybeSingle(),
@@ -31,20 +36,12 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
       .eq("id", user!.id)
       .maybeSingle(),
   ]);
-  const quote = quoteRes.data;
+  const quote = quoteRes.data as
+    | (typeof quoteRes.data & { converted_invoice: { number: string } | null })
+    | null;
   if (!quote) notFound();
   const gmailConnected = Boolean(profileRes.data?.gmail_refresh_token);
-
-  // Si converti, on récupère le numéro de la facture pour l'affichage.
-  let convertedInvoiceNumber: string | null = null;
-  if (quote.converted_invoice_id) {
-    const { data: inv } = await supabase
-      .from("invoices")
-      .select("number")
-      .eq("id", quote.converted_invoice_id)
-      .maybeSingle();
-    convertedInvoiceNumber = inv?.number ?? null;
-  }
+  const convertedInvoiceNumber = quote.converted_invoice?.number ?? null;
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 animate-fade-in-up">

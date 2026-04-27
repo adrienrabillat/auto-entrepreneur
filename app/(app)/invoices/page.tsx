@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDate, formatEUR } from "@/lib/format";
@@ -6,8 +7,21 @@ import { FileText, Plus } from "lucide-react";
 import { DeleteDraftButton } from "./row-delete";
 import { ExportExcelButton } from "@/components/ui/export-excel";
 import { initialsFrom } from "@/lib/initials";
+import { ListRowSkeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Liste des factures.
+ *
+ * Architecture streaming RSC : le wrapper de page rend immédiatement
+ * l'en-tête (titre + boutons + filtres) sans attendre la requête DB. La
+ * liste est isolée dans un composant <InvoicesListSection> async wrappé
+ * dans <Suspense>. Quand l'utilisateur change de filtre via les pills,
+ * `key={filter}` sur le Suspense déclenche le fallback à chaque nouvelle
+ * valeur, ce qui donne une transition perçue beaucoup plus rapide
+ * (l'en-tête ne re-flash pas, seule la liste refait un skeleton court).
+ */
 
 type Invoice = {
   id: string;
@@ -29,24 +43,14 @@ const STATUS_FILTERS = [
   { key: "paid",  label: "Payées" },
 ] as const;
 
-export default async function InvoicesPage({
+type FilterKey = (typeof STATUS_FILTERS)[number]["key"];
+
+export default function InvoicesPage({
   searchParams,
 }: {
   searchParams: { status?: string };
 }) {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  const filter = (searchParams.status ?? "all") as (typeof STATUS_FILTERS)[number]["key"];
-  let q = supabase
-    .from("invoices")
-    .select("*")
-    .eq("user_id", user!.id)
-    .order("issued_on", { ascending: false });
-  if (filter !== "all") q = q.eq("status", filter);
-
-  const { data: invoices = [] } = await q;
-  const list = (invoices ?? []) as Invoice[];
+  const filter = (searchParams.status ?? "all") as FilterKey;
 
   return (
     <div className="space-y-5 animate-fade-in-up">
@@ -87,48 +91,83 @@ export default async function InvoicesPage({
         })}
       </div>
 
-      <div className="surface p-2">
-        {list.length === 0 ? (
-          <EmptyState filter={filter} />
-        ) : (
-          <ul>
-            {list.map((inv) => {
-              const displayName = inv.client_name || inv.client_email;
-              return (
-                <li key={inv.id} className="relative group">
-                  <Link
-                    href={`/invoices/${inv.id}`}
-                    className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
-                  >
-                    <div className="avatar">{initialsFrom(displayName)}</div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="font-medium text-ink-900 truncate">{inv.description}</span>
-                        <StatusDot status={inv.status} />
-                      </div>
-                      <div className="mt-0.5 text-xs text-ink-500 truncate">
-                        <span className="tabular-nums">{inv.number}</span> · {displayName} · {formatDate(inv.issued_on)}
-                        {inv.paid_at ? ` · payée le ${formatDate(inv.paid_at)}` : ""}
-                      </div>
+      {/* `key={filter}` : à chaque changement de filtre, le Suspense
+          remonte et affiche à nouveau le fallback skeleton pendant que
+          la nouvelle requête tourne. Sans la key, React garderait
+          l'ancienne liste affichée jusqu'à la fin de la nouvelle requête. */}
+      <Suspense key={filter} fallback={<InvoicesListSkeleton />}>
+        <InvoicesListSection filter={filter} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function InvoicesListSection({ filter }: { filter: FilterKey }) {
+  const supabase = createClient();
+  const user = await getCurrentUser();
+
+  let q = supabase
+    .from("invoices")
+    .select("*")
+    .eq("user_id", user!.id)
+    .order("issued_on", { ascending: false });
+  if (filter !== "all") q = q.eq("status", filter);
+
+  const { data: invoices = [] } = await q;
+  const list = (invoices ?? []) as Invoice[];
+
+  return (
+    <div className="surface p-2">
+      {list.length === 0 ? (
+        <EmptyState filter={filter} />
+      ) : (
+        <ul>
+          {list.map((inv) => {
+            const displayName = inv.client_name || inv.client_email;
+            return (
+              <li key={inv.id} className="relative group">
+                <Link
+                  href={`/invoices/${inv.id}`}
+                  className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
+                >
+                  <div className="avatar">{initialsFrom(displayName)}</div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-medium text-ink-900 truncate">{inv.description}</span>
+                      <StatusDot status={inv.status} />
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-body font-bold tabular-nums tracking-tight text-ink-900">
-                        {formatEUR(inv.amount_cents)}
-                      </div>
-                      {inv.status === "draft" ? <div className="w-8" aria-hidden /> : null}
+                    <div className="mt-0.5 text-xs text-ink-500 truncate">
+                      <span className="tabular-nums">{inv.number}</span> · {displayName} · {formatDate(inv.issued_on)}
+                      {inv.paid_at ? ` · payée le ${formatDate(inv.paid_at)}` : ""}
                     </div>
-                  </Link>
-                  {inv.status === "draft" ? (
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                      <DeleteDraftButton id={inv.id} />
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-body font-bold tabular-nums tracking-tight text-ink-900">
+                      {formatEUR(inv.amount_cents)}
                     </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+                    {inv.status === "draft" ? <div className="w-8" aria-hidden /> : null}
+                  </div>
+                </Link>
+                {inv.status === "draft" ? (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <DeleteDraftButton id={inv.id} />
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function InvoicesListSkeleton() {
+  return (
+    <div className="surface p-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <ListRowSkeleton key={i} />
+      ))}
     </div>
   );
 }

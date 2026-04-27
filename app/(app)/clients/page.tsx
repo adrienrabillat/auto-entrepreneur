@@ -1,12 +1,21 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { Plus, Users, Building2 } from "lucide-react";
 import { DeleteClientButton } from "./row-delete";
 import { initialsFrom } from "@/lib/initials";
 import { ExportExcelButton } from "@/components/ui/export-excel";
+import { ListRowSkeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Liste du carnet clients. Streaming RSC : l'en-tête (titre + boutons)
+ * rend immédiatement, la liste arrive en streaming via <ClientsListSection>.
+ * Pas de filtre par statut ici (juste archivés=false), donc pas de
+ * key={…} sur le Suspense — il ne se ré-suspendrait jamais sur cette page.
+ */
 
 type ClientRow = {
   id: string;
@@ -21,18 +30,7 @@ type ClientRow = {
   country: string;
 };
 
-export default async function ClientsPage() {
-  const supabase = createClient();
-  const user = await getCurrentUser();
-
-  const { data: clients = [] } = await supabase
-    .from("clients")
-    .select("*")
-    .eq("user_id", user!.id)
-    .eq("archived", false)
-    .order("created_at", { ascending: false });
-  const list = (clients ?? []) as ClientRow[];
-
+export default function ClientsPage() {
   return (
     <div className="space-y-5 animate-fade-in-up">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -55,47 +53,76 @@ export default async function ClientsPage() {
         </div>
       </div>
 
-      <div className="surface p-2">
-        {list.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <ul>
-            {list.map((c) => {
-              const label = displayLabel(c);
-              return (
-                <li key={c.id} className="relative group">
-                  <Link
-                    href={`/clients/${c.id}`}
-                    className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
-                  >
-                    <div className="avatar">
-                      {c.is_pro ? <Building2 size={16} /> : initialsFrom(label)}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="font-medium text-ink-900 truncate">{label}</span>
-                        <span className={`status-dot ${c.is_pro ? "paid" : "draft"}`}>
-                          <span className="d" aria-hidden />
-                          {c.is_pro ? "Pro" : "Particulier"}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 text-xs text-ink-500 truncate">
-                        {c.email}
-                        {c.city ? ` · ${c.city}` : ""}
-                        {c.siren ? ` · SIREN ${c.siren}` : ""}
-                      </div>
-                    </div>
-                    <div className="w-8 shrink-0" aria-hidden />
-                  </Link>
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    <DeleteClientButton id={c.id} label={label} />
+      <Suspense fallback={<ClientsListSkeleton />}>
+        <ClientsListSection />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ClientsListSection() {
+  const supabase = createClient();
+  const user = await getCurrentUser();
+
+  const { data: clients = [] } = await supabase
+    .from("clients")
+    .select("*")
+    .eq("user_id", user!.id)
+    .eq("archived", false)
+    .order("created_at", { ascending: false });
+  const list = (clients ?? []) as ClientRow[];
+
+  return (
+    <div className="surface p-2">
+      {list.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <ul>
+          {list.map((c) => {
+            const label = displayLabel(c);
+            return (
+              <li key={c.id} className="relative group">
+                <Link
+                  href={`/clients/${c.id}`}
+                  className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
+                >
+                  <div className="avatar">
+                    {c.is_pro ? <Building2 size={16} /> : initialsFrom(label)}
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-medium text-ink-900 truncate">{label}</span>
+                      <span className={`status-dot ${c.is_pro ? "paid" : "draft"}`}>
+                        <span className="d" aria-hidden />
+                        {c.is_pro ? "Pro" : "Particulier"}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-xs text-ink-500 truncate">
+                      {c.email}
+                      {c.city ? ` · ${c.city}` : ""}
+                      {c.siren ? ` · SIREN ${c.siren}` : ""}
+                    </div>
+                  </div>
+                  <div className="w-8 shrink-0" aria-hidden />
+                </Link>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  <DeleteClientButton id={c.id} label={label} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ClientsListSkeleton() {
+  return (
+    <div className="surface p-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <ListRowSkeleton key={i} />
+      ))}
     </div>
   );
 }
@@ -128,4 +155,3 @@ function EmptyState() {
     </div>
   );
 }
-
