@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
@@ -9,7 +9,9 @@ import { Card } from "@/components/ui/card";
 import { EmailSuggestion } from "@/components/ui/email-suggestion";
 import { SuccessOverlay as SharedSuccessOverlay } from "@/components/ui/success-overlay";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { lookupSiren } from "@/lib/sirene";
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -57,6 +59,24 @@ function formatFrDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/**
+ * Recompose les 3 sous-champs adresse en une chaîne multi-ligne identique
+ * à celle produite par buildAddress() dans new/page.tsx (clients existants).
+ * Le PDF (lib/pdf.ts) attend un split sur \n pour séparer rue / CP+ville.
+ * Retourne null si aucun champ n'est rempli.
+ */
+function composeManualAddress(
+  line1: string,
+  postalCode: string,
+  city: string,
+): string | null {
+  const lines = [
+    line1.trim() || null,
+    [postalCode.trim() || null, city.trim() || null].filter(Boolean).join(" ") || null,
+  ].filter(Boolean) as string[];
+  return lines.length ? lines.join("\n") : null;
+}
+
 export function NewInvoiceForm({
   gmailConnected,
   clients,
@@ -76,8 +96,22 @@ export function NewInvoiceForm({
   const [clientEmail, setClientEmail] = useState("");
   const [clientName, setClientName] = useState("");
   const [clientSiren, setClientSiren] = useState("");
-  const [clientAddress, setClientAddress] = useState("");
+  // Adresse client en saisie manuelle — éclatée en 3 champs structurés
+  // pour pouvoir (a) auto-remplir depuis l'API SIRENE quand un SIREN valide
+  // est saisi et (b) imposer chaque sous-champ obligatoire pour un client pro
+  // (URSSAF + Factur-X exigent une adresse complète sur la facture B2B).
+  const [clientAddressLine1, setClientAddressLine1] = useState("");
+  const [clientPostalCode, setClientPostalCode] = useState("");
+  const [clientCity, setClientCity] = useState("");
   const [saveAsClient, setSaveAsClient] = useState(true);
+
+  // SIREN auto-fill côté wizard — strictement le même pattern que dans
+  // app/(app)/clients/form.tsx : sirenStatus pour l'icône d'état, AbortController
+  // pour annuler la requête en cours quand on retape, lastResolvedSirenRef
+  // pour ne pas écraser les éditions manuelles faites APRÈS l'auto-fill.
+  const [sirenStatus, setSirenStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
+  const sirenAbortRef = useRef<AbortController | null>(null);
+  const lastResolvedSirenRef = useRef<string>("");
 
   // step 2 — invoice
   const [description, setDescription] = useState("");
@@ -133,6 +167,50 @@ export function NewInvoiceForm({
     return Math.round(pu * q);
   }, [unitPrice, quantity]);
 
+  // Un SIREN renseigné = client professionnel → adresse complète obligatoire.
+  // Cette dérivation pilote à la fois la validation (validateStep1) et le
+  // rendu (champs marqués required + libellé "obligatoire pour un pro").
+  const isManualPro = mode === "manual" && /^\d{9}$/.test(clientSiren.replace(/\D/g, ""));
+
+  // ---------- SIREN auto-fill (saisie manuelle uniquement) ----------
+  // À chaque nouveau SIREN à 9 chiffres, on interroge l'API publique
+  // Recherche d'entreprises (cf. lib/sirene.ts) pour pré-remplir la raison
+  // sociale et l'adresse du siège. Identique au comportement de la fiche
+  // client pour que l'utilisateur ait la même UX peu importe l'endroit
+  // depuis lequel il saisit un pro.
+  useEffect(() => {
+    if (mode !== "manual") return;
+    const clean = clientSiren.replace(/\D/g, "");
+    if (clean.length !== 9) {
+      if (sirenStatus !== "idle") setSirenStatus("idle");
+      return;
+    }
+    // Même SIREN qu'avant → l'utilisateur est probablement en train d'éditer
+    // les champs à la main. On ne re-fetch pas pour ne pas écraser ses saisies.
+    if (clean === lastResolvedSirenRef.current) return;
+
+    sirenAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    sirenAbortRef.current = ctrl;
+
+    setSirenStatus("loading");
+    lookupSiren(clean, ctrl.signal).then((company) => {
+      if (ctrl.signal.aborted) return;
+      if (!company) {
+        setSirenStatus("not_found");
+        return;
+      }
+      setClientName((prev) => prev.trim() ? prev : company.name);
+      setClientAddressLine1(company.addressLine1 ?? "");
+      setClientPostalCode(company.postalCode ?? "");
+      setClientCity(company.city ?? "");
+      lastResolvedSirenRef.current = clean;
+      setSirenStatus("found");
+    });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, clientSiren]);
+
   // ---------- aperçu PDF ----------
   // Quand on arrive à l'étape 3 (Relecture), on POST les valeurs actuelles
   // à /api/invoices/preview qui régénère le PDF sans rien écrire en base.
@@ -158,7 +236,7 @@ export function NewInvoiceForm({
           client_email: effectiveClient?.email || clientEmail,
           client_name: effectiveClient?.name ?? (clientName || null),
           client_siren: effectiveClient?.siren ?? (clientSiren.replace(/\s/g, "") || null),
-          client_address: effectiveClient?.address ?? (clientAddress || null),
+          client_address: effectiveClient?.address ?? composeManualAddress(clientAddressLine1, clientPostalCode, clientCity),
           operation_type: operationType,
           delivery_address: deliveryAddress.trim() || null,
           execution_date: executionDate || null,
@@ -205,6 +283,15 @@ export function NewInvoiceForm({
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clientEmail.trim())) return "Email du client invalide.";
     const siren = clientSiren.replace(/\s/g, "");
     if (siren && !/^\d{9}$/.test(siren)) return "SIREN : 9 chiffres attendus.";
+    // Client pro = adresse complète obligatoire. URSSAF + Factur-X exigent
+    // raison sociale + adresse complète sur la facture B2B, sans quoi le PDF
+    // ne serait pas conforme.
+    if (isManualPro) {
+      if (!clientName.trim()) return "Raison sociale obligatoire pour un client pro.";
+      if (!clientAddressLine1.trim()) return "Adresse obligatoire pour un client pro.";
+      if (!clientPostalCode.trim()) return "Code postal obligatoire pour un client pro.";
+      if (!clientCity.trim()) return "Ville obligatoire pour un client pro.";
+    }
     return null;
   }
 
@@ -276,7 +363,9 @@ export function NewInvoiceForm({
       let email = clientEmail.trim();
       let name: string | null = clientName.trim() || null;
       let siren: string | null = clientSiren.replace(/\s/g, "") || null;
-      let address: string | null = clientAddress.trim() || null;
+      // Adresse manuelle : on recompose la chaîne multi-ligne attendue par
+      // l'API factures et le générateur PDF (pdf.ts split sur \n).
+      let address: string | null = composeManualAddress(clientAddressLine1, clientPostalCode, clientCity);
       let client_id: string | null = null;
       let clientLabel = name || email;
 
@@ -288,18 +377,24 @@ export function NewInvoiceForm({
         client_id = effectiveClient.id;
         clientLabel = effectiveClient.label;
       } else if (mode === "manual" && saveAsClient) {
-        // Créer d'abord le client, puis poser la facture dessus.
+        // Création du client en parallèle de la facture. Champs structurés
+        // address_line1 / postal_code / city pour que la fiche client
+        // résultante soit propre (et pas une ligne 1 contenant un bloc CP+ville).
+        // Pour les pros, on bascule first_name/last_name à null car l'identité
+        // est portée par company_name (raison sociale).
         const res = await fetch("/api/clients", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             is_pro: Boolean(siren),
-            first_name: name ? name.split(" ")[0] : null,
-            last_name: name ? name.split(" ").slice(1).join(" ") || null : null,
+            first_name: name && !siren ? name.split(" ")[0] : null,
+            last_name: name && !siren ? (name.split(" ").slice(1).join(" ") || null) : null,
             company_name: siren ? name : null,
             siren,
             email,
-            address_line1: address,
+            address_line1: clientAddressLine1.trim() || null,
+            postal_code: clientPostalCode.trim() || null,
+            city: clientCity.trim() || null,
           }),
         });
         const payload = await res.json();
@@ -477,9 +572,44 @@ export function NewInvoiceForm({
             </>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* SIREN en tête du bloc — saisie en premier déclenche l'auto-fill
+                  raison sociale + adresse via lib/sirene.ts, exactement comme
+                  sur la fiche client. Optionnel : si vide, le client est traité
+                  comme un particulier et l'adresse n'est plus obligatoire. */}
               <div className="md:col-span-2">
-                <Label htmlFor="client_name" hint="optionnel — nom du pro ou du particulier">Nom</Label>
-                <Input id="client_name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+                <Label htmlFor="client_siren" hint="si pro — on remplit le reste automatiquement">SIREN</Label>
+                <div className="relative">
+                  <Input
+                    id="client_siren"
+                    inputMode="numeric"
+                    value={clientSiren}
+                    onChange={(e) => setClientSiren(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                    className="pr-10"
+                  />
+                  {sirenStatus === "loading" ? (
+                    <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 animate-spin" />
+                  ) : sirenStatus === "found" ? (
+                    <Check size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-success-600" />
+                  ) : sirenStatus === "not_found" ? (
+                    <AlertCircle size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-warn-600" />
+                  ) : null}
+                </div>
+                {sirenStatus === "found" ? (
+                  <p className="mt-1.5 text-xs text-success-600">Entreprise trouvée, infos remplies automatiquement.</p>
+                ) : sirenStatus === "not_found" ? (
+                  <p className="mt-1.5 text-xs text-warn-600">SIREN introuvable — saisis l&apos;adresse à la main ci-dessous.</p>
+                ) : null}
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="client_name" hint={isManualPro ? "raison sociale — obligatoire" : "optionnel — nom du pro ou du particulier"}>
+                  {isManualPro ? "Raison sociale" : "Nom"}
+                </Label>
+                <Input
+                  id="client_name"
+                  required={isManualPro}
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                />
               </div>
               <div className="md:col-span-2">
                 <Label htmlFor="client_email">Email</Label>
@@ -492,22 +622,37 @@ export function NewInvoiceForm({
                 />
                 <EmailSuggestion email={clientEmail} onAccept={(fixed) => setClientEmail(fixed)} />
               </div>
-              <div>
-                <Label htmlFor="client_siren" hint="si pro">SIREN</Label>
+              {/* Adresse éclatée — obligatoire dès qu'un SIREN est renseigné.
+                  Mentions URSSAF + Factur-X B2B exigent rue + CP + ville sur la
+                  facture, sinon le PDF n'est pas conforme. */}
+              <div className="md:col-span-2">
+                <Label htmlFor="client_address_line1" hint={isManualPro ? "obligatoire pour un pro" : "optionnel"}>
+                  Adresse
+                </Label>
                 <Input
-                  id="client_siren"
-                  inputMode="numeric"
-                  value={clientSiren}
-                  onChange={(e) => setClientSiren(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                  id="client_address_line1"
+                  required={isManualPro}
+                  value={clientAddressLine1}
+                  onChange={(e) => setClientAddressLine1(e.target.value)}
+                  placeholder="N° et rue"
                 />
               </div>
-              <div className="md:col-span-1">
-                <Label htmlFor="client_address" hint="optionnel">Adresse</Label>
-                <Textarea
-                  id="client_address"
-                  rows={2}
-                  value={clientAddress}
-                  onChange={(e) => setClientAddress(e.target.value)}
+              <div>
+                <Label htmlFor="client_postal_code" hint={isManualPro ? "obligatoire" : "optionnel"}>Code postal</Label>
+                <Input
+                  id="client_postal_code"
+                  required={isManualPro}
+                  value={clientPostalCode}
+                  onChange={(e) => setClientPostalCode(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="client_city" hint={isManualPro ? "obligatoire" : "optionnel"}>Ville</Label>
+                <Input
+                  id="client_city"
+                  required={isManualPro}
+                  value={clientCity}
+                  onChange={(e) => setClientCity(e.target.value)}
                 />
               </div>
               <label className="md:col-span-2 flex items-center gap-2 cursor-pointer select-none rounded-2xl bg-surface-2 p-3.5 text-small">

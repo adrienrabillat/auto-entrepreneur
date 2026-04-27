@@ -121,6 +121,14 @@ export function ClientForm({
       if (v.is_pro && cleanSiren && !/^\d{9}$/.test(cleanSiren)) {
         throw new Error("SIREN client : 9 chiffres attendus");
       }
+      // Pour un pro : adresse complète obligatoire (URSSAF + Factur-X exigent
+      // rue + CP + ville sur les factures B2B). On valide ici plutôt que dans
+      // l'API pour donner un retour direct au moment de la saisie.
+      if (v.is_pro) {
+        if (!v.address_line1.trim()) throw new Error("Adresse obligatoire pour un client pro");
+        if (!v.postal_code.trim()) throw new Error("Code postal obligatoire pour un client pro");
+        if (!v.city.trim()) throw new Error("Ville obligatoire pour un client pro");
+      }
       const body = { ...v, siren: cleanSiren };
       const url = mode === "create" ? "/api/clients" : `/api/clients/${clientId}`;
       const method = mode === "create" ? "POST" : "PUT";
@@ -284,9 +292,10 @@ export function ClientForm({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
-            <Label htmlFor="address_line1" hint="obligatoire pour un pro">Adresse</Label>
+            <Label htmlFor="address_line1" hint={v.is_pro ? "obligatoire pour un pro" : "optionnel"}>Adresse</Label>
             <AddressAutocomplete
               id="address_line1"
+              required={v.is_pro}
               value={v.address_line1}
               onChange={(val) => setV({ ...v, address_line1: val })}
               onSelect={(s) => setV({ ...v, address_line1: s.addressLine1, postal_code: s.postalCode, city: s.city })}
@@ -297,12 +306,12 @@ export function ClientForm({
             <Input aria-label="Complément" value={v.address_line2} onChange={(e) => setV({ ...v, address_line2: e.target.value })} />
           </div>
           <div>
-            <Label htmlFor="postal_code">Code postal</Label>
-            <Input id="postal_code" value={v.postal_code} onChange={(e) => setV({ ...v, postal_code: e.target.value })} />
+            <Label htmlFor="postal_code" hint={v.is_pro ? "obligatoire" : "optionnel"}>Code postal</Label>
+            <Input id="postal_code" required={v.is_pro} value={v.postal_code} onChange={(e) => setV({ ...v, postal_code: e.target.value })} />
           </div>
           <div>
-            <Label htmlFor="city">Ville</Label>
-            <Input id="city" value={v.city} onChange={(e) => setV({ ...v, city: e.target.value })} />
+            <Label htmlFor="city" hint={v.is_pro ? "obligatoire" : "optionnel"}>Ville</Label>
+            <Input id="city" required={v.is_pro} value={v.city} onChange={(e) => setV({ ...v, city: e.target.value })} />
           </div>
         </div>
 

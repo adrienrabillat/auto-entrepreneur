@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
@@ -9,7 +9,9 @@ import Link from "next/link";
 import { EmailSuggestion } from "@/components/ui/email-suggestion";
 import { SuccessOverlay } from "@/components/ui/success-overlay";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { lookupSiren } from "@/lib/sirene";
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -65,6 +67,24 @@ function formatFrDate(iso: string): string {
 }
 
 /**
+ * Recompose les 3 sous-champs adresse en une chaîne multi-ligne identique
+ * à celle produite par buildAddress() côté page parente (clients existants).
+ * Le PDF (lib/pdf.ts) attend un split sur \n pour séparer rue / CP+ville.
+ * Retourne null si aucun champ n'est rempli.
+ */
+function composeManualAddress(
+  line1: string,
+  postalCode: string,
+  city: string,
+): string | null {
+  const lines = [
+    line1.trim() || null,
+    [postalCode.trim() || null, city.trim() || null].filter(Boolean).join(" ") || null,
+  ].filter(Boolean) as string[];
+  return lines.length ? lines.join("\n") : null;
+}
+
+/**
  * Wizard de création d'un devis. Calque la structure de NewInvoiceForm
  * pour garder la cohérence visuelle entre les deux modules :
  *
@@ -98,10 +118,24 @@ export function NewQuoteForm({
   const [clientEmail, setClientEmail] = useState("");
   const [clientName, setClientName] = useState("");
   const [clientSiren, setClientSiren] = useState("");
-  const [clientAddress, setClientAddress] = useState("");
+  // Adresse client en saisie manuelle — éclatée en 3 champs structurés pour
+  // (a) auto-remplir depuis l'API SIRENE quand un SIREN valide est saisi et
+  // (b) imposer chaque sous-champ obligatoire pour un client pro (URSSAF +
+  // Factur-X exigent une adresse complète sur les documents B2B).
+  const [clientAddressLine1, setClientAddressLine1] = useState("");
+  const [clientPostalCode, setClientPostalCode] = useState("");
+  const [clientCity, setClientCity] = useState("");
   // "Enregistrer ce client dans mon carnet" — coché par défaut quand l'user
   // est en saisie manuelle. Décocher = devis one-shot, on ne crée pas la fiche.
   const [saveAsClient, setSaveAsClient] = useState(true);
+
+  // SIREN auto-fill côté wizard — strictement le même pattern que dans
+  // app/(app)/clients/form.tsx : sirenStatus pour l'icône d'état, AbortController
+  // pour annuler la requête en cours quand on retape, lastResolvedSirenRef
+  // pour ne pas écraser les éditions manuelles faites APRÈS l'auto-fill.
+  const [sirenStatus, setSirenStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
+  const sirenAbortRef = useRef<AbortController | null>(null);
+  const lastResolvedSirenRef = useRef<string>("");
 
   // Étape 2 — prestation
   const [description, setDescription] = useState("");
@@ -151,6 +185,48 @@ export function NewQuoteForm({
     return Math.round(pu * q);
   }, [unitPrice, quantity]);
 
+  // Un SIREN renseigné = client professionnel → adresse complète obligatoire.
+  // Cette dérivation pilote à la fois la validation (validateStep1) et le
+  // rendu (champs marqués required + libellé "obligatoire pour un pro").
+  const isManualPro = mode === "manual" && /^\d{9}$/.test(clientSiren.replace(/\D/g, ""));
+
+  // ─── SIREN auto-fill (saisie manuelle uniquement) ─────────────────
+  // Comportement identique à la fiche client (cf. app/(app)/clients/form.tsx) :
+  // dès qu'un SIREN à 9 chiffres est saisi, on interroge l'API publique
+  // Recherche d'entreprises pour pré-remplir raison sociale + adresse siège.
+  // L'utilisateur peut ensuite éditer librement — on ne re-fetch plus tant
+  // qu'il ne change pas le SIREN, pour ne pas écraser ses corrections.
+  useEffect(() => {
+    if (mode !== "manual") return;
+    const clean = clientSiren.replace(/\D/g, "");
+    if (clean.length !== 9) {
+      if (sirenStatus !== "idle") setSirenStatus("idle");
+      return;
+    }
+    if (clean === lastResolvedSirenRef.current) return;
+
+    sirenAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    sirenAbortRef.current = ctrl;
+
+    setSirenStatus("loading");
+    lookupSiren(clean, ctrl.signal).then((company) => {
+      if (ctrl.signal.aborted) return;
+      if (!company) {
+        setSirenStatus("not_found");
+        return;
+      }
+      setClientName((prev) => prev.trim() ? prev : company.name);
+      setClientAddressLine1(company.addressLine1 ?? "");
+      setClientPostalCode(company.postalCode ?? "");
+      setClientCity(company.city ?? "");
+      lastResolvedSirenRef.current = clean;
+      setSirenStatus("found");
+    });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, clientSiren]);
+
   // ─── Aperçu PDF — déclenché à chaque arrivée à l'étape 3 ─────────
   useEffect(() => {
     if (step !== 3) return;
@@ -173,7 +249,7 @@ export function NewQuoteForm({
           client_email: effectiveClient?.email || clientEmail,
           client_name: effectiveClient?.name ?? (clientName || null),
           client_siren: effectiveClient?.siren ?? (clientSiren.replace(/\s/g, "") || null),
-          client_address: effectiveClient?.address ?? (clientAddress || null),
+          client_address: effectiveClient?.address ?? composeManualAddress(clientAddressLine1, clientPostalCode, clientCity),
           operation_type: operationType,
           valid_until: validUntil || null,
         };
@@ -216,6 +292,16 @@ export function NewQuoteForm({
       return "Email du client invalide.";
     const siren = clientSiren.replace(/\s/g, "");
     if (siren && !/^\d{9}$/.test(siren)) return "SIREN : 9 chiffres attendus.";
+    // Client pro = adresse complète obligatoire. URSSAF + Factur-X exigent
+    // raison sociale + adresse complète sur le devis B2B (le devis devient
+    // facture en cas d'acceptation, donc autant exiger les mêmes mentions
+    // dès maintenant).
+    if (isManualPro) {
+      if (!clientName.trim()) return "Raison sociale obligatoire pour un client pro.";
+      if (!clientAddressLine1.trim()) return "Adresse obligatoire pour un client pro.";
+      if (!clientPostalCode.trim()) return "Code postal obligatoire pour un client pro.";
+      if (!clientCity.trim()) return "Ville obligatoire pour un client pro.";
+    }
     return null;
   }
 
@@ -304,7 +390,9 @@ export function NewQuoteForm({
       let email = clientEmail.trim();
       let name: string | null = clientName.trim() || null;
       let siren: string | null = clientSiren.replace(/\s/g, "") || null;
-      let address: string | null = clientAddress.trim() || null;
+      // Adresse manuelle : on recompose la chaîne multi-ligne attendue par
+      // l'API devis et le générateur PDF (lib/pdf.ts split sur \n).
+      let address: string | null = composeManualAddress(clientAddressLine1, clientPostalCode, clientCity);
       let client_id: string | null = null;
       let clientLabel = name || email;
 
@@ -321,9 +409,12 @@ export function NewQuoteForm({
         //   - is_pro = Boolean(siren) → un client avec SIREN est typé pro
         //   - first_name / last_name extraits par split(" ") seulement si pas pro
         //   - company_name = name si pro (raison sociale), null sinon
-        // C'est la combinaison qui garantit Factur-X compatible (l'XML
-        // Factur-X requiert un BuyerTradeParty.LegalRegistration.ID = SIREN
-        // + un BuyerTradeParty.Name = company_name pour les pros B2B).
+        //   - address_line1 / postal_code / city envoyés en clair pour que la
+        //     fiche client résultante soit propre et réutilisable (le formulaire
+        //     fiche client lit ces 3 champs séparés, pas une chaîne agrégée).
+        // Cette combinaison garantit Factur-X compatible (l'XML requiert
+        // BuyerTradeParty.LegalRegistration.ID = SIREN, BuyerTradeParty.Name =
+        // company_name, et BuyerTradeParty.PostalTradeAddress avec rue/CP/ville).
         const res = await fetch("/api/clients", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -334,7 +425,9 @@ export function NewQuoteForm({
             company_name: siren ? name : null,
             siren,
             email,
-            address_line1: address,
+            address_line1: clientAddressLine1.trim() || null,
+            postal_code: clientPostalCode.trim() || null,
+            city: clientCity.trim() || null,
           }),
         });
         const payload = await res.json();
@@ -504,9 +597,44 @@ export function NewQuoteForm({
             </>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* SIREN en tête du bloc — saisie en premier déclenche l'auto-fill
+                  raison sociale + adresse via lib/sirene.ts, exactement comme
+                  sur la fiche client. Optionnel : si vide, le client est traité
+                  comme un particulier et l'adresse n'est plus obligatoire. */}
               <div className="md:col-span-2">
-                <Label htmlFor="client_name" hint="optionnel — nom du pro ou du particulier">Nom</Label>
-                <Input id="client_name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+                <Label htmlFor="client_siren" hint="si pro — on remplit le reste automatiquement">SIREN</Label>
+                <div className="relative">
+                  <Input
+                    id="client_siren"
+                    inputMode="numeric"
+                    value={clientSiren}
+                    onChange={(e) => setClientSiren(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                    className="pr-10"
+                  />
+                  {sirenStatus === "loading" ? (
+                    <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-500 animate-spin" />
+                  ) : sirenStatus === "found" ? (
+                    <Check size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-success-600" />
+                  ) : sirenStatus === "not_found" ? (
+                    <AlertCircle size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-warn-600" />
+                  ) : null}
+                </div>
+                {sirenStatus === "found" ? (
+                  <p className="mt-1.5 text-xs text-success-600">Entreprise trouvée, infos remplies automatiquement.</p>
+                ) : sirenStatus === "not_found" ? (
+                  <p className="mt-1.5 text-xs text-warn-600">SIREN introuvable — saisis l&apos;adresse à la main ci-dessous.</p>
+                ) : null}
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="client_name" hint={isManualPro ? "raison sociale — obligatoire" : "optionnel — nom du pro ou du particulier"}>
+                  {isManualPro ? "Raison sociale" : "Nom"}
+                </Label>
+                <Input
+                  id="client_name"
+                  required={isManualPro}
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                />
               </div>
               <div className="md:col-span-2">
                 <Label htmlFor="client_email">Email</Label>
@@ -519,22 +647,37 @@ export function NewQuoteForm({
                 />
                 <EmailSuggestion email={clientEmail} onAccept={(fixed) => setClientEmail(fixed)} />
               </div>
-              <div>
-                <Label htmlFor="client_siren" hint="si pro">SIREN</Label>
+              {/* Adresse éclatée — obligatoire dès qu'un SIREN est renseigné.
+                  Mentions URSSAF + Factur-X B2B exigent rue + CP + ville sur le
+                  devis (qui se transforme en facture en cas d'acceptation). */}
+              <div className="md:col-span-2">
+                <Label htmlFor="client_address_line1" hint={isManualPro ? "obligatoire pour un pro" : "optionnel"}>
+                  Adresse
+                </Label>
                 <Input
-                  id="client_siren"
-                  inputMode="numeric"
-                  value={clientSiren}
-                  onChange={(e) => setClientSiren(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                  id="client_address_line1"
+                  required={isManualPro}
+                  value={clientAddressLine1}
+                  onChange={(e) => setClientAddressLine1(e.target.value)}
+                  placeholder="N° et rue"
                 />
               </div>
-              <div className="md:col-span-1">
-                <Label htmlFor="client_address" hint="optionnel">Adresse</Label>
-                <Textarea
-                  id="client_address"
-                  rows={2}
-                  value={clientAddress}
-                  onChange={(e) => setClientAddress(e.target.value)}
+              <div>
+                <Label htmlFor="client_postal_code" hint={isManualPro ? "obligatoire" : "optionnel"}>Code postal</Label>
+                <Input
+                  id="client_postal_code"
+                  required={isManualPro}
+                  value={clientPostalCode}
+                  onChange={(e) => setClientPostalCode(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="client_city" hint={isManualPro ? "obligatoire" : "optionnel"}>Ville</Label>
+                <Input
+                  id="client_city"
+                  required={isManualPro}
+                  value={clientCity}
+                  onChange={(e) => setClientCity(e.target.value)}
                 />
               </div>
               <label className="md:col-span-2 flex items-center gap-2 cursor-pointer select-none rounded-2xl bg-surface-2 p-3.5 text-small">
