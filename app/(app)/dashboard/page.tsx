@@ -7,6 +7,7 @@ import { Plus, UserPlus, Download } from "lucide-react";
 import { HeroAmount } from "./hero-amount";
 import { initialsFrom } from "@/lib/initials";
 import { PriorActivityModal } from "./prior-activity-modal";
+import { cleanClientName } from "@/lib/display-name";
 
 export const dynamic = "force-dynamic";
 
@@ -159,20 +160,22 @@ export default async function DashboardPage() {
 
       {/* 2 stats — en attente + année */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-        <StatCard
-          label="En attente de paiement"
-          value={formatEUR(outstanding)}
-          accent="warn"
-          hint={
-            outstandingInvoices.length > 0
-              ? `${outstandingInvoices.length} facture${
-                  outstandingInvoices.length > 1 ? "s" : ""
-                } envoyée${outstandingInvoices.length > 1 ? "s" : ""}, non payée${
-                  outstandingInvoices.length > 1 ? "s" : ""
-                }`
-              : "Tout est à jour"
-          }
-        />
+        <Link href="/invoices?status=sent" className="block transition-transform hover:scale-[1.02]">
+          <StatCard
+            label="En attente de paiement"
+            value={formatEUR(outstanding)}
+            accent="warn"
+            hint={
+              outstandingInvoices.length > 0
+                ? `${outstandingInvoices.length} facture${
+                    outstandingInvoices.length > 1 ? "s" : ""
+                  } envoyée${outstandingInvoices.length > 1 ? "s" : ""}, non payée${
+                    outstandingInvoices.length > 1 ? "s" : ""
+                  }`
+                : "Tout est à jour"
+            }
+          />
+        </Link>
         <StatCard
           label={`Encaissé ${now.getFullYear()}`}
           value={formatEUR(yearCollected)}
@@ -197,7 +200,7 @@ export default async function DashboardPage() {
         ) : (
           <ul className="pb-1">
             {recent.map((inv) => {
-              const displayName = inv.client_name || inv.client_email;
+              const displayName = cleanClientName(inv.client_name) || inv.client_email;
               const initials = initialsFrom(displayName);
               return (
                 <li key={inv.id}>

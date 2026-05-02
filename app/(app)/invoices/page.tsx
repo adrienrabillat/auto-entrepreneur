@@ -8,6 +8,7 @@ import { DeleteDraftButton } from "./row-delete";
 import { ExportExcelButton } from "@/components/ui/export-excel";
 import { initialsFrom } from "@/lib/initials";
 import { ListRowSkeleton } from "@/components/ui/skeleton";
+import { cleanClientName } from "@/lib/display-name";
 
 export const dynamic = "force-dynamic";
 
@@ -123,7 +124,7 @@ async function InvoicesListSection({ filter }: { filter: FilterKey }) {
       ) : (
         <ul>
           {list.map((inv) => {
-            const displayName = inv.client_name || inv.client_email;
+            const displayName = cleanClientName(inv.client_name) || inv.client_email;
             return (
               <li key={inv.id} className="relative group">
                 <Link

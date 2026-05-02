@@ -6,6 +6,8 @@ import { formatDate, formatEUR } from "@/lib/format";
 import { Download, FileText, Plus } from "lucide-react";
 import { initialsFrom } from "@/lib/initials";
 import { ListRowSkeleton } from "@/components/ui/skeleton";
+import { cleanClientName } from "@/lib/display-name";
+import { DeleteQuoteButton } from "./row-delete";
 
 export const dynamic = "force-dynamic";
 
@@ -131,9 +133,10 @@ async function QuotesListSection({ filter }: { filter: FilterKey }) {
       ) : (
         <ul>
           {list.map((q) => {
-            const displayName = q.client_name || q.client_email;
+            const displayName = cleanClientName(q.client_name) || q.client_email;
+            const canDelete = !q.converted_invoice_id;
             return (
-              <li key={q.id}>
+              <li key={q.id} className="relative group">
                 <Link
                   href={`/quotes/${q.id}`}
                   className="grid grid-cols-[auto_1fr_auto] gap-3.5 items-center px-3.5 py-3 rounded-2xl row-hover"
@@ -149,10 +152,18 @@ async function QuotesListSection({ filter }: { filter: FilterKey }) {
                       {q.valid_until ? ` · valable jusqu'au ${formatDate(q.valid_until)}` : ""}
                     </div>
                   </div>
-                  <div className="text-body font-bold tabular-nums tracking-tight text-ink-900 shrink-0">
-                    {formatEUR(q.amount_cents)}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-body font-bold tabular-nums tracking-tight text-ink-900">
+                      {formatEUR(q.amount_cents)}
+                    </div>
+                    {canDelete ? <div className="w-8" aria-hidden /> : null}
                   </div>
                 </Link>
+                {canDelete ? (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <DeleteQuoteButton id={q.id} number={q.number} />
+                  </div>
+                ) : null}
               </li>
             );
           })}

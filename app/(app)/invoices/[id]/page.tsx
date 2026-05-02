@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDate, formatEUR } from "@/lib/format";
 import { InvoiceActions } from "./actions";
 import { ArrowLeft, ExternalLink } from "lucide-react";
+import { cleanClientName } from "@/lib/display-name";
 
 export const dynamic = "force-dynamic";
 
@@ -63,14 +64,14 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
             {formatEUR(invoice.amount_cents)}
           </div>
           <div className="mt-3 text-small text-ink-500">
-            Pour {invoice.client_name || invoice.client_email}
+            Pour {cleanClientName(invoice.client_name) || invoice.client_email}
           </div>
         </div>
       </section>
 
       <section className="surface p-6 space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-small">
-          <Field label="Client">{invoice.client_name || invoice.client_email}</Field>
+          <Field label="Client">{cleanClientName(invoice.client_name) || invoice.client_email}</Field>
           <Field label="Email">{invoice.client_email}</Field>
           <Field label="Émise le">{formatDate(invoice.issued_on)}</Field>
           <Field label="Envoyée le">{invoice.sent_at ? formatDate(invoice.sent_at) : "—"}</Field>

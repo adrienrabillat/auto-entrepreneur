@@ -60,6 +60,25 @@ const themeBootScript = `
 }catch(e){}})();
 `;
 
+// Écran de chargement initial — affiché AVANT React pour éviter un flash
+// noir/blanc. Le conteneur est masqué dès que le body a des enfants React
+// rendus (via un MutationObserver léger).
+const splashScript = `
+(function(){try{
+  var el=document.getElementById('__splash');
+  if(!el) return;
+  var obs=new MutationObserver(function(){
+    if(document.getElementById('__next')||document.querySelector('main')){
+      el.style.opacity='0';
+      setTimeout(function(){el.remove();},300);
+      obs.disconnect();
+    }
+  });
+  obs.observe(document.body,{childList:true,subtree:true});
+  setTimeout(function(){if(el&&el.parentNode){el.style.opacity='0';setTimeout(function(){el.remove();},300);}},4000);
+}catch(e){}})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
@@ -69,7 +88,48 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* Splash screen — visible pendant le chargement initial, disparaît
+            quand React est monté. Couleur de fond = CSS variable (respecte
+            le thème choisi). */}
+        <div
+          id="__splash"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            gap: "16px",
+            background: "rgb(var(--c-bg, 244 245 247))",
+            transition: "opacity 300ms ease",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icon-192.png"
+            alt="Asthia"
+            width={56}
+            height={56}
+            style={{ borderRadius: "16px" }}
+          />
+          <div
+            style={{
+              width: "32px",
+              height: "32px",
+              border: "3px solid rgb(var(--c-ink-4, 194 198 208))",
+              borderTopColor: "rgb(var(--c-accent, 47 107 255))",
+              borderRadius: "50%",
+              animation: "asthia-spin 0.7s linear infinite",
+            }}
+          />
+          <style dangerouslySetInnerHTML={{ __html: "@keyframes asthia-spin { to { transform: rotate(360deg); } }" }} />
+        </div>
+        <script dangerouslySetInnerHTML={{ __html: splashScript }} />
+        {children}
+      </body>
     </html>
   );
 }

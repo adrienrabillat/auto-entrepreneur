@@ -61,6 +61,18 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
         })}
       </nav>
 
+      {/* Lien URSSAF obligatoire — partenariat API TDAE */}
+      <div className="mt-auto pt-6">
+        <a
+          href="https://www.autoentrepreneur.urssaf.fr"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-[11px] leading-snug text-ink-400 hover:text-ink-600 transition-colors px-3.5"
+        >
+          L&apos;essentiel du statut —{" "}
+          <span className="underline underline-offset-2">Autoentrepreneur.urssaf.fr</span>
+        </a>
+      </div>
     </aside>
   );
 }

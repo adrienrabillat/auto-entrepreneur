@@ -7,6 +7,7 @@ import { DeleteClientButton } from "./row-delete";
 import { initialsFrom } from "@/lib/initials";
 import { ExportExcelButton } from "@/components/ui/export-excel";
 import { ListRowSkeleton } from "@/components/ui/skeleton";
+import { clientDisplayLabel } from "@/lib/display-name";
 
 export const dynamic = "force-dynamic";
 
@@ -79,7 +80,7 @@ async function ClientsListSection() {
       ) : (
         <ul>
           {list.map((c) => {
-            const label = displayLabel(c);
+            const label = clientDisplayLabel(c);
             return (
               <li key={c.id} className="relative group">
                 <Link
@@ -127,14 +128,8 @@ function ClientsListSkeleton() {
   );
 }
 
-function displayLabel(c: ClientRow): string {
-  if (c.is_pro && c.company_name) {
-    const who = [c.first_name, c.last_name].filter(Boolean).join(" ");
-    return who ? `${c.company_name} — ${who}` : c.company_name;
-  }
-  const full = [c.first_name, c.last_name].filter(Boolean).join(" ");
-  return full || c.email;
-}
+/* displayLabel a été remplacée par clientDisplayLabel (lib/display-name.ts)
+ * qui gère le cas [Non éligible] pour les noms commerciaux. */
 
 function EmptyState() {
   return (
