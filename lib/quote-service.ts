@@ -300,10 +300,29 @@ export async function convertQuoteToInvoice(
   if (error) throw error;
   const quote = rawQuote as QuoteRow;
 
-  // Idempotence : si déjà converti, on ne recrée pas. C'est important
-  // pour les double-clics et pour les retries éventuels côté client.
+  // Idempotence : si déjà converti ET que la facture existe encore, on ne
+  // recrée pas. C'est important pour les double-clics et pour les retries
+  // éventuels côté client.
+  // MAIS si la facture liée a été supprimée (brouillon supprimé par l'user),
+  // on permet une reconversion en nettoyant l'ancien lien.
   if (quote.converted_invoice_id) {
-    return { invoiceId: quote.converted_invoice_id, alreadyConverted: true };
+    const { data: linkedInvoice } = await supabase
+      .from("invoices")
+      .select("id")
+      .eq("id", quote.converted_invoice_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (linkedInvoice) {
+      // La facture existe toujours → idempotent, on renvoie l'ID existant.
+      return { invoiceId: quote.converted_invoice_id, alreadyConverted: true };
+    }
+    // La facture a été supprimée → on nettoie le lien pour pouvoir reconvertir.
+    await supabase
+      .from("quotes")
+      .update({ converted_invoice_id: null })
+      .eq("id", quote.id)
+      .eq("user_id", userId);
   }
 
   // Crée la facture avec les mêmes données. Le numéro de facture est

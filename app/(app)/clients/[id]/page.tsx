@@ -4,6 +4,8 @@ import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { ClientForm } from "../form";
+import { DeleteClientSection } from "./delete-section";
+import { clientDisplayLabel } from "@/lib/display-name";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,8 @@ export default async function EditClientPage({ params }: { params: { id: string 
     .eq("user_id", user!.id)
     .maybeSingle();
   if (!client) notFound();
+
+  const deleteLabel = clientDisplayLabel(client);
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -50,6 +54,7 @@ export default async function EditClientPage({ params }: { params: { id: string 
           }}
         />
       </div>
+      <DeleteClientSection id={client.id} label={deleteLabel} />
     </div>
   );
 }

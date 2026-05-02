@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Send, Check, X, ArrowRight, Trash2, Loader2 } from "lucide-react";
+import { Send, Check, X, ArrowRight, Trash2, Loader2, Pencil } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Quote = {
@@ -28,15 +29,19 @@ type Quote = {
 export function QuoteActions({
   quote,
   gmailConnected,
+  invoiceDeleted = false,
 }: {
   quote: Quote;
   gmailConnected: boolean;
+  invoiceDeleted?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const isConverted = Boolean(quote.converted_invoice_id);
+  // Un devis converti est "figé" SAUF si la facture liée a été supprimée :
+  // dans ce cas on réactive toutes les actions pour permettre reconversion.
+  const isConverted = Boolean(quote.converted_invoice_id) && !invoiceDeleted;
 
   // Helpers : POST/PATCH/DELETE → toast d'erreur si KO, refresh si OK.
   async function action(label: string, fn: () => Promise<Response>) {
@@ -118,6 +123,13 @@ export function QuoteActions({
   return (
     <>
       <div className="flex flex-wrap gap-2 pt-2 border-t border-ink-100">
+        {/* Modifier */}
+        <Link href={`/quotes/${quote.id}/edit`}>
+          <Button type="button" variant="secondary">
+            <Pencil size={14} /> Modifier
+          </Button>
+        </Link>
+
         {/* Envoi / renvoi */}
         <Button
           type="button"
@@ -167,8 +179,8 @@ export function QuoteActions({
           </Button>
         ) : null}
 
-        {/* Conversion en facture : seulement si accepté */}
-        {quote.status === "accepted" ? (
+        {/* Conversion en facture : si accepté, OU si ancienne conversion supprimée */}
+        {quote.status === "accepted" || invoiceDeleted ? (
           <Button
             type="button"
             variant="primary"
@@ -176,7 +188,7 @@ export function QuoteActions({
             disabled={busy !== null}
           >
             {busy === "convert" ? <Loader2 size={14} className="animate-spin" /> : <ArrowRight size={14} />}
-            Convertir en facture
+            {invoiceDeleted ? "Reconvertir en facture" : "Convertir en facture"}
           </Button>
         ) : null}
 

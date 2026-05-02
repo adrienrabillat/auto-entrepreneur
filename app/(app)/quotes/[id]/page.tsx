@@ -44,6 +44,11 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const gmailConnected = Boolean(profileRes.data?.gmail_refresh_token);
   const convertedInvoiceNumber = quote.converted_invoice?.number ?? null;
 
+  // Cas spécial : le devis a un converted_invoice_id mais le JOIN ne renvoie
+  // rien → la facture liée a été supprimée (brouillon supprimé par l'user).
+  // On réactive les actions pour permettre une nouvelle conversion.
+  const invoiceDeleted = Boolean(quote.converted_invoice_id) && !quote.converted_invoice;
+
   return (
     <div className="max-w-3xl mx-auto space-y-5 animate-fade-in-up">
       <div>
@@ -65,8 +70,9 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
         </div>
       </div>
 
-      {/* Bandeau de conversion : visible si le devis a été transformé en facture */}
-      {quote.converted_invoice_id ? (
+      {/* Bandeau de conversion : visible si le devis a été transformé en facture
+          ET que cette facture existe toujours */}
+      {quote.converted_invoice_id && !invoiceDeleted ? (
         <div className="rounded-2xl bg-success-500/10 border border-success-500/20 p-4 flex items-center justify-between gap-3">
           <div className="text-small">
             <div className="font-medium text-success-700">
@@ -84,6 +90,18 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           >
             Voir la facture <ArrowRight size={14} />
           </Link>
+        </div>
+      ) : null}
+
+      {/* Bandeau d'avertissement : la facture liée a été supprimée */}
+      {invoiceDeleted ? (
+        <div className="rounded-2xl bg-warn-500/10 border border-warn-500/20 p-4 text-small">
+          <div className="font-medium text-warn-700">
+            La facture associée a été supprimée
+          </div>
+          <div className="text-ink-600 mt-0.5">
+            Tu peux reconvertir ce devis en facture ou le modifier.
+          </div>
         </div>
       ) : null}
 
@@ -134,7 +152,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           </div>
         ) : null}
 
-        <QuoteActions quote={quote} gmailConnected={gmailConnected} />
+        <QuoteActions quote={quote} gmailConnected={gmailConnected} invoiceDeleted={invoiceDeleted} />
       </section>
 
       <section className="surface p-0 overflow-hidden">
