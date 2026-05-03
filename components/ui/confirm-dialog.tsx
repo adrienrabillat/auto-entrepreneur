@@ -33,6 +33,7 @@ export function ConfirmDialog({
   cancelLabel = "Annuler",
   loading = false,
   variant = "danger",
+  children,
 }: {
   open: boolean;
   onClose: () => void;
@@ -43,6 +44,7 @@ export function ConfirmDialog({
   cancelLabel?: string;
   loading?: boolean;
   variant?: "danger" | "primary";
+  children?: React.ReactNode;
 }) {
   const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -121,6 +123,8 @@ export function ConfirmDialog({
             <X size={16} />
           </button>
         </div>
+
+        {children ? <div className="mt-4">{children}</div> : null}
 
         <div className="mt-6 flex items-center justify-end gap-2">
           <Button

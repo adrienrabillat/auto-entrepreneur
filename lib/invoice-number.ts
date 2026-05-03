@@ -65,6 +65,88 @@ export async function nextInvoiceNumber(
 }
 
 /**
+ * Numéro temporaire pour un brouillon. Format fixe : "BROUILLON-001".
+ * Utilise `profiles.draft_number_seed` — séquence séparée pour ne pas
+ * polluer la numérotation légale des factures validées.
+ */
+export async function nextDraftNumber(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string> {
+  const { data: profile, error: profErr } = await supabase
+    .from("profiles")
+    .select("draft_number_seed")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profErr) throw profErr;
+
+  const seed: number = profile?.draft_number_seed ?? 0;
+  const nextSeq = seed + 1;
+
+  const { error: updateErr } = await supabase
+    .from("profiles")
+    .update({ draft_number_seed: nextSeq })
+    .eq("id", userId)
+    .eq("draft_number_seed", seed);
+
+  if (updateErr) throw updateErr;
+
+  return `BROUILLON-${String(nextSeq).padStart(3, "0")}`;
+}
+
+/**
+ * Finalise le numéro d'une facture brouillon → numéro légal séquentiel.
+ * Appelé au moment de l'envoi ou du marquage "payée" (= validation).
+ * Le draft_number est conservé en base comme trace.
+ *
+ * Retourne le nouveau numéro assigné.
+ */
+export async function finalizeInvoiceNumber(
+  supabase: SupabaseClient,
+  userId: string,
+  invoiceId: string,
+): Promise<string> {
+  const number = await nextInvoiceNumber(supabase, userId);
+
+  // Lire l'ancien numéro pour le sauvegarder comme draft_number
+  const { data: inv } = await supabase
+    .from("invoices")
+    .select("number, draft_number")
+    .eq("id", invoiceId)
+    .eq("user_id", userId)
+    .single();
+
+  const patch: Record<string, unknown> = { number };
+  // Sauvegarder le numéro brouillon si pas déjà fait
+  if (inv && !inv.draft_number && inv.number?.startsWith("BROUILLON-")) {
+    patch.draft_number = inv.number;
+  }
+
+  const { error } = await supabase
+    .from("invoices")
+    .update(patch)
+    .eq("id", invoiceId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+  return number;
+}
+
+/**
+ * Numéro d'avoir. Utilise la même séquence que les factures (obligation
+ * légale — les avoirs font partie de la séquence chronologique) et
+ * préfixe avec "AV-" pour les distinguer visuellement.
+ */
+export async function nextCreditNoteNumber(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string> {
+  const number = await nextInvoiceNumber(supabase, userId);
+  return `AV-${number}`;
+}
+
+/**
  * Variante pour les devis. Logique identique mais lit/écrit
  * quote_number_format / quote_number_seed.
  *

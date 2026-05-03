@@ -27,9 +27,9 @@ export type InvoicePdfData = {
   number: string;
   /** Type de document. 'invoice' = facture (par défaut, comportement
    *  historique). 'quote' = devis : titre "DEVIS", date d'échéance affichée
-   *  comme "Validité" et bandeau légal adapté. Les autres pans du PDF
-   *  (mentions légales vendeur, ligne de prestation, totaux) sont identiques. */
-  documentKind?: "invoice" | "quote";
+   *  comme "Validité" et bandeau légal adapté. 'credit_note' = avoir :
+   *  titre "AVOIR" avec montants affichés en négatif. */
+  documentKind?: "invoice" | "quote" | "credit_note";
   issuedOn: string;              // ISO date (YYYY-MM-DD)
   dueOn?: string;                // optional ISO date — date de règlement (facture) OU validité (devis)
   executionDate?: string;        // ISO date — date de réalisation / livraison
@@ -106,8 +106,9 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   // totaux, mentions légales) reste strictement identique pour cohérence
   // visuelle entre les deux types de documents.
   const isQuote = data.documentKind === "quote";
-  const docNoun = isQuote ? "Devis" : "Facture";
-  const docTitle = isQuote ? "DEVIS" : "FACTURE";
+  const isCreditNote = data.documentKind === "credit_note";
+  const docNoun = isCreditNote ? "Avoir" : isQuote ? "Devis" : "Facture";
+  const docTitle = isCreditNote ? "AVOIR" : isQuote ? "DEVIS" : "FACTURE";
   pdf.setTitle(`${docNoun} ${data.number}`);
   pdf.setAuthor(sellerLegalLabel(data));
   pdf.setSubject(`${docNoun} ${data.number} — ${sellerLegalLabel(data)}`);

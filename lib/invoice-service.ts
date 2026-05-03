@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateInvoicePdf, type InvoicePdfData, type OperationType } from "@/lib/pdf";
 import { deliverInvoice, type DeliveryResult } from "@/lib/delivery";
-import { nextInvoiceNumber } from "@/lib/invoice-number";
+import {
+  nextInvoiceNumber,
+  nextDraftNumber,
+  finalizeInvoiceNumber,
+  nextCreditNoteNumber,
+} from "@/lib/invoice-number";
 import { formatEUR } from "@/lib/format";
 
 type Profile = {
@@ -57,6 +62,9 @@ type InvoiceRow = {
   client_address: string | null;
   status?: string;
   paid_at?: string | null;
+  invoice_type?: string;
+  related_invoice_id?: string | null;
+  draft_number?: string | null;
 };
 
 export async function loadProfile(supabase: SupabaseClient, userId: string): Promise<Profile> {
@@ -93,15 +101,19 @@ export async function createInvoiceRow(
     input.unit_price_cents ?? Math.round(input.amount_cents / quantity);
   const prepaid = Boolean(input.prepaid);
 
-  // Numérotation facture : la contrainte unique (user_id, number) en base
-  // garantit l'unicité, mais deux requêtes parallèles peuvent calculer le même
-  // "next" (lecture puis insert non atomiques). On retente tant que Postgres
-  // renvoie 23505 (unique_violation) sur cette contrainte. En pratique ça
-  // n'arrive quasiment jamais (3 utilisateurs, jamais de créations concurrentes)
-  // mais ça nous protège contre un double-clic ou un lancement simultané.
+  // Numérotation : les brouillons reçoivent un numéro temporaire (BROUILLON-XXX).
+  // Le vrai numéro séquentiel légal n'est attribué qu'au moment de la
+  // validation (envoi ou marquage payé). Les factures acquittées (prepaid)
+  // reçoivent directement un vrai numéro car elles sont immédiatement validées.
+  //
+  // Retry logic : la contrainte unique (user_id, number) en base garantit
+  // l'unicité. On retente sur 23505 (unique_violation) pour gérer le cas
+  // (théorique) de double-clic.
   const MAX_ATTEMPTS = 5;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const number = await nextInvoiceNumber(supabase, userId);
+    const number = prepaid
+      ? await nextInvoiceNumber(supabase, userId)
+      : await nextDraftNumber(supabase, userId);
     const { data, error } = await supabase
       .from("invoices")
       .insert({
@@ -124,6 +136,8 @@ export async function createInvoiceRow(
         due_on: input.due_on ?? null,
         status: prepaid ? "paid" : "draft",
         paid_at: prepaid ? new Date().toISOString() : null,
+        invoice_type: "standard",
+        draft_number: prepaid ? null : number,
       })
       .select("*")
       .single();
@@ -146,20 +160,27 @@ export async function createInvoiceRow(
 
 export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): InvoicePdfData {
   assertProfileReady(profile);
+  const isCreditNote = invoice.invoice_type === "credit_note";
   const qty = Number(invoice.quantity) || 1;
-  const unit = invoice.unit_price_cents ?? Math.round(invoice.amount_cents / qty);
+  // Pour les avoirs, les montants sont stockés en négatif en base.
+  // Le PDF doit les afficher en positif avec le titre "AVOIR".
+  const absAmount = Math.abs(invoice.amount_cents);
+  const unit = invoice.unit_price_cents != null
+    ? Math.abs(invoice.unit_price_cents)
+    : Math.round(absAmount / qty);
   // "Acquittée" si le statut est payé ET que la date de paiement est ≤ la date d'émission
   // (marqueur d'une facture émise déjà payée, par opposition à un paiement reçu plus tard).
   const paidAt = invoice.status === "paid" && invoice.paid_at ? invoice.paid_at : undefined;
   return {
     number: invoice.number,
+    documentKind: isCreditNote ? "credit_note" : "invoice",
     issuedOn: invoice.issued_on,
     dueOn: invoice.due_on ?? undefined,
     executionDate: invoice.execution_date ?? undefined,
     description: invoice.description,
     quantity: qty,
     unitPriceCents: unit,
-    amountCents: invoice.amount_cents,
+    amountCents: absAmount,
     currency: invoice.currency || "EUR",
     operationType: invoice.operation_type,
     deliveryAddress: invoice.delivery_address ?? undefined,
@@ -219,7 +240,14 @@ export async function sendInvoice(
     .eq("user_id", userId)
     .single();
   if (error) throw error;
-  const invoice = invoiceRaw as InvoiceRow;
+  let invoice = invoiceRaw as InvoiceRow;
+
+  // Finalisation du numéro : si la facture a encore un numéro brouillon,
+  // on lui attribue le vrai numéro séquentiel légal maintenant.
+  if (invoice.number?.startsWith("BROUILLON-")) {
+    const finalNumber = await finalizeInvoiceNumber(supabase, userId, invoiceId);
+    invoice = { ...invoice, number: finalNumber };
+  }
 
   const pdfBytes = await generateInvoicePdf(pdfDataFromInvoice(profile, invoice));
   const filename = `facture-${invoice.number}.pdf`;
@@ -320,6 +348,198 @@ export async function sendInvoice(
   if (updErr) throw updErr;
 
   return { ok: true as const };
+}
+
+/**
+ * Mise à jour d'une facture brouillon. Seules les factures en statut
+ * 'draft' sont modifiables librement — pas de contrainte légale.
+ */
+export async function updateDraftInvoice(
+  supabase: SupabaseClient,
+  userId: string,
+  invoiceId: string,
+  input: {
+    description?: string;
+    quantity?: number;
+    unit_price_cents?: number;
+    amount_cents?: number;
+    operation_type?: OperationType;
+    execution_date?: string | null;
+    delivery_address?: string | null;
+    due_on?: string | null;
+    discount_terms?: string | null;
+  }
+) {
+  // Vérifier que la facture est bien un brouillon
+  const { data: invoice, error: getErr } = await supabase
+    .from("invoices")
+    .select("id, status")
+    .eq("id", invoiceId)
+    .eq("user_id", userId)
+    .single();
+
+  if (getErr) throw getErr;
+  if (!invoice) throw new Error("Facture introuvable.");
+  if (invoice.status !== "draft") {
+    throw new Error("Seuls les brouillons peuvent être modifiés directement.");
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (input.description !== undefined) patch.description = input.description;
+  if (input.quantity !== undefined) patch.quantity = input.quantity;
+  if (input.unit_price_cents !== undefined) patch.unit_price_cents = input.unit_price_cents;
+  if (input.amount_cents !== undefined) patch.amount_cents = input.amount_cents;
+  if (input.operation_type !== undefined) patch.operation_type = input.operation_type;
+  if (input.execution_date !== undefined) patch.execution_date = input.execution_date;
+  if (input.delivery_address !== undefined) patch.delivery_address = input.delivery_address;
+  if (input.due_on !== undefined) patch.due_on = input.due_on;
+  if (input.discount_terms !== undefined) patch.discount_terms = input.discount_terms;
+
+  if (Object.keys(patch).length === 0) return;
+
+  const { error: updErr } = await supabase
+    .from("invoices")
+    .update(patch)
+    .eq("id", invoiceId)
+    .eq("user_id", userId);
+
+  if (updErr) throw updErr;
+}
+
+/**
+ * Crée un avoir (credit note) lié à une facture existante.
+ *
+ * Cas 2 (envoyée non payée) : avoir d'annulation totale → nouvelle facture brouillon.
+ * Cas 3 (payée) : avoir partiel ou total.
+ *
+ * L'avoir est une facture avec :
+ * - invoice_type = 'credit_note'
+ * - related_invoice_id = id de la facture originale
+ * - amount_cents négatif (convention comptable)
+ * - Numéro dans la séquence légale, préfixé "AV-"
+ *
+ * Retourne { creditNote, newDraft? } :
+ * - creditNote : l'avoir créé
+ * - newDraft : uniquement pour le cas 2, le brouillon correctif créé
+ */
+export async function createCreditNote(
+  supabase: SupabaseClient,
+  userId: string,
+  originalInvoiceId: string,
+  input: {
+    /** Montant de l'avoir en centimes (positif). Par défaut : total de la facture originale. */
+    amount_cents?: number;
+    /** Motif / description de l'avoir */
+    reason?: string;
+    /** Si true (cas 2 — envoyée non payée), on crée aussi une facture brouillon correctif */
+    createCorrectiveDraft?: boolean;
+  } = {}
+) {
+  // 1. Charger la facture originale
+  const { data: original, error: getErr } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("id", originalInvoiceId)
+    .eq("user_id", userId)
+    .single();
+
+  if (getErr) throw getErr;
+  if (!original) throw new Error("Facture originale introuvable.");
+  if (original.status === "draft") {
+    throw new Error("Pas besoin d'avoir pour un brouillon — modifie-le directement.");
+  }
+  if (original.invoice_type === "credit_note") {
+    throw new Error("Impossible de créer un avoir sur un avoir.");
+  }
+
+  const creditAmountCents = input.amount_cents ?? original.amount_cents;
+  if (creditAmountCents <= 0 || creditAmountCents > original.amount_cents) {
+    throw new Error(`Montant de l'avoir invalide (max ${formatEUR(original.amount_cents)}).`);
+  }
+
+  const creditNoteNumber = await nextCreditNoteNumber(supabase, userId);
+  const reason = input.reason?.trim() || `Avoir sur facture ${original.number}`;
+  const isFullCancel = creditAmountCents === original.amount_cents;
+
+  // 2. Créer l'avoir
+  const { data: creditNote, error: cnErr } = await supabase
+    .from("invoices")
+    .insert({
+      user_id: userId,
+      number: creditNoteNumber,
+      invoice_type: "credit_note",
+      related_invoice_id: originalInvoiceId,
+      description: reason,
+      quantity: original.quantity,
+      unit_price_cents: original.unit_price_cents
+        ? -Math.round((creditAmountCents / (Number(original.quantity) || 1)))
+        : null,
+      amount_cents: -creditAmountCents,
+      currency: original.currency,
+      operation_type: original.operation_type,
+      client_id: original.client_id,
+      client_email: original.client_email,
+      client_name: original.client_name,
+      client_siren: original.client_siren,
+      client_address: original.client_address,
+      execution_date: original.execution_date,
+      delivery_address: original.delivery_address,
+      discount_terms: original.discount_terms ?? "Néant",
+      status: "draft",
+    })
+    .select("*")
+    .single();
+
+  if (cnErr) throw cnErr;
+
+  // 3. Si annulation totale : marquer la facture originale comme annulée
+  if (isFullCancel) {
+    await supabase
+      .from("invoices")
+      .update({ status: "cancelled" })
+      .eq("id", originalInvoiceId)
+      .eq("user_id", userId);
+  }
+
+  // 4. Cas 2 : créer un brouillon correctif (copie de l'originale)
+  let newDraft = null;
+  if (input.createCorrectiveDraft) {
+    const draftNumber = await nextDraftNumber(supabase, userId);
+    const { data: draft, error: draftErr } = await supabase
+      .from("invoices")
+      .insert({
+        user_id: userId,
+        number: draftNumber,
+        invoice_type: "standard",
+        description: original.description,
+        quantity: original.quantity,
+        unit_price_cents: original.unit_price_cents,
+        amount_cents: original.amount_cents,
+        currency: original.currency,
+        operation_type: original.operation_type,
+        client_id: original.client_id,
+        client_email: original.client_email,
+        client_name: original.client_name,
+        client_siren: original.client_siren,
+        client_address: original.client_address,
+        execution_date: null, // Nouvelle date à renseigner
+        delivery_address: original.delivery_address,
+        discount_terms: original.discount_terms ?? "Néant",
+        due_on: null,
+        status: "draft",
+        draft_number: draftNumber,
+      })
+      .select("*")
+      .single();
+
+    if (draftErr) throw draftErr;
+    newDraft = draft;
+  }
+
+  return {
+    creditNote: creditNote as InvoiceRow,
+    newDraft: newDraft as InvoiceRow | null,
+  };
 }
 
 function assertProfileReady(p: Profile) {

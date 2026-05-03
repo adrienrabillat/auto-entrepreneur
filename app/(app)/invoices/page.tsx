@@ -35,6 +35,7 @@ type Invoice = {
   issued_on: string;
   sent_at: string | null;
   paid_at: string | null;
+  invoice_type?: string;
 };
 
 const STATUS_FILTERS = [
@@ -125,6 +126,7 @@ async function InvoicesListSection({ filter }: { filter: FilterKey }) {
         <ul>
           {list.map((inv) => {
             const displayName = cleanClientName(inv.client_name) || inv.client_email;
+            const isCreditNote = inv.invoice_type === "credit_note";
             return (
               <li key={inv.id} className="relative group">
                 <Link
@@ -135,6 +137,11 @@ async function InvoicesListSection({ filter }: { filter: FilterKey }) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <span className="font-medium text-ink-900 truncate">{inv.description}</span>
+                      {isCreditNote ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-warn-500/10 text-warn-700 px-2 py-0.5 text-[11px] font-semibold">
+                          Avoir
+                        </span>
+                      ) : null}
                       <StatusDot status={inv.status} />
                     </div>
                     <div className="mt-0.5 text-xs text-ink-500 truncate">
@@ -143,7 +150,7 @@ async function InvoicesListSection({ filter }: { filter: FilterKey }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-body font-bold tabular-nums tracking-tight text-ink-900">
+                    <div className={`text-body font-bold tabular-nums tracking-tight ${isCreditNote ? "text-danger-600" : "text-ink-900"}`}>
                       {formatEUR(inv.amount_cents)}
                     </div>
                     {inv.status === "draft" ? <div className="w-8" aria-hidden /> : null}

@@ -62,6 +62,8 @@ create table if not exists public.profiles (
   invoice_number_seed integer not null default 0 check (invoice_number_seed >= 0),
   quote_number_format text not null default 'D-{year}-{seq:4}',
   quote_number_seed integer not null default 0 check (quote_number_seed >= 0),
+  -- Sprint 3 : séquence séparée pour les numéros de brouillons (BROUILLON-XXX)
+  draft_number_seed integer not null default 0 check (draft_number_seed >= 0),
   -- Flag "j'ai déjà facturé cette année" coché à l'onboarding. Déclenche
   -- un modal bloquant au 1er dashboard pour saisir les derniers numéros
   -- et proposer l'import de compta.
@@ -79,7 +81,7 @@ create table if not exists public.invoices (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   client_id uuid references public.clients(id) on delete set null,
-  number text not null,                              -- human-readable, e.g. 2026-0001
+  number text not null,                              -- human-readable, e.g. 2026-0001 or BROUILLON-001
   client_name text,
   client_email text not null,
   client_siren text,                                 -- B2B: client's SIREN (required from 2026 for pro clients)
@@ -87,7 +89,7 @@ create table if not exists public.invoices (
   description text not null,
   quantity numeric(10,2) not null default 1,
   unit_price_cents integer,                          -- prix unitaire HT ; si null on retombe sur amount_cents
-  amount_cents integer not null check (amount_cents > 0),
+  amount_cents integer not null,                     -- positif pour les factures, négatif pour les avoirs
   currency text not null default 'EUR',
   -- "Nature de l'opération" — mandatory from Sept 2026
   operation_type text not null default 'service' check (operation_type in ('service','vente','mixte')),
@@ -102,9 +104,15 @@ create table if not exists public.invoices (
   paid_at timestamptz,
   pdf_path text,                                     -- storage path inside the "invoices" bucket
   xml_path text,                                     -- Factur-X CII XML path (once generated)
+  -- Sprint 3 : avoirs + numérotation brouillons
+  invoice_type text not null default 'standard' check (invoice_type in ('standard', 'credit_note')),
+  related_invoice_id uuid references public.invoices(id) on delete set null,
+  draft_number text,                                 -- numéro temporaire brouillon, conservé comme trace
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (user_id, number)
+  unique (user_id, number),
+  -- Les avoirs ont un amount_cents < 0, les factures > 0
+  check ((invoice_type = 'credit_note' and amount_cents < 0) or (invoice_type = 'standard' and amount_cents > 0))
 );
 
 create index if not exists invoices_user_paid_idx
@@ -112,6 +120,9 @@ create index if not exists invoices_user_paid_idx
   where paid_at is not null;
 create index if not exists invoices_user_status_idx
   on public.invoices(user_id, status);
+create index if not exists invoices_related_idx
+  on public.invoices(related_invoice_id)
+  where related_invoice_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- clients — carnet d'adresses par utilisateur (particulier ou pro)
