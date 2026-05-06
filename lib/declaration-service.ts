@@ -65,16 +65,47 @@ export async function processUserDeclaration(
   }
 
   // Compute revenue: sum of invoices paid during the period.
+  // Sprint 4 : on EXCLUT les factures importées (imported = true) — elles
+  // viennent d'un autre logiciel et ont déjà été déclarées URSSAF par
+  // celui-ci. Les inclure créerait un doublon de cotisations.
   const { startIso, endIso } = monthBounds(periodYear, periodMonth);
   const { data: invoices = [] } = await admin
     .from("invoices")
     .select("amount_cents, paid_at")
     .eq("user_id", user.id)
     .eq("status", "paid")
+    .eq("imported", false)
     .gte("paid_at", startIso)
     .lt("paid_at", endIso);
 
-  const total = (invoices ?? []).reduce((s, i) => s + (i.amount_cents as number), 0);
+  const totalFromInvoices = (invoices ?? []).reduce(
+    (s, i) => s + (i.amount_cents as number),
+    0,
+  );
+
+  // Sprint 4 : agrégation du CA importé via /import (table prior_revenue).
+  // On ne consomme QUE les lignes :
+  //   - de la même période (year, month)
+  //   - non déjà déclarées manuellement par l'AE (already_declared = false)
+  //   - pas encore soumises par Asthia (submitted_at IS NULL)
+  // Cela couvre le cas d'un AE qui démarre Asthia en cours d'année et veut
+  // qu'on rattrape ses déclarations rétroactivement, sans risque de doublon.
+  const { data: priorRows } = await admin
+    .from("prior_revenue")
+    .select("id, amount_cents, already_declared, submitted_at")
+    .eq("user_id", user.id)
+    .eq("period_year", periodYear)
+    .eq("period_month", periodMonth)
+    .eq("already_declared", false)
+    .is("submitted_at", null);
+
+  const priorRevenue = priorRows ?? [];
+  const totalFromPriorRevenue = priorRevenue.reduce(
+    (s, r) => s + (r.amount_cents as number),
+    0,
+  );
+
+  const total = totalFromInvoices + totalFromPriorRevenue;
 
   // Profile guard: SIRET required to submit
   if (!user.siret) {
@@ -118,12 +149,28 @@ export async function processUserDeclaration(
     };
   }
 
+  const submittedAt = new Date().toISOString();
   await upsertDeclaration(admin, user.id, periodYear, periodMonth, {
     total_cents: total,
     status: "submitted",
     urssaf_reference: result.reference,
-    submitted_at: new Date().toISOString(),
+    submitted_at: submittedAt,
   });
+
+  // Sprint 4 : on marque les prior_revenue consommés comme "soumis via Asthia"
+  // pour qu'un re-run du cron ne les rajoute pas dans une déclaration future.
+  // Best-effort : on ne bloque pas la réponse si l'update échoue (l'erreur
+  // serait au pire une ligne marquée à la prochaine exécution).
+  if (priorRevenue.length > 0) {
+    const ids = priorRevenue.map((r) => r.id);
+    await admin
+      .from("prior_revenue")
+      .update({
+        submitted_at: submittedAt,
+        urssaf_reference: result.reference,
+      })
+      .in("id", ids);
+  }
 
   return {
     userId: user.id,

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Send, Check, X, ArrowRight, Trash2, Loader2, Pencil } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ErrorBanner } from "@/components/ui/feedback";
 
 type Quote = {
   id: string;
@@ -38,21 +39,26 @@ export function QuoteActions({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Sprint 5 — uniformisation : on remplace les alert() natifs par un
+  // état d'erreur inline, identique au pattern utilisé dans
+  // invoices/[id]/actions.tsx pour rester cohérent entre modules.
+  const [error, setError] = useState<string | null>(null);
 
   // Un devis converti est "figé" SAUF si la facture liée a été supprimée :
   // dans ce cas on réactive toutes les actions pour permettre reconversion.
   const isConverted = Boolean(quote.converted_invoice_id) && !invoiceDeleted;
 
-  // Helpers : POST/PATCH/DELETE → toast d'erreur si KO, refresh si OK.
+  // Helpers : POST/PATCH/DELETE → erreur inline si KO, refresh si OK.
   async function action(label: string, fn: () => Promise<Response>) {
     setBusy(label);
+    setError(null);
     try {
       const res = await fn();
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Erreur");
       router.refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erreur inattendue");
+      setError(e instanceof Error ? e.message : "Erreur inattendue");
     } finally {
       setBusy(null);
     }
@@ -60,7 +66,7 @@ export function QuoteActions({
 
   async function handleSend() {
     if (!gmailConnected) {
-      alert("Gmail n'est pas connecté. Va dans Paramètres → Reconnecter Gmail.");
+      setError("Gmail n'est pas connecté. Va dans Paramètres → Reconnecter Gmail.");
       return;
     }
     await action("send", () =>
@@ -80,6 +86,7 @@ export function QuoteActions({
 
   async function handleConvert() {
     setBusy("convert");
+    setError(null);
     try {
       const res = await fetch(`/api/quotes/${quote.id}/convert`, { method: "POST" });
       const data = await res.json();
@@ -89,7 +96,7 @@ export function QuoteActions({
       router.push(`/invoices/${data.invoiceId}`);
       router.refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erreur inattendue");
+      setError(e instanceof Error ? e.message : "Erreur inattendue");
     } finally {
       setBusy(null);
     }
@@ -98,6 +105,7 @@ export function QuoteActions({
   async function handleDelete() {
     setConfirmDelete(false);
     setBusy("delete");
+    setError(null);
     try {
       const res = await fetch(`/api/quotes/${quote.id}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
@@ -105,7 +113,7 @@ export function QuoteActions({
       router.push("/quotes");
       router.refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erreur inattendue");
+      setError(e instanceof Error ? e.message : "Erreur inattendue");
       setBusy(null);
     }
   }
@@ -204,6 +212,13 @@ export function QuoteActions({
           Supprimer
         </Button>
       </div>
+
+      {/* Bannière d'erreur inline — pattern identique à invoices/[id]/actions.tsx */}
+      <ErrorBanner
+        message={error}
+        onDismiss={() => setError(null)}
+        className="mt-3"
+      />
 
       <ConfirmDialog
         open={confirmDelete}

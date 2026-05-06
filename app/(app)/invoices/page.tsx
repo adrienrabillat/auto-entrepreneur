@@ -36,6 +36,7 @@ type Invoice = {
   sent_at: string | null;
   paid_at: string | null;
   invoice_type?: string;
+  imported?: boolean;
 };
 
 const STATUS_FILTERS = [
@@ -127,6 +128,7 @@ async function InvoicesListSection({ filter }: { filter: FilterKey }) {
           {list.map((inv) => {
             const displayName = cleanClientName(inv.client_name) || inv.client_email;
             const isCreditNote = inv.invoice_type === "credit_note";
+            const isImported = Boolean(inv.imported);
             return (
               <li key={inv.id} className="relative group">
                 <Link
@@ -142,6 +144,11 @@ async function InvoicesListSection({ filter }: { filter: FilterKey }) {
                           Avoir
                         </span>
                       ) : null}
+                      {isImported ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/10 text-brand-700 px-2 py-0.5 text-[11px] font-semibold">
+                          Importée
+                        </span>
+                      ) : null}
                       <StatusDot status={inv.status} />
                     </div>
                     <div className="mt-0.5 text-xs text-ink-500 truncate">
@@ -153,10 +160,12 @@ async function InvoicesListSection({ filter }: { filter: FilterKey }) {
                     <div className={`text-body font-bold tabular-nums tracking-tight ${isCreditNote ? "text-danger-600" : "text-ink-900"}`}>
                       {formatEUR(inv.amount_cents)}
                     </div>
-                    {inv.status === "draft" ? <div className="w-8" aria-hidden /> : null}
+                    {inv.status === "draft" && !isCreditNote ? <div className="w-8" aria-hidden /> : null}
                   </div>
                 </Link>
-                {inv.status === "draft" ? (
+                {/* Bouton de suppression : brouillons STANDARD uniquement
+                    (pas les avoirs ni les factures importées). */}
+                {inv.status === "draft" && !isCreditNote && !isImported ? (
                   <div className="absolute right-2 top-1/2 -translate-y-1/2">
                     <DeleteDraftButton id={inv.id} />
                   </div>

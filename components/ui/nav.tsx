@@ -61,8 +61,8 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
         })}
       </nav>
 
-      {/* Lien URSSAF obligatoire — partenariat API TDAE */}
-      <div className="mt-auto pt-6">
+      {/* Lien URSSAF + lien légal en pied de sidebar — discret. */}
+      <div className="mt-auto pt-6 space-y-2.5">
         <a
           href="https://www.autoentrepreneur.urssaf.fr"
           target="_blank"
@@ -72,6 +72,14 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
           L&apos;essentiel du statut —{" "}
           <span className="underline underline-offset-2">Autoentrepreneur.urssaf.fr</span>
         </a>
+        {/* Lien légal — Sprint 5 #13. Pas dans la nav principale parce que
+            ce n'est pas une fonctionnalité métier, mais reste accessible. */}
+        <Link
+          href="/legal"
+          className="block text-[11px] leading-snug text-ink-400 hover:text-ink-600 transition-colors px-3.5"
+        >
+          Mentions légales · CGU · Confidentialité
+        </Link>
       </div>
     </aside>
   );

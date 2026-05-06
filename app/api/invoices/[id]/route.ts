@@ -50,7 +50,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   // Fetch to check status
   const { data: invoice, error: getErr } = await supabase
     .from("invoices")
-    .select("id, status")
+    .select("id, status, invoice_type, imported")
     .eq("id", params.id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -58,11 +58,35 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   if (getErr) return NextResponse.json({ error: getErr.message }, { status: 500 });
   if (!invoice) return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
 
+  // Sprint 4 : les factures importées sont figées en lecture (numéro venant
+  // d'un autre logiciel, pas de cycle Asthia derrière). On peut juste les
+  // dé-importer en bloc via une UI dédiée — pas de delete unitaire ici.
+  if (invoice.imported) {
+    return NextResponse.json(
+      {
+        error:
+          "Une facture importée ne peut pas être supprimée individuellement. Utilise l'option 'Tout dé-importer' depuis la page Import.",
+      },
+      { status: 400 }
+    );
+  }
+
   if (invoice.status !== "draft") {
     return NextResponse.json(
       {
         error:
           "Seuls les brouillons peuvent être supprimés. Une facture envoyée ou payée doit être gardée pour des raisons légales.",
+      },
+      { status: 400 }
+    );
+  }
+  // Les avoirs ont déjà un numéro légal attribué (séquence URSSAF sans trou).
+  // Les supprimer créerait un trou dans la chronologie : interdit.
+  if (invoice.invoice_type === "credit_note") {
+    return NextResponse.json(
+      {
+        error:
+          "Un avoir ne peut pas être supprimé : son numéro légal est déjà attribué dans la séquence chronologique.",
       },
       { status: 400 }
     );

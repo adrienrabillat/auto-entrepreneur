@@ -6,6 +6,7 @@ import { formatDate, formatEUR } from "@/lib/format";
 import { InvoiceActions } from "./actions";
 import { ArrowLeft, ExternalLink, FileWarning } from "lucide-react";
 import { cleanClientName } from "@/lib/display-name";
+import { SavedFlash } from "@/components/ui/saved-flash";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,10 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 animate-fade-in-up">
+      {/* Toast "Modifications enregistrées" — apparaît si on arrive depuis
+          /edit avec ?saved=1, puis disparaît tout seul après 2,5 s. */}
+      <SavedFlash />
+
       <div>
         <Link
           href="/invoices"

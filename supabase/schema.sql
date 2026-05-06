@@ -108,6 +108,11 @@ create table if not exists public.invoices (
   invoice_type text not null default 'standard' check (invoice_type in ('standard', 'credit_note')),
   related_invoice_id uuid references public.invoices(id) on delete set null,
   draft_number text,                                 -- numéro temporaire brouillon, conservé comme trace
+  -- Sprint 4 : factures importées depuis un autre logiciel (historique).
+  -- Figées en lecture, exclues des déclarations URSSAF.
+  imported boolean not null default false,
+  imported_at timestamptz,
+  import_source text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, number),
@@ -150,6 +155,31 @@ create table if not exists public.clients (
 
 create index if not exists clients_user_archived_idx on public.clients(user_id, archived);
 create index if not exists clients_user_email_idx on public.clients(user_id, lower(email));
+
+-- ---------------------------------------------------------------------------
+-- prior_revenue — CA encaissé avant Asthia, ventilé par mois et catégorie.
+-- Branché sur le cycle URSSAF via already_declared (Sprint 4).
+-- ---------------------------------------------------------------------------
+create table if not exists public.prior_revenue (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  period_year integer not null check (period_year between 2020 and 2100),
+  period_month integer not null check (period_month between 1 and 12),
+  activity_kind text not null
+    check (activity_kind in ('vente', 'service_bic', 'liberal_bnc')),
+  amount_cents bigint not null check (amount_cents >= 0),
+  -- Sprint 4 : branchement URSSAF
+  already_declared boolean not null default false,
+  submitted_at timestamptz,
+  urssaf_reference text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, period_year, period_month, activity_kind)
+);
+create index if not exists prior_revenue_user_year_idx on public.prior_revenue(user_id, period_year);
+create index if not exists prior_revenue_pending_idx
+  on public.prior_revenue(user_id, period_year, period_month)
+  where already_declared = false and submitted_at is null;
 
 -- ---------------------------------------------------------------------------
 -- Monthly URSSAF declarations

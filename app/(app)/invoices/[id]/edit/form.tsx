@@ -101,7 +101,12 @@ export function EditInvoiceForm({ invoice }: { invoice: InvoiceData }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
-      router.push(`/invoices/${invoice.id}`);
+      // Sprint 5 : flag "saved" passé en query string. La page détail le
+      // détectera (via searchParams) et affichera un toast SavedToast léger
+      // pour confirmer l'édition à l'utilisateur (pattern uniformisé avec
+      // les autres modules — pas de SuccessOverlay pour les éditions de
+      // brouillon, ce serait trop intrusif).
+      router.push(`/invoices/${invoice.id}?saved=1`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inattendue");

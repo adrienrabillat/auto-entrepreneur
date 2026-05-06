@@ -158,7 +158,13 @@ export async function createInvoiceRow(
   );
 }
 
-export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): InvoicePdfData {
+export function pdfDataFromInvoice(
+  profile: Profile,
+  invoice: InvoiceRow,
+  /** Numéro de la facture originale, requis lorsque `invoice` est un avoir
+   *  pour afficher la mention "Avoir relatif à la facture XXX" dans le PDF. */
+  relatedInvoiceNumber?: string,
+): InvoicePdfData {
   assertProfileReady(profile);
   const isCreditNote = invoice.invoice_type === "credit_note";
   const qty = Number(invoice.quantity) || 1;
@@ -168,9 +174,14 @@ export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): Invoi
   const unit = invoice.unit_price_cents != null
     ? Math.abs(invoice.unit_price_cents)
     : Math.round(absAmount / qty);
-  // "Acquittée" si le statut est payé ET que la date de paiement est ≤ la date d'émission
-  // (marqueur d'une facture émise déjà payée, par opposition à un paiement reçu plus tard).
-  const paidAt = invoice.status === "paid" && invoice.paid_at ? invoice.paid_at : undefined;
+  // "Acquittée" : ne s'applique QU'aux vraies factures payées. Pour un avoir,
+  // status='paid' est interne (déclaration URSSAF) et ne doit pas apparaître
+  // visuellement comme "PAYÉE LE …" sur le PDF — l'avoir ne représente pas
+  // un paiement reçu mais un crédit émis.
+  const paidAt =
+    !isCreditNote && invoice.status === "paid" && invoice.paid_at
+      ? invoice.paid_at
+      : undefined;
   return {
     number: invoice.number,
     documentKind: isCreditNote ? "credit_note" : "invoice",
@@ -187,6 +198,7 @@ export function pdfDataFromInvoice(profile: Profile, invoice: InvoiceRow): Invoi
     paymentTerms: invoice.payment_terms ?? undefined,
     discountTerms: invoice.discount_terms ?? "Néant",
     paidAt,
+    relatedInvoiceNumber: isCreditNote ? relatedInvoiceNumber : undefined,
     seller: {
       displayName: profile.display_name!,
       businessName: profile.business_name ?? undefined,
@@ -240,7 +252,14 @@ export async function sendInvoice(
     .eq("user_id", userId)
     .single();
   if (error) throw error;
-  let invoice = invoiceRaw as InvoiceRow;
+  let invoice = invoiceRaw as InvoiceRow & { imported?: boolean };
+
+  // Sprint 4 : les factures importées d'un autre logiciel sont figées —
+  // pas d'envoi par email Asthia (sinon l'AE risque de spammer son client
+  // avec un duplicata d'une facture qu'il a déjà reçue ailleurs).
+  if (invoice.imported) {
+    throw new Error("Une facture importée ne peut pas être renvoyée par email depuis Asthia.");
+  }
 
   // Finalisation du numéro : si la facture a encore un numéro brouillon,
   // on lui attribue le vrai numéro séquentiel légal maintenant.
@@ -249,8 +268,24 @@ export async function sendInvoice(
     invoice = { ...invoice, number: finalNumber };
   }
 
-  const pdfBytes = await generateInvoicePdf(pdfDataFromInvoice(profile, invoice));
-  const filename = `facture-${invoice.number}.pdf`;
+  // Pour un avoir, charger le numéro de la facture originale (mention
+  // "Avoir relatif à la facture XXX" dans le PDF + email).
+  const isCreditNote = invoice.invoice_type === "credit_note";
+  let relatedNumber: string | undefined;
+  if (isCreditNote && invoice.related_invoice_id) {
+    const { data: original } = await supabase
+      .from("invoices")
+      .select("number")
+      .eq("id", invoice.related_invoice_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    relatedNumber = original?.number;
+  }
+
+  const pdfBytes = await generateInvoicePdf(pdfDataFromInvoice(profile, invoice, relatedNumber));
+  const filename = isCreditNote
+    ? `avoir-${invoice.number}.pdf`
+    : `facture-${invoice.number}.pdf`;
   const storagePath = `${userId}/${invoice.id}/${filename}`;
 
   const { error: upErr } = await supabase.storage
@@ -258,51 +293,89 @@ export async function sendInvoice(
     .upload(storagePath, pdfBytes, { contentType: "application/pdf", upsert: true });
   if (upErr) throw upErr;
 
-  const alreadyPaid = invoice.status === "paid" || Boolean(invoice.paid_at);
-  const prettyAmount = formatEUR(invoice.amount_cents);
+  // Pour un avoir, on ne parle pas de "Facture acquittée" même si en base
+  // status='paid' — c'est un détail comptable interne, pas un message client.
+  const alreadyPaid = !isCreditNote && (invoice.status === "paid" || Boolean(invoice.paid_at));
+  // L'avoir est stocké en montant négatif en base ; on l'affiche en valeur
+  // absolue dans la communication client (le PDF affiche déjà "À déduire").
+  const prettyAmount = formatEUR(Math.abs(invoice.amount_cents));
 
-  const subject = alreadyPaid
-    ? `Facture acquittée ${invoice.number} — ${profile.display_name}`
-    : `Facture ${invoice.number} — ${profile.display_name}`;
+  const subject = isCreditNote
+    ? `Avoir ${invoice.number} — ${profile.display_name}`
+    : alreadyPaid
+      ? `Facture acquittée ${invoice.number} — ${profile.display_name}`
+      : `Facture ${invoice.number} — ${profile.display_name}`;
 
-  const text = alreadyPaid
+  const greeting = `Bonjour${invoice.client_name ? " " + invoice.client_name : ""},`;
+  const signature = [
+    profile.display_name,
+    profile.metier ?? "",
+  ].filter(Boolean).join("\n");
+
+  const text = isCreditNote
     ? [
-        `Bonjour${invoice.client_name ? " " + invoice.client_name : ""},`,
+        greeting,
         ``,
-        `Voici en pièce jointe la facture ${invoice.number} (${prettyAmount}) — acquittée, aucun règlement n'est dû.`,
+        `Tu trouveras en pièce jointe l'avoir ${invoice.number} d'un montant de ${prettyAmount}${
+          relatedNumber ? ` relatif à la facture ${relatedNumber}` : ""
+        }.`,
         ``,
-        `Objet : ${invoice.description}`,
+        `Motif : ${invoice.description}`,
         ``,
-        `Merci pour la confiance,`,
-        profile.display_name,
-        profile.metier ?? "",
+        `Cet avoir sera déduit d'une prochaine facture ou remboursé selon les modalités convenues.`,
+        ``,
+        `Bien à toi,`,
+        signature,
       ].join("\n")
-    : [
-        `Bonjour${invoice.client_name ? " " + invoice.client_name : ""},`,
-        ``,
-        `Tu trouveras en pièce jointe la facture ${invoice.number} d'un montant de ${prettyAmount}.`,
-        ``,
-        `Objet : ${invoice.description}`,
-        ``,
-        `Merci !`,
-        profile.display_name,
-        profile.metier ?? "",
-      ].join("\n");
+    : alreadyPaid
+      ? [
+          greeting,
+          ``,
+          `Voici en pièce jointe la facture ${invoice.number} (${prettyAmount}) — acquittée, aucun règlement n'est dû.`,
+          ``,
+          `Objet : ${invoice.description}`,
+          ``,
+          `Merci pour la confiance,`,
+          signature,
+        ].join("\n")
+      : [
+          greeting,
+          ``,
+          `Tu trouveras en pièce jointe la facture ${invoice.number} d'un montant de ${prettyAmount}.`,
+          ``,
+          `Objet : ${invoice.description}`,
+          ``,
+          `Merci !`,
+          signature,
+        ].join("\n");
 
-  const html = alreadyPaid
+  const htmlGreeting = `<p>Bonjour${invoice.client_name ? " " + escapeHtml(invoice.client_name) : ""},</p>`;
+  const htmlSignature = `<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span>`;
+
+  const html = isCreditNote
     ? `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-        <p>Bonjour${invoice.client_name ? " " + escapeHtml(invoice.client_name) : ""},</p>
-        <p>Voici en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
-        <p style="background:#ECF8EE;border:1px solid #16A34A;border-radius:8px;padding:10px 14px;color:#14532D;"><strong>Facture acquittée · Solde dû : 0,00 €</strong><br/>Aucun règlement n'est dû.</p>
-        <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
-        <p>Merci pour la confiance,<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span></p>
+        ${htmlGreeting}
+        <p>Tu trouveras en pièce jointe l'avoir <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>${
+          relatedNumber ? ` relatif à la facture <strong>${escapeHtml(relatedNumber)}</strong>` : ""
+        }.</p>
+        <p style="background:#F1F5F9;border:1px solid #94A3B8;border-radius:8px;padding:10px 14px;color:#334155;"><strong>Avoir à valoir</strong><br/>Cet avoir sera déduit d'une prochaine facture ou remboursé selon les modalités convenues.</p>
+        <p><em>Motif :</em> ${escapeHtml(invoice.description)}</p>
+        <p>Bien à toi,${htmlSignature}</p>
       </div>`
-    : `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-        <p>Bonjour${invoice.client_name ? " " + escapeHtml(invoice.client_name) : ""},</p>
-        <p>Tu trouveras en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
-        <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
-        <p>Merci !<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span></p>
-      </div>`;
+    : alreadyPaid
+      ? `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
+          ${htmlGreeting}
+          <p>Voici en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
+          <p style="background:#ECF8EE;border:1px solid #16A34A;border-radius:8px;padding:10px 14px;color:#14532D;"><strong>Facture acquittée · Solde dû : 0,00 €</strong><br/>Aucun règlement n'est dû.</p>
+          <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
+          <p>Merci pour la confiance,${htmlSignature}</p>
+        </div>`
+      : `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
+          ${htmlGreeting}
+          <p>Tu trouveras en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
+          <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
+          <p>Merci !${htmlSignature}</p>
+        </div>`;
 
   // Dispatcher : choisit automatiquement Gmail ou PDP selon le destinataire
   // et la configuration (env PDP_PROVIDER). Tant que PDP n'est pas activée,
@@ -370,18 +443,29 @@ export async function updateDraftInvoice(
     discount_terms?: string | null;
   }
 ) {
-  // Vérifier que la facture est bien un brouillon
+  // Vérifier que la facture est bien un brouillon STANDARD (pas un avoir,
+  // pas une facture importée).
+  // - Un avoir, même en draft, a déjà un numéro légal et ne doit pas être
+  //   modifiable.
+  // - Une facture importée vient d'un autre logiciel : modifier son contenu
+  //   créerait une incohérence avec l'historique de l'autre outil.
   const { data: invoice, error: getErr } = await supabase
     .from("invoices")
-    .select("id, status")
+    .select("id, status, invoice_type, imported")
     .eq("id", invoiceId)
     .eq("user_id", userId)
     .single();
 
   if (getErr) throw getErr;
   if (!invoice) throw new Error("Facture introuvable.");
+  if (invoice.imported) {
+    throw new Error("Une facture importée est figée en lecture seule.");
+  }
   if (invoice.status !== "draft") {
     throw new Error("Seuls les brouillons peuvent être modifiés directement.");
+  }
+  if (invoice.invoice_type === "credit_note") {
+    throw new Error("Un avoir ne peut pas être modifié : son numéro légal est figé.");
   }
 
   const patch: Record<string, unknown> = {};
@@ -451,17 +535,77 @@ export async function createCreditNote(
   if (original.invoice_type === "credit_note") {
     throw new Error("Impossible de créer un avoir sur un avoir.");
   }
+  // Sprint 4 : on refuse les avoirs sur les factures importées. Le numéro
+  // de l'avoir entrerait dans la séquence Asthia mais référencerait une
+  // facture hors-séquence (importée), ce qui crée une incohérence légale.
+  if ((original as { imported?: boolean }).imported) {
+    throw new Error(
+      "Impossible de créer un avoir sur une facture importée. Émets l'avoir directement dans le logiciel d'origine.",
+    );
+  }
 
-  const creditAmountCents = input.amount_cents ?? original.amount_cents;
-  if (creditAmountCents <= 0 || creditAmountCents > original.amount_cents) {
-    throw new Error(`Montant de l'avoir invalide (max ${formatEUR(original.amount_cents)}).`);
+  // Calcul du montant déjà avoirisé sur cette facture pour éviter le
+  // sur-avoir : on peut faire plusieurs avoirs partiels mais leur somme
+  // ne doit jamais dépasser le montant de la facture originale, sinon on
+  // émettrait un crédit supérieur à ce que le client a payé.
+  //
+  // Les avoirs sont stockés avec amount_cents NÉGATIF — on prend la valeur
+  // absolue pour les sommer.
+  const { data: existingCreditNotes } = await supabase
+    .from("invoices")
+    .select("amount_cents")
+    .eq("user_id", userId)
+    .eq("related_invoice_id", originalInvoiceId)
+    .eq("invoice_type", "credit_note");
+
+  const alreadyCreditedCents = (existingCreditNotes ?? []).reduce(
+    (sum, cn) => sum + Math.abs(cn.amount_cents as number),
+    0,
+  );
+  const remainingCancellableCents = original.amount_cents - alreadyCreditedCents;
+
+  if (remainingCancellableCents <= 0) {
+    throw new Error(
+      `Cette facture a déjà été entièrement avoirisée (${formatEUR(alreadyCreditedCents)} sur ${formatEUR(original.amount_cents)}).`,
+    );
+  }
+
+  const creditAmountCents = input.amount_cents ?? remainingCancellableCents;
+  if (creditAmountCents <= 0) {
+    throw new Error("Le montant de l'avoir doit être strictement positif.");
+  }
+  if (creditAmountCents > remainingCancellableCents) {
+    const remaining = formatEUR(remainingCancellableCents);
+    const original_total = formatEUR(original.amount_cents);
+    throw new Error(
+      alreadyCreditedCents > 0
+        ? `Avoir trop élevé : il reste ${remaining} avoirisable sur cette facture (${formatEUR(alreadyCreditedCents)} déjà émis sur ${original_total}).`
+        : `Montant de l'avoir invalide (max ${original_total}).`,
+    );
   }
 
   const creditNoteNumber = await nextCreditNoteNumber(supabase, userId);
   const reason = input.reason?.trim() || `Avoir sur facture ${original.number}`;
-  const isFullCancel = creditAmountCents === original.amount_cents;
+  // "Full cancel" = la somme cumulée des avoirs (existants + nouveau) atteint
+  // le montant de la facture originale. C'est dans ce cas seulement qu'on
+  // marque l'originale comme cancelled (et uniquement si elle était 'sent',
+  // cf. Fix #3 plus bas).
+  const isFullCancel =
+    alreadyCreditedCents + creditAmountCents === original.amount_cents;
 
-  // 2. Créer l'avoir
+  // 2. Créer l'avoir.
+  //
+  // L'avoir est créé directement en `status: 'paid'` avec `paid_at = now()` :
+  //
+  // - Légalement, un avoir est un acte d'émission immédiat (il n'a pas
+  //   d'état "brouillon" comme une facture, son numéro est déjà figé dans
+  //   la séquence chronologique URSSAF dès la création).
+  // - Comptablement, le `paid_at` représente la date d'effet du crédit.
+  //   Cela garantit que l'avoir est inclus dans la déclaration URSSAF du
+  //   mois en cours (avec amount_cents négatif → réduit le CA déclaré).
+  //   Sans cela, un avoir partiel sur une facture payée ne réduirait pas
+  //   le CA et l'AE déclarerait plus que ce qu'il a réellement encaissé.
+  const nowIso = new Date().toISOString();
   const { data: creditNote, error: cnErr } = await supabase
     .from("invoices")
     .insert({
@@ -485,15 +629,24 @@ export async function createCreditNote(
       execution_date: original.execution_date,
       delivery_address: original.delivery_address,
       discount_terms: original.discount_terms ?? "Néant",
-      status: "draft",
+      status: "paid",
+      paid_at: nowIso,
     })
     .select("*")
     .single();
 
   if (cnErr) throw cnErr;
 
-  // 3. Si annulation totale : marquer la facture originale comme annulée
-  if (isFullCancel) {
+  // 3. Marquer la facture originale comme annulée — UNIQUEMENT si elle
+  //    était `sent` (cas 2 : facture envoyée non payée → on l'annule
+  //    proprement et on émet un brouillon correctif).
+  //
+  //    Pour une facture déjà PAID (cas 3), on NE la passe PAS à 'cancelled'
+  //    même en cas d'avoir total : comptablement, le client a réellement
+  //    payé et la facture reste valide ; c'est l'avoir négatif qui neutralise
+  //    le CA. Marquer la facture "cancelled" effacerait à tort l'historique
+  //    du paiement reçu.
+  if (isFullCancel && original.status === "sent") {
     await supabase
       .from("invoices")
       .update({ status: "cancelled" })

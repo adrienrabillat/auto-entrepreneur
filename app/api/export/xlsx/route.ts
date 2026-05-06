@@ -1,8 +1,22 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import ExcelJS from "exceljs";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Parse et valide le paramètre ?year=YYYY.
+ * Retourne null pour "toutes années" (défaut historique conservé), ou le
+ * numéro d'année validé. Refuse les valeurs absurdes (< 2000 ou > current+1).
+ */
+function parseYearParam(raw: string | null): number | null {
+  if (!raw) return null;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return null;
+  const currentYear = new Date().getFullYear();
+  if (n < 2000 || n > currentYear + 1) return null;
+  return n;
+}
 
 type Invoice = {
   id: string;
@@ -21,6 +35,10 @@ type Invoice = {
   paid_at: string | null;
   due_on: string | null;
   execution_date: string | null;
+  invoice_type?: string;
+  related_invoice_id?: string | null;
+  imported?: boolean;
+  import_source?: string | null;
 };
 
 type Declaration = {
@@ -59,10 +77,40 @@ function natureLabel(t: string): string {
   return t;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
+
+  // ?year=YYYY : filtre par exercice fiscal (= année civile pour les
+  // micro-entrepreneurs). Si absent ou invalide, on exporte tout l'historique
+  // — comportement rétro-compat avec l'ancienne API.
+  const year = parseYearParam(req.nextUrl.searchParams.get("year"));
+
+  // Bornes pour le filtre invoice.issued_on : [year-01-01, (year+1)-01-01).
+  // On filtre côté serveur via gte/lt pour éviter de rapatrier toute la BDD
+  // si l'AE a plusieurs années d'historique.
+  const yearStart = year ? `${year}-01-01` : null;
+  const yearEnd = year ? `${year + 1}-01-01` : null;
+
+  let invoicesQuery = supabase
+    .from("invoices")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("issued_on", { ascending: true });
+  if (yearStart && yearEnd) {
+    invoicesQuery = invoicesQuery.gte("issued_on", yearStart).lt("issued_on", yearEnd);
+  }
+
+  let declsQuery = supabase
+    .from("monthly_declarations")
+    .select("period_year, period_month, total_cents, status, urssaf_reference, submitted_at")
+    .eq("user_id", user.id)
+    .order("period_year", { ascending: true })
+    .order("period_month", { ascending: true });
+  if (year) {
+    declsQuery = declsQuery.eq("period_year", year);
+  }
 
   const [{ data: profile }, { data: invoicesRaw }, { data: declsRaw }] = await Promise.all([
     supabase
@@ -70,17 +118,8 @@ export async function GET() {
       .select("display_name, business_name, siren, siret, metier, email")
       .eq("id", user.id)
       .maybeSingle(),
-    supabase
-      .from("invoices")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("issued_on", { ascending: true }),
-    supabase
-      .from("monthly_declarations")
-      .select("period_year, period_month, total_cents, status, urssaf_reference, submitted_at")
-      .eq("user_id", user.id)
-      .order("period_year", { ascending: true })
-      .order("period_month", { ascending: true }),
+    invoicesQuery,
+    declsQuery,
   ]);
 
   const invoices = (invoicesRaw ?? []) as Invoice[];
@@ -93,11 +132,16 @@ export async function GET() {
 
   // ─── Sheet 1: Factures ─────────────────────────────────────────────────
   {
-    const ws = wb.addWorksheet("Factures", {
+    const sheetName = year ? `Factures ${year}` : "Factures";
+    const ws = wb.addWorksheet(sheetName, {
       views: [{ state: "frozen", ySplit: 1 }],
     });
     ws.columns = [
       { header: "N° facture", key: "number", width: 14 },
+      // Type : "Facture" / "Avoir" — colonne ajoutée Sprint 4 pour rendre
+      // les avoirs explicites côté compta (sinon c'est juste un montant
+      // négatif sans contexte dans la liste).
+      { header: "Type", key: "type", width: 10 },
       { header: "Date émission", key: "issued_on", width: 14, style: { numFmt: "dd/mm/yyyy" } },
       { header: "Date exécution", key: "execution_date", width: 14, style: { numFmt: "dd/mm/yyyy" } },
       { header: "Statut", key: "status", width: 11 },
@@ -116,8 +160,14 @@ export async function GET() {
     styleHeader(ws);
 
     for (const inv of invoices) {
+      // Type composite : combine "Avoir / Facture" et le marqueur "Importée"
+      // pour que les comptables identifient en un coup d'œil les factures
+      // historiques (qui ne sont pas dans la séquence légale Asthia).
+      const baseType = inv.invoice_type === "credit_note" ? "Avoir" : "Facture";
+      const typeLabel = inv.imported ? `${baseType} (importée)` : baseType;
       ws.addRow({
         number: inv.number,
+        type: typeLabel,
         issued_on: parseDate(inv.issued_on),
         execution_date: parseDate(inv.execution_date),
         status: statusLabel(inv.status),
@@ -250,7 +300,12 @@ export async function GET() {
 
   const buffer = await wb.xlsx.writeBuffer();
   const today = new Date().toISOString().slice(0, 10);
-  const filename = `compta-${profile?.display_name?.split(" ").join("-").toLowerCase() || "export"}-${today}.xlsx`;
+  const slug = profile?.display_name?.split(" ").join("-").toLowerCase() || "export";
+  // Filename : "compta-<user>-<year>.xlsx" ou "compta-<user>-<today>.xlsx"
+  // selon qu'on a filtré ou pas.
+  const filename = year
+    ? `compta-${slug}-${year}.xlsx`
+    : `compta-${slug}-${today}.xlsx`;
   return new NextResponse(buffer as ArrayBuffer, {
     status: 200,
     headers: {

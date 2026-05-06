@@ -22,9 +22,22 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     .single();
   if (error || !invoice) return NextResponse.json({ error: "Facture introuvable" }, { status: 404 });
 
+  // Pour un avoir, charger le numéro de la facture originale afin de
+  // l'afficher dans le PDF ("Avoir relatif à la facture F-2026-0042").
+  let relatedNumber: string | undefined;
+  if (invoice.invoice_type === "credit_note" && invoice.related_invoice_id) {
+    const { data: original } = await supabase
+      .from("invoices")
+      .select("number")
+      .eq("id", invoice.related_invoice_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    relatedNumber = original?.number;
+  }
+
   try {
     const profile = await loadProfile(supabase, user.id);
-    const pdf = await generateInvoicePdf(pdfDataFromInvoice(profile, invoice));
+    const pdf = await generateInvoicePdf(pdfDataFromInvoice(profile, invoice, relatedNumber));
     return new NextResponse(Buffer.from(pdf), {
       status: 200,
       headers: {

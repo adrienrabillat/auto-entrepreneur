@@ -44,6 +44,12 @@ export type InvoicePdfData = {
   discountTerms?: string;        // default: "Néant"
   /** Si présente → facture acquittée, stamp "ACQUITTÉE" + "Payée le …" sur le PDF. */
   paidAt?: string;
+  /** Numéro de la facture originale lorsque ce document est un avoir
+   *  (documentKind = 'credit_note'). Affiché en sous-titre du PDF :
+   *  "Avoir relatif à la facture F-2026-0042". Permet au client (et à
+   *  l'administration) de relier sans ambiguïté l'avoir à la facture
+   *  qu'il neutralise. Ignoré pour les autres types de documents. */
+  relatedInvoiceNumber?: string;
   seller: {
     displayName: string;
     businessName?: string;
@@ -178,7 +184,23 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     align: "right",
   });
 
-  if (data.paidAt) {
+  // Sous-titre "Avoir relatif à la facture XXX" pour les avoirs.
+  // C'est une mention juridiquement attendue : le client (et le fisc) doit
+  // pouvoir relier l'avoir à la facture qu'il rectifie. Affichée juste sous
+  // le titre, en italique, pour rester discret.
+  if (isCreditNote && data.relatedInvoiceNumber) {
+    draw(
+      `Avoir relatif à la facture ${data.relatedInvoiceNumber}`,
+      marginX,
+      y - 18,
+      { size: 10, font: italic, color: C_INK_500 }
+    );
+  }
+
+  // Tampon "ACQUITTÉE" : uniquement pour les VRAIES factures payées.
+  // Pour un avoir, le statut "paid" est interne (sert à la déclaration URSSAF)
+  // et n'a pas de sens visuel pour le client.
+  if (data.paidAt && !isCreditNote) {
     // Pastille verte sous le titre, alignée à gauche.
     const label = "ACQUITTÉE";
     const padX = 8;
@@ -200,18 +222,29 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     draw(label, bx + padX, by, { size, font: bold, color: C_PAID });
   }
 
-  y -= data.paidAt ? 52 : 36;
+  // Espace après l'en-tête : un peu plus bas si tampon ACQUITTÉE ou sous-titre avoir.
+  const hasSubtitle = (data.paidAt && !isCreditNote) || (isCreditNote && data.relatedInvoiceNumber);
+  y -= hasSubtitle ? 52 : 36;
 
   // ----------------------------------------------------------------
   // Ligne méta : Date d'émission / Règlement (ou "Payée le") / Exécution
+  // Pour un avoir : la colonne "Règlement" n'a pas de sens (l'avoir n'est
+  // pas à régler), on la remplace par "TYPE = Avoir d'annulation/partiel".
   // ----------------------------------------------------------------
   const metaCols = [
     { label: "DATE D'ÉMISSION", value: formatFr(data.issuedOn) },
-    data.paidAt
-      ? { label: "PAYÉE LE", value: formatFr(data.paidAt.slice(0, 10)) }
-      : data.dueOn
-        ? { label: "DATE DE RÈGLEMENT", value: formatFr(data.dueOn) }
-        : { label: "RÈGLEMENT", value: data.paymentTerms || "À réception" },
+    isCreditNote
+      ? {
+          label: "TYPE",
+          value: data.relatedInvoiceNumber
+            ? `Avoir · réf. ${data.relatedInvoiceNumber}`
+            : "Avoir",
+        }
+      : data.paidAt
+        ? { label: "PAYÉE LE", value: formatFr(data.paidAt.slice(0, 10)) }
+        : data.dueOn
+          ? { label: "DATE DE RÈGLEMENT", value: formatFr(data.dueOn) }
+          : { label: "RÈGLEMENT", value: data.paymentTerms || "À réception" },
     data.executionDate
       ? { label: "DATE D'EXÉCUTION", value: formatFr(data.executionDate) }
       : { label: "NATURE", value: operationLabel(data.operationType) },
@@ -356,31 +389,71 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
 
   y -= 24;
 
-  // Ligne "Solde dû" — toujours affichée. Passe à 0 quand la facture est
-  // acquittée (= paiement déjà reçu), colorée en vert pour éviter toute
-  // ambiguïté avec le client.
-  const paid = Boolean(data.paidAt);
-  draw("Solde dû", totalsLeft, y, {
-    size: 10, font: bold, color: paid ? C_PAID : C_INK_900,
-  });
-  draw(paid ? "0,00 €" : formatCurrency(data.amountCents, data.currency), totalX, y, {
-    size: 12, font: bold, color: paid ? C_PAID : C_INK_900, align: "right",
-  });
-  if (paid) {
-    draw("· Facture acquittée", totalsLeft + 55, y, {
-      size: 9, font: italic, color: C_PAID,
+  // Ligne "Solde dû" — pour une FACTURE :
+  //   - non payée : montant à régler en couleur ink-900
+  //   - payée    : 0,00 € en vert + mention "Facture acquittée"
+  // Pour un AVOIR : remplacée par "À déduire" (le montant indique un crédit
+  // accordé au client, pas une somme à payer).
+  if (isCreditNote) {
+    draw("À déduire", totalsLeft, y, {
+      size: 10, font: bold, color: C_INK_900,
     });
+    draw(`- ${formatCurrency(data.amountCents, data.currency)}`, totalX, y, {
+      size: 12, font: bold, color: C_INK_900, align: "right",
+    });
+    draw("· Avoir à valoir", totalsLeft + 55, y, {
+      size: 9, font: italic, color: C_INK_500,
+    });
+  } else {
+    const paid = Boolean(data.paidAt);
+    draw("Solde dû", totalsLeft, y, {
+      size: 10, font: bold, color: paid ? C_PAID : C_INK_900,
+    });
+    draw(paid ? "0,00 €" : formatCurrency(data.amountCents, data.currency), totalX, y, {
+      size: 12, font: bold, color: paid ? C_PAID : C_INK_900, align: "right",
+    });
+    if (paid) {
+      draw("· Facture acquittée", totalsLeft + 55, y, {
+        size: 9, font: italic, color: C_PAID,
+      });
+    }
   }
 
   y -= 28;
 
   // ----------------------------------------------------------------
   // Bloc règlement
-  //   • facture normale  → IBAN / BIC / référence
+  //   • avoir            → bandeau explicatif "Avoir à valoir / déduire
+  //                        sur la prochaine facture", pas d'IBAN
   //   • facture acquittée → bandeau vert "Paiement reçu", pas d'IBAN
+  //   • facture normale   → IBAN / BIC / référence
   // ----------------------------------------------------------------
   y -= 6;
-  if (data.paidAt) {
+  if (isCreditNote) {
+    // Bandeau explicatif (gris/navy) — pas de demande de paiement.
+    const bw = innerW;
+    const bh = 56;
+    const by = y - bh + 12;
+    page.drawRectangle({
+      x: marginX, y: by, width: bw, height: bh,
+      color: C_LINE_SOFT, borderColor: C_INK_400, borderWidth: 0.6,
+    });
+    draw("AVOIR À VALOIR", marginX + 14, y - 4, {
+      size: 9, font: bold, color: C_INK_700,
+    });
+    const explainLine1 = data.relatedInvoiceNumber
+      ? `Cet avoir d'un montant de ${formatCurrency(data.amountCents, data.currency)} concerne la facture ${data.relatedInvoiceNumber}.`
+      : `Cet avoir d'un montant de ${formatCurrency(data.amountCents, data.currency)} vous est accordé.`;
+    draw(explainLine1, marginX + 14, y - 20, {
+      size: 9.5, font: regular, color: C_INK_700,
+    });
+    draw(
+      "Il sera déduit d'une prochaine facture ou remboursé selon les modalités convenues.",
+      marginX + 14, y - 34,
+      { size: 9.5, font: regular, color: C_INK_700 }
+    );
+    y -= bh + 18;
+  } else if (data.paidAt) {
     // Bandeau "Paiement reçu"
     const bw = innerW;
     const bh = 40;
@@ -482,6 +555,10 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     iban: data.seller.iban,
     bic: data.seller.bic,
     paid: Boolean(data.paidAt),
+    // EN 16931 / Factur-X : un avoir DOIT utiliser TypeCode 381 et référencer
+    // la facture qu'il rectifie via InvoiceReferencedDocument.
+    documentTypeCode: isCreditNote ? "381" : "380",
+    relatedInvoiceNumber: data.relatedInvoiceNumber,
     seller: {
       legalName: sellerLegalLabel(data),
       siren: data.seller.siren,

@@ -49,6 +49,16 @@ export type FacturxInput = {
   bic?: string;
   /** Acquittée : aucun solde à régler. Affecte DuePayableAmount. */
   paid?: boolean;
+  /** Type de document UN/CEFACT (UNTDID 1001) :
+   *  - 380 = Commercial invoice (facture commerciale, défaut)
+   *  - 381 = Commercial credit note (avoir / note de crédit)
+   *  Norme EN 16931 : un avoir DOIT utiliser TypeCode 381 et avoir un montant
+   *  négatif (ce que le PDF rend visuellement en valeur absolue). */
+  documentTypeCode?: "380" | "381";
+  /** Référence à la facture originale lorsque ce document est un avoir
+   *  (TypeCode 381). Encodé dans BillingSpecifiedReferencedDocument pour la
+   *  traçabilité comptable et la reconnaissance par les PDP. */
+  relatedInvoiceNumber?: string;
   seller: {
     legalName: string;
     siren: string;
@@ -171,7 +181,7 @@ export function buildFacturxBasicXml(inp: FacturxInput): string {
   </rsm:ExchangedDocumentContext>
   <rsm:ExchangedDocument>
     <ram:ID>${esc(inp.number)}</ram:ID>
-    <ram:TypeCode>380</ram:TypeCode>
+    <ram:TypeCode>${esc(inp.documentTypeCode ?? "380")}</ram:TypeCode>
     <ram:IssueDateTime>
       <udt:DateTimeString format="102">${issuedCompact}</udt:DateTimeString>
     </ram:IssueDateTime>
@@ -250,7 +260,14 @@ ${paymentTermsBlock}
         <ram:TaxTotalAmount currencyID="${esc(inp.currency)}">0.00</ram:TaxTotalAmount>
         <ram:GrandTotalAmount>${total}</ram:GrandTotalAmount>
         <ram:DuePayableAmount>${due}</ram:DuePayableAmount>
-      </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
+      </ram:SpecifiedTradeSettlementHeaderMonetarySummation>${
+        inp.documentTypeCode === "381" && inp.relatedInvoiceNumber
+          ? `
+      <ram:InvoiceReferencedDocument>
+        <ram:IssuerAssignedID>${esc(inp.relatedInvoiceNumber)}</ram:IssuerAssignedID>
+      </ram:InvoiceReferencedDocument>`
+          : ""
+      }
     </ram:ApplicableHeaderTradeSettlement>
   </rsm:SupplyChainTradeTransaction>
 </rsm:CrossIndustryInvoice>

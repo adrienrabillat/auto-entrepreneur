@@ -68,6 +68,24 @@ export default async function LandingPage({
           ) : null}
         </div>
       </section>
+
+      {/* Footer minimaliste — accès aux pages légales avant connexion.
+          Sprint 5 #13 : obligatoire pour conformité LCEN. */}
+      <footer className="px-5 md:px-8 py-6 max-w-6xl mx-auto w-full">
+        <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
+          <Link href="/legal/mentions-legales" className="hover:text-ink-700 transition-colors">
+            Mentions légales
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/legal/cgu" className="hover:text-ink-700 transition-colors">
+            CGU
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/legal/confidentialite" className="hover:text-ink-700 transition-colors">
+            Confidentialité
+          </Link>
+        </div>
+      </footer>
     </main>
   );
 }

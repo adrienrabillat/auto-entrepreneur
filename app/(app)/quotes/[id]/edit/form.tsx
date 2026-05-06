@@ -96,7 +96,9 @@ export function EditQuoteForm({ quote }: { quote: QuoteData }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
-      router.push(`/quotes/${quote.id}`);
+      // Sprint 5 — uniformisation : ?saved=1 déclenche le SavedToast sur
+      // la page détail (cohérent avec invoices/[id]/edit).
+      router.push(`/quotes/${quote.id}?saved=1`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inattendue");

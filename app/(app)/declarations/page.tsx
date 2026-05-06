@@ -1,10 +1,11 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { StatCard } from "@/components/ui/card";
 import { monthLabel, formatEUR, formatDate } from "@/lib/format";
 import { RunMyDeclaration } from "./run-button";
 import { ExportExcelButton } from "@/components/ui/export-excel";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, FileSpreadsheet, ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,28 @@ export default async function DeclarationsPage() {
           hint="Automatique, tu n'as rien à faire"
         />
       </div>
+
+      {/* Lien vers /import — visible pour tous (pas conditionné à
+          had_prior_activity) afin que les AE qui ont oublié de cocher la
+          case à l'onboarding puissent quand même y accéder. Sprint 4 — B2. */}
+      <Link
+        href="/import"
+        className="surface p-4 flex items-center gap-3 hover:shadow-pop transition-shadow group"
+      >
+        <div className="h-10 w-10 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600 shrink-0">
+          <FileSpreadsheet size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-small font-medium text-ink-900">
+            Importer du CA déjà encaissé
+          </p>
+          <p className="text-xs text-ink-500">
+            Si tu as démarré ton activité avant Asthia, saisis ton CA passé
+            ici pour qu&apos;il soit pris en compte dans les déclarations URSSAF.
+          </p>
+        </div>
+        <ArrowRight size={16} className="text-ink-400 group-hover:text-brand-600 transition-colors shrink-0" />
+      </Link>
 
       <section>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { ImportRevenueForm } from "./form";
-import { ArrowLeft, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileSpreadsheet, FileUp } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,11 @@ export const dynamic = "force-dynamic";
  * Le form client en aval (ImportRevenueForm) gère la grille de saisie et
  * l'upsert vers la table prior_revenue.
  */
-export default async function ImportPage() {
+export default async function ImportPage({
+  searchParams,
+}: {
+  searchParams?: { year?: string };
+}) {
   const supabase = createClient();
   const user = await getCurrentUser();
   if (!user) redirect("/");
@@ -55,17 +59,34 @@ export default async function ImportPage() {
     );
   }
 
-  // Construction des périodes à saisir depuis le 1er janvier de l'année
-  // courante jusqu'à la dernière période entièrement écoulée.
+  // Année cible : on accepte ?year=YYYY pour permettre à l'AE d'éditer
+  // une année passée (ex: importer son CA 2024 a posteriori). Garde-fou :
+  // limité aux 5 dernières années (current → current-4) pour éviter qu'on
+  // se retrouve à saisir des données de 2010.
   const now = new Date();
-  const year = now.getFullYear();
-  const periods = buildPastPeriods(now, profile.urssaf_frequency as "monthly" | "quarterly");
+  const currentYear = now.getFullYear();
+  const requestedYear = parseInt(searchParams?.year ?? "", 10);
+  const year =
+    Number.isFinite(requestedYear) &&
+    requestedYear >= currentYear - 4 &&
+    requestedYear <= currentYear
+      ? requestedYear
+      : currentYear;
 
-  // Précharge des entrées déjà saisies. Si l'user revient sur la page
-  // pour modifier, le form les affiche en valeur initiale.
+  // Liste des années sélectionnables : current et 4 années précédentes.
+  // On les passe au form pour qu'il rende un sélecteur (pills).
+  const availableYears: number[] = [];
+  for (let y = currentYear; y >= currentYear - 4; y--) availableYears.push(y);
+
+  // Construction des périodes à saisir.
+  // - Année passée : toutes les périodes (12 mois ou 4 trimestres).
+  // - Année courante : périodes entièrement écoulées uniquement.
+  const periods = buildAvailablePeriods(now, year, profile.urssaf_frequency as "monthly" | "quarterly");
+
+  // Précharge des entrées déjà saisies POUR L'ANNÉE CIBLE.
   const { data: existing } = await supabase
     .from("prior_revenue")
-    .select("period_year, period_month, activity_kind, amount_cents")
+    .select("period_year, period_month, activity_kind, amount_cents, already_declared, submitted_at")
     .eq("user_id", user.id)
     .eq("period_year", year);
 
@@ -84,12 +105,35 @@ export default async function ImportPage() {
         </div>
         <ImportRevenueForm
           year={year}
+          availableYears={availableYears}
           activityKind={profile.activity_kind as "vente" | "service_bic" | "liberal_bnc" | "mixte"}
           frequency={profile.urssaf_frequency as "monthly" | "quarterly"}
           periods={periods}
           existing={existing ?? []}
           alreadyResolved={Boolean(profile.prior_activity_resolved)}
         />
+
+        {/* Lien secondaire vers l'import de factures historiques.
+            Sépare bien les 2 use-cases : ici on saisit du CA agrégé,
+            là-bas on importe des factures détaillées d'un autre logiciel. */}
+        <Link
+          href="/import/factures"
+          className="surface p-4 flex items-center gap-3 hover:shadow-pop transition-shadow group"
+        >
+          <div className="h-10 w-10 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600 shrink-0">
+            <FileUp size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-small font-medium text-ink-900">
+              Tu changes de logiciel ? Importe tes factures historiques
+            </p>
+            <p className="text-xs text-ink-500">
+              Téléverse un CSV ou XLSX pour rapatrier ton historique en lecture
+              seule (pas de re-déclaration URSSAF, pas d&apos;envoi email).
+            </p>
+          </div>
+          <ArrowRight size={16} className="text-ink-400 group-hover:text-brand-600 transition-colors shrink-0" />
+        </Link>
       </div>
     </div>
   );
@@ -110,41 +154,48 @@ function BackLink() {
 }
 
 /**
- * Construit la liste des périodes passées de l'année courante.
- * - Mensuel : tous les mois de janvier jusqu'au mois précédent inclus.
- * - Trimestriel : tous les trimestres entièrement écoulés.
- * On ne propose pas de saisir la période en cours : elle est déjà alimentée
- * par les vraies factures émises dans l'app.
+ * Construit la liste des périodes saisissables pour `targetYear`.
  *
- * Renvoie un tableau de { month: 1-12, label: "Janvier 2026" } trié
- * du plus ancien au plus récent.
+ * - Si `targetYear` est strictement avant l'année en cours : toutes les
+ *   périodes sont disponibles (12 mois ou 4 trimestres).
+ * - Si `targetYear` est l'année en cours : seules les périodes entièrement
+ *   écoulées (depuis janvier jusqu'au mois/trimestre précédent inclus).
+ * - Si `targetYear` est une année future : aucune période (l'UI gère
+ *   l'affichage du cas vide).
+ *
+ * Trié du plus ancien au plus récent.
  */
-function buildPastPeriods(
+function buildAvailablePeriods(
   now: Date,
+  targetYear: number,
   frequency: "monthly" | "quarterly",
 ): { month: number; label: string }[] {
-  const year = now.getFullYear();
+  const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // 1-12
+
+  // Limite supérieure : pour l'année courante = mois en cours, sinon = 13
+  // (= toute l'année saisissable).
+  const monthCap = targetYear < currentYear ? 13 : currentYear === targetYear ? currentMonth : 1;
 
   if (frequency === "monthly") {
     const out: { month: number; label: string }[] = [];
-    for (let m = 1; m < currentMonth; m++) {
-      out.push({ month: m, label: monthLabel(m, year) });
+    for (let m = 1; m < monthCap; m++) {
+      out.push({ month: m, label: monthLabel(m, targetYear) });
     }
     return out;
   }
 
   // Trimestriel : T1 = mois 1-3, T2 = 4-6, T3 = 7-9, T4 = 10-12.
-  // Un trimestre est "entièrement écoulé" si son dernier mois est < mois en cours.
+  // Un trimestre est "entièrement écoulé" si son dernier mois est < monthCap.
   const out: { month: number; label: string }[] = [];
   const trimesters = [
-    { start: 1, end: 3, label: `T1 ${year} (jan–mars)` },
-    { start: 4, end: 6, label: `T2 ${year} (avr–juin)` },
-    { start: 7, end: 9, label: `T3 ${year} (juil–sept)` },
-    { start: 10, end: 12, label: `T4 ${year} (oct–déc)` },
+    { start: 1, end: 3, label: `T1 ${targetYear} (jan–mars)` },
+    { start: 4, end: 6, label: `T2 ${targetYear} (avr–juin)` },
+    { start: 7, end: 9, label: `T3 ${targetYear} (juil–sept)` },
+    { start: 10, end: 12, label: `T4 ${targetYear} (oct–déc)` },
   ];
   for (const t of trimesters) {
-    if (t.end < currentMonth) {
+    if (t.end < monthCap) {
       out.push({ month: t.start, label: t.label });
     }
   }

@@ -8,6 +8,8 @@ import { HeroAmount } from "./hero-amount";
 import { initialsFrom } from "@/lib/initials";
 import { PriorActivityModal } from "./prior-activity-modal";
 import { cleanClientName } from "@/lib/display-name";
+import { ThresholdCard } from "./threshold-card";
+import type { ActivityKind } from "@/lib/urssaf-thresholds";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +36,9 @@ export default async function DashboardPage() {
   const prevMonthEnd = monthStart;
   const yearStart = new Date(now.getFullYear(), 0, 1);
 
-  const [invoicesRes, profileRes] = await Promise.all([
+  // Sprint 4 : on charge aussi le prior_revenue de l'année pour la
+  // ThresholdCard (et l'activity_kind pour connaître le seuil applicable).
+  const [invoicesRes, profileRes, priorRes] = await Promise.all([
     supabase
       .from("invoices")
       .select("*")
@@ -43,12 +47,18 @@ export default async function DashboardPage() {
       .limit(100),
     supabase
       .from("profiles")
-      .select("display_name, had_prior_activity, prior_activity_resolved, invoice_number_format, quote_number_format")
+      .select("display_name, had_prior_activity, prior_activity_resolved, invoice_number_format, quote_number_format, activity_kind")
       .eq("id", user!.id)
       .maybeSingle(),
+    supabase
+      .from("prior_revenue")
+      .select("amount_cents, activity_kind")
+      .eq("user_id", user!.id)
+      .eq("period_year", now.getFullYear()),
   ]);
   const all = (invoicesRes.data ?? []) as Invoice[];
   const profile = profileRes.data;
+  const priorRows = (priorRes.data ?? []) as { amount_cents: number; activity_kind: string }[];
   // Modal "tu as déjà facturé cette année" : on l'affiche tant que l'user
   // a coché la case à l'onboarding (had_prior_activity) sans avoir saisi
   // ses derniers numéros (prior_activity_resolved). C'est volontairement
@@ -71,6 +81,25 @@ export default async function DashboardPage() {
   const monthCollected = sumBetween(monthStart);
   const prevMonthCollected = sumBetween(prevMonthStart, prevMonthEnd);
   const yearCollected = sumBetween(yearStart);
+
+  // Sprint 4 — agrégats prior_revenue pour la ThresholdCard.
+  const priorTotal = priorRows.reduce((s, r) => s + r.amount_cents, 0);
+  const priorService = priorRows
+    .filter((r) => r.activity_kind === "service_bic" || r.activity_kind === "liberal_bnc")
+    .reduce((s, r) => s + r.amount_cents, 0);
+  // Pour les factures Asthia, on a operation_type sur la facture mais pas
+  // de cohérence directe avec activity_kind. Heuristique : on considère
+  // operation_type='service' comme part services. Si l'AE est en mixte,
+  // c'est cette part qui compte pour le sous-seuil 77 700 €.
+  const invoiceServiceCollected = all
+    .filter((i) => {
+      if (!i.paid_at) return false;
+      const d = new Date(i.paid_at);
+      if (d < yearStart) return false;
+      const op = (i as Invoice & { operation_type?: string }).operation_type;
+      return op === "service";
+    })
+    .reduce((s, i) => s + i.amount_cents, 0);
 
   const outstandingInvoices = all.filter((i) => i.status === "sent");
   const outstanding = outstandingInvoices.reduce((s, i) => s + i.amount_cents, 0);
@@ -157,6 +186,22 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {/* Carte Seuil annuel — combine B3 (lien import + récap) et B5
+          (barre de progression vers le seuil + alerte). On ne l'affiche
+          que si l'AE a renseigné son activity_kind à l'onboarding ; sans
+          ça, on ne saurait pas quel seuil appliquer. */}
+      {profile?.activity_kind ? (
+        <ThresholdCard
+          activityKind={profile.activity_kind as ActivityKind}
+          invoicesCents={yearCollected}
+          priorRevenueCents={priorTotal}
+          priorRevenueServiceCents={priorService}
+          invoicesServiceCents={invoiceServiceCollected}
+          year={now.getFullYear()}
+          resolved={Boolean(profile?.prior_activity_resolved)}
+        />
+      ) : null}
 
       {/* 2 stats — en attente + année */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">

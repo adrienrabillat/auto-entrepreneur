@@ -20,8 +20,11 @@ export default async function EditInvoicePage({ params }: { params: { id: string
 
   if (!invoice) notFound();
 
-  // Seuls les brouillons sont modifiables
-  if (invoice.status !== "draft") {
+  // Seuls les brouillons standard sont modifiables.
+  // Les avoirs (même en draft) sont figés : leur numéro légal a déjà été
+  // attribué, les modifier ou supprimer créerait un trou dans la séquence
+  // chronologique URSSAF (illégal).
+  if (invoice.status !== "draft" || invoice.invoice_type === "credit_note") {
     notFound();
   }
 

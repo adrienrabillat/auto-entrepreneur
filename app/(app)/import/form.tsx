@@ -18,6 +18,8 @@ type ExistingEntry = {
   period_month: number;
   activity_kind: string;
   amount_cents: number;
+  already_declared?: boolean | null;
+  submitted_at?: string | null;
 };
 
 /**
@@ -51,6 +53,7 @@ const COLUMNS_BY_ACTIVITY: Record<ActivityKind, { id: LeafKind; label: string }[
  */
 export function ImportRevenueForm({
   year,
+  availableYears,
   activityKind,
   frequency,
   periods,
@@ -58,6 +61,9 @@ export function ImportRevenueForm({
   alreadyResolved,
 }: {
   year: number;
+  /** Années sélectionnables (current → current-4). Permet à l'AE de
+   *  basculer entre années pour saisir/modifier des périodes passées. */
+  availableYears: number[];
   activityKind: ActivityKind;
   frequency: Frequency;
   periods: Period[];
@@ -77,10 +83,47 @@ export function ImportRevenueForm({
     return m;
   }, [existing]);
 
+  // État : flag "déjà déclaré à l'URSSAF" par période.
+  // Un toggle par mois/trimestre (pas par cellule) — en pratique l'AE déclare
+  // une période entière à la fois, pas une catégorie spécifique. Si toutes
+  // les lignes de cette période sont already_declared en BD, on coche.
+  const initialAlreadyDeclared = useMemo(() => {
+    const byPeriod = new Map<number, { total: number; declared: number; locked: boolean }>();
+    for (const e of existing) {
+      const slot = byPeriod.get(e.period_month) ?? { total: 0, declared: 0, locked: false };
+      slot.total += 1;
+      if (e.already_declared) slot.declared += 1;
+      // Si une ligne a déjà été soumise via Asthia (submitted_at non null),
+      // la période est "verrouillée" : on ne peut plus changer le flag car
+      // ça créerait une incohérence avec la déclaration mensuelle déjà
+      // envoyée à l'URSSAF.
+      if (e.submitted_at) slot.locked = true;
+      byPeriod.set(e.period_month, slot);
+    }
+    const m = new Map<number, { checked: boolean; locked: boolean }>();
+    for (const [month, s] of byPeriod) {
+      m.set(month, { checked: s.declared > 0 && s.declared === s.total, locked: s.locked });
+    }
+    return m;
+  }, [existing]);
+
   const [values, setValues] = useState<Map<string, string>>(initial);
+  const [alreadyDeclared, setAlreadyDeclared] = useState<Map<number, { checked: boolean; locked: boolean }>>(initialAlreadyDeclared);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function setPeriodDeclared(month: number, checked: boolean) {
+    setAlreadyDeclared((prev) => {
+      const next = new Map(prev);
+      const current = next.get(month);
+      // Verrouillé si au moins une ligne de cette période a déjà été
+      // soumise par Asthia (submitted_at non null). Bouton inerte.
+      if (current?.locked) return next;
+      next.set(month, { checked, locked: false });
+      return next;
+    });
+  }
 
   function setCell(month: number, kind: LeafKind, raw: string) {
     setValues((prev) => {
@@ -121,8 +164,10 @@ export function ImportRevenueForm({
         period_month: number;
         activity_kind: LeafKind;
         amount_cents: number;
+        already_declared: boolean;
       }[] = [];
       for (const p of periods) {
+        const declaredFlag = alreadyDeclared.get(p.month)?.checked ?? false;
         for (const c of columns) {
           const raw = values.get(`${p.month}-${c.id}`) ?? "";
           // Champ vraiment vide = on ne touche pas la BDD pour cette cellule.
@@ -133,6 +178,10 @@ export function ImportRevenueForm({
             period_month: p.month,
             activity_kind: c.id,
             amount_cents: parseToCents(raw),
+            // Flag "déjà déclaré" propagé sur toutes les catégories de la
+            // période. Si l'AE coche, ces lignes ne seront jamais soumises
+            // à l'URSSAF par le cron (= sécurité anti-doublon).
+            already_declared: declaredFlag,
           });
         }
       }
@@ -189,6 +238,32 @@ export function ImportRevenueForm({
 
   return (
     <div className="space-y-5">
+      {/* Sélecteur d'année — pills horizontales. Chaque pill est un Link
+          (href=?year=YYYY) → la page recharge avec les bonnes périodes
+          + entrées préchargées. Pas de state interne pour rester en
+          synchro avec l'URL et permettre le bookmark / partage. */}
+      {availableYears.length > 1 ? (
+        <div className="inline-flex bg-surface-2 p-1 rounded-full overflow-x-auto max-w-full">
+          {availableYears.map((y) => {
+            const active = y === year;
+            return (
+              <a
+                key={y}
+                href={`/import?year=${y}`}
+                className={
+                  "px-4 py-1.5 rounded-full text-small font-medium whitespace-nowrap transition-all " +
+                  (active
+                    ? "bg-surface text-ink-900 shadow-hair"
+                    : "text-ink-500 hover:text-ink-900")
+                }
+              >
+                {y}
+              </a>
+            );
+          })}
+        </div>
+      ) : null}
+
       {alreadyResolved ? (
         <div className="rounded-2xl bg-brand-500/5 border border-brand-500/15 p-3.5 flex items-start gap-2.5 text-xs text-ink-600">
           <Info size={14} className="mt-0.5 shrink-0 text-brand-600" />
@@ -212,32 +287,72 @@ export function ImportRevenueForm({
                     {c.label}
                   </th>
                 ))}
+                {/* Colonne flag "déjà déclaré à l'URSSAF" — par période.
+                    L'AE coche pour les périodes qu'il a déjà déclarées
+                    manuellement avant Asthia (sécurité anti-doublon). */}
+                <th
+                  className="text-center font-medium px-3 py-3 whitespace-nowrap"
+                  title="Coche si tu as déjà déclaré cette période manuellement à l'URSSAF (Asthia ne re-soumettra pas)"
+                >
+                  Déjà
+                  <br />
+                  déclaré
+                </th>
               </tr>
             </thead>
             <tbody>
-              {periods.map((p) => (
-                <tr key={p.month} className="border-t border-ink-100">
-                  <td className="px-4 py-2.5 text-ink-900 capitalize">{p.label}</td>
-                  {columns.map((c) => (
-                    <td key={c.id} className="px-2 py-2">
-                      <div className="relative">
+              {periods.map((p) => {
+                const declaredEntry = alreadyDeclared.get(p.month);
+                const isLocked = Boolean(declaredEntry?.locked);
+                const isChecked = Boolean(declaredEntry?.checked);
+                return (
+                  <tr key={p.month} className="border-t border-ink-100">
+                    <td className="px-4 py-2.5 text-ink-900 capitalize">{p.label}</td>
+                    {columns.map((c) => (
+                      <td key={c.id} className="px-2 py-2">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={values.get(`${p.month}-${c.id}`) ?? ""}
+                            onChange={(e) => setCell(p.month, c.id, e.target.value)}
+                            placeholder="0,00"
+                            className="h-10 w-full rounded-lg bg-surface px-3 pr-7 text-right text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow tabular-nums"
+                            aria-label={`${c.label} — ${p.label}`}
+                          />
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-400 pointer-events-none">
+                            €
+                          </span>
+                        </div>
+                      </td>
+                    ))}
+                    {/* Toggle "déjà déclaré". Si la période a déjà été
+                        soumise par Asthia (submitted_at non null), on
+                        verrouille — ne pas créer d'incohérence en BD. */}
+                    <td className="px-3 py-2 text-center">
+                      <label
+                        className={`inline-flex items-center justify-center cursor-pointer ${
+                          isLocked ? "cursor-not-allowed opacity-50" : ""
+                        }`}
+                        title={
+                          isLocked
+                            ? "Période déjà soumise via Asthia — verrouillée"
+                            : "Coche si tu as déjà déclaré cette période à l'URSSAF avant Asthia"
+                        }
+                      >
                         <input
-                          type="text"
-                          inputMode="decimal"
-                          value={values.get(`${p.month}-${c.id}`) ?? ""}
-                          onChange={(e) => setCell(p.month, c.id, e.target.value)}
-                          placeholder="0,00"
-                          className="h-10 w-full rounded-lg bg-surface px-3 pr-7 text-right text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow tabular-nums"
-                          aria-label={`${c.label} — ${p.label}`}
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isLocked}
+                          onChange={(e) => setPeriodDeclared(p.month, e.target.checked)}
+                          className="h-4 w-4 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+                          aria-label={`Période ${p.label} — déjà déclarée à l'URSSAF`}
                         />
-                        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-ink-400 pointer-events-none">
-                          €
-                        </span>
-                      </div>
+                      </label>
                     </td>
-                  ))}
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot className="bg-surface-2 text-ink-900 font-medium">
               <tr className="border-t border-ink-200">
@@ -247,10 +362,13 @@ export function ImportRevenueForm({
                     {formatEUR(totals.byKind[c.id])}
                   </td>
                 ))}
+                {/* Cellule vide sous la colonne "Déjà déclaré" pour conserver
+                    l'alignement du tableau. */}
+                <td className="px-3 py-3" aria-hidden />
               </tr>
               {columns.length > 1 ? (
                 <tr className="border-t border-ink-100">
-                  <td colSpan={columns.length} className="px-4 py-3 text-right text-ink-900 font-semibold tabular-nums">
+                  <td colSpan={columns.length + 1} className="px-4 py-3 text-right text-ink-900 font-semibold tabular-nums">
                     Total général : {formatEUR(totals.grand)}
                   </td>
                 </tr>
@@ -259,6 +377,22 @@ export function ImportRevenueForm({
           </table>
         </div>
       </Card>
+
+      {/* Légende du flag "déjà déclaré" */}
+      <div className="rounded-2xl bg-brand-500/5 border border-brand-500/15 p-3.5 flex items-start gap-2.5 text-xs text-ink-600">
+        <Info size={14} className="mt-0.5 shrink-0 text-brand-600" />
+        <div>
+          <p>
+            <strong>Coche &laquo;&nbsp;Déjà déclaré&nbsp;&raquo;</strong> uniquement pour les périodes que tu as
+            déjà déclarées toi-même à l&apos;URSSAF avant d&apos;utiliser Asthia.
+            Asthia ne re-soumettra pas ces périodes (pas de double cotisation).
+          </p>
+          <p className="mt-1 text-ink-500">
+            Pour les périodes non cochées, Asthia déclare automatiquement
+            ces montants à l&apos;URSSAF lors du prochain passage du cron mensuel.
+          </p>
+        </div>
+      </div>
 
       {error ? (
         <p className="text-small text-danger-600 bg-danger-500/10 rounded-2xl px-4 py-2.5">

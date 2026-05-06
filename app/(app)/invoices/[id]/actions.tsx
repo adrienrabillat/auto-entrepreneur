@@ -21,6 +21,7 @@ type Invoice = {
   number: string;
   status: "draft" | "sent" | "paid" | "cancelled";
   paid_at: string | null;
+  sent_at?: string | null;
   invoice_type?: string;
   amount_cents: number;
 };
@@ -133,8 +134,10 @@ export function InvoiceActions({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        {/* === CAS 1 : Brouillon — édition libre === */}
-        {invoice.status === "draft" ? (
+        {/* === CAS 1 : Brouillon STANDARD — édition libre. Les avoirs en
+              draft ne sont PAS éditables : leur numéro légal est déjà figé
+              dans la séquence chronologique URSSAF. === */}
+        {invoice.status === "draft" && !isCreditNote ? (
           <Link href={`/invoices/${invoice.id}/edit`}>
             <Button type="button" variant="secondary">
               <Pencil size={14} /> Modifier
@@ -161,8 +164,11 @@ export function InvoiceActions({
           </Button>
         ) : null}
 
-        {/* Envoi / renvoi */}
-        {invoice.status !== "paid" && invoice.status !== "cancelled" ? (
+        {/* Envoi / renvoi.
+            Pour une facture : visible tant que pas payée/annulée.
+            Pour un avoir : toujours visible (l'avoir est en status='paid'
+            par construction mais peut quand même être envoyé/renvoyé). */}
+        {(invoice.status !== "paid" && invoice.status !== "cancelled") || isCreditNote ? (
           <Button
             disabled={!gmailConnected || busy !== null}
             onClick={() => run("send", `/api/invoices/${invoice.id}/send`)}
@@ -170,35 +176,42 @@ export function InvoiceActions({
             <Send size={16} />
             {busy === "send"
               ? "Envoi…"
-              : invoice.status === "sent"
+              : invoice.sent_at
                 ? "Renvoyer par email"
-                : "Envoyer par email"}
+                : isCreditNote
+                  ? "Envoyer l'avoir"
+                  : "Envoyer par email"}
           </Button>
         ) : null}
 
-        {/* Marquer payée / retirer paiement */}
-        {invoice.status !== "paid" ? (
-          <Button
-            variant="secondary"
-            disabled={busy !== null}
-            onClick={() => run("paid", `/api/invoices/${invoice.id}/mark-paid`, { paid: true })}
-          >
-            <CheckCircle2 size={16} />
-            {busy === "paid" ? "…" : "Marquer comme payée"}
-          </Button>
-        ) : (
-          <Button
-            variant="secondary"
-            disabled={busy !== null}
-            onClick={() => run("unpaid", `/api/invoices/${invoice.id}/mark-paid`, { paid: false })}
-          >
-            <Undo2 size={16} />
-            {busy === "unpaid" ? "…" : "Retirer le paiement"}
-          </Button>
-        )}
+        {/* Marquer payée / retirer paiement — UNIQUEMENT factures standard.
+            Sur un avoir, le statut "paid" est figé (sert à inclure l'avoir
+            dans la déclaration URSSAF), pas de toggle utilisateur. */}
+        {!isCreditNote ? (
+          invoice.status !== "paid" ? (
+            <Button
+              variant="secondary"
+              disabled={busy !== null}
+              onClick={() => run("paid", `/api/invoices/${invoice.id}/mark-paid`, { paid: true })}
+            >
+              <CheckCircle2 size={16} />
+              {busy === "paid" ? "…" : "Marquer comme payée"}
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              disabled={busy !== null}
+              onClick={() => run("unpaid", `/api/invoices/${invoice.id}/mark-paid`, { paid: false })}
+            >
+              <Undo2 size={16} />
+              {busy === "unpaid" ? "…" : "Retirer le paiement"}
+            </Button>
+          )
+        ) : null}
 
-        {/* Suppression — brouillons uniquement */}
-        {invoice.status === "draft" ? (
+        {/* Suppression — brouillons STANDARD uniquement (pas les avoirs).
+            Supprimer un avoir créerait un trou dans la séquence légale. */}
+        {invoice.status === "draft" && !isCreditNote ? (
           <Button
             variant="danger"
             disabled={busy !== null}
