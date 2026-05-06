@@ -63,14 +63,10 @@ export default function QuotesPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link href="/quotes/new" className="pill pill-primary">
-            <Plus size={16} />
-            Nouveau devis
-          </Link>
-          {/* Export XLSX — calque l'UX du bouton "Exporter" du dashboard et de
-              la liste clients : <a href> direct vers la route API qui renvoie
-              le fichier en Content-Disposition: attachment, le navigateur
-              déclenche le téléchargement sans navigation. */}
+          {/* Sprint 5 — uniformisation : on aligne sur le pattern Factures
+              (Exporter à gauche, CTA primaire à droite). Le bouton primaire
+              doit être en bout de ligne, c'est l'action que l'utilisateur
+              cherche en priorité. */}
           <a
             href="/api/export/quotes"
             className="pill pill-ghost"
@@ -79,6 +75,10 @@ export default function QuotesPage({
             <Download size={16} />
             Exporter
           </a>
+          <Link href="/quotes/new" className="pill pill-primary">
+            <Plus size={16} />
+            Nouveau devis
+          </Link>
         </div>
       </div>
 

@@ -31,8 +31,11 @@ export function RunMyDeclaration() {
   return (
     <div className="flex items-center gap-3">
       {error ? <span className="text-small text-danger-600">{error}</span> : null}
+      {/* Sprint 5 — label raccourci de "Lancer ma déclaration maintenant"
+          à "Lancer la déclaration" pour que les deux CTA (Exporter Excel
+          + Lancer) tiennent sur la même ligne sans wrap. */}
       <Button variant="primary" size="sm" onClick={run} disabled={busy}>
-        {busy ? "Envoi…" : "Lancer ma déclaration maintenant"}
+        {busy ? "Envoi…" : "Lancer la déclaration"}
       </Button>
     </div>
   );
