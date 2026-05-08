@@ -8,6 +8,8 @@ import {
   PDFRef,
   PDFString,
 } from "pdf-lib";
+import fs from "fs";
+import path from "path";
 
 /**
  * Conformité Factur-X / PDF/A-3.
@@ -55,18 +57,101 @@ export type FacturxOptions = {
 /**
  * Applique les modifications PDF/A-3 + Factur-X au document. À appeler
  * APRÈS l'attach du factur-x.xml mais AVANT le `pdf.save()`.
+ *
+ * Tout ce qui se passe ici est défensif : si une étape échoue (par
+ * exemple parce que la structure interne du PDF a changé entre versions
+ * de pdf-lib), on log et on continue. La conformité PDF/A-3 est un
+ * "nice to have" — perdre la facture entière à cause de métadonnées
+ * cassées serait pire.
  */
 export function applyPdfA3FacturxCompliance(pdf: PDFDocument, opts: FacturxOptions) {
-  // 1. Tag version 1.7 (Factur-X requiert ≥ 1.7).
-  // pdf-lib n'expose pas de setter direct, mais on peut écrire dans le
-  // header en éditant pdf.context.header. Si non disponible, le default
-  // de pdf-lib (1.7) suffit déjà.
+  try {
+    setAfRelationshipOnFilespecs(pdf, "Alternative");
+  } catch (e) {
+    console.warn("[pdfa3] setAfRelationshipOnFilespecs failed:", e);
+  }
+  try {
+    attachOutputIntent(pdf);
+  } catch (e) {
+    console.warn("[pdfa3] attachOutputIntent failed:", e);
+  }
+  try {
+    attachXmpMetadata(pdf, opts);
+  } catch (e) {
+    console.warn("[pdfa3] attachXmpMetadata failed:", e);
+  }
+}
 
-  // 2. AFRelationship sur le Filespec de chaque pièce jointe.
-  setAfRelationshipOnFilespecs(pdf, "Alternative");
+/**
+ * Ajoute un /OutputIntents au Catalog avec un profil ICC sRGB embarqué.
+ *
+ * PDF/A-3 exige cette déclaration colorimétrique pour que le rendu des
+ * couleurs soit reproductible à long terme. Sans ça, veraPDF marque le
+ * PDF comme non conforme. Acrobat l'affiche correctement quand même mais
+ * on n'est pas en règle au sens strict.
+ *
+ * Le profil sRGB est stocké en `lib/assets/sRGB.icc` (~480 bytes, profil
+ * "sRGB v2 micro" — minimum valide pour PDF/A). Il est lu une fois et
+ * mis en cache module-level.
+ */
+let cachedIccBytes: Uint8Array | null | undefined;
 
-  // 3. XMP metadata sur le Catalog.
-  attachXmpMetadata(pdf, opts);
+function loadSrgbIcc(): Uint8Array | null {
+  if (cachedIccBytes !== undefined) return cachedIccBytes;
+  try {
+    // process.cwd() pointe vers la racine de l'app sur Vercel
+    // serverless. Le profil est inclus via `outputFileTracingIncludes`
+    // dans next.config.js.
+    const filePath = path.join(process.cwd(), "lib", "assets", "sRGB.icc");
+    cachedIccBytes = new Uint8Array(fs.readFileSync(filePath));
+    return cachedIccBytes;
+  } catch (e) {
+    console.warn(
+      "[pdfa3] sRGB.icc introuvable à",
+      path.join(process.cwd(), "lib/assets/sRGB.icc"),
+      "—",
+      e instanceof Error ? e.message : e,
+    );
+    cachedIccBytes = null;
+    return null;
+  }
+}
+
+function attachOutputIntent(pdf: PDFDocument) {
+  const iccBytes = loadSrgbIcc();
+  if (!iccBytes) return;
+
+  // Embed du profil ICC en stream avec /N=3 (RGB = 3 composantes).
+  const iccStream = PDFRawStream.of(
+    pdf.context.obj({
+      N: 3,
+      Length: iccBytes.length,
+    }),
+    iccBytes,
+  );
+  const iccRef = pdf.context.register(iccStream);
+
+  // Construit l'objet OutputIntent qui référence le profil.
+  // - S = GTS_PDFA1 (signature historique reprise par PDF/A-3)
+  // - OutputConditionIdentifier = "sRGB IEC61966-2.1" (chaîne libre,
+  //   doit matcher la sémantique du profil ICC)
+  // - DestOutputProfile = ref vers notre stream ICC
+  const outputIntent = pdf.context.obj({
+    Type: "OutputIntent",
+    S: "GTS_PDFA1",
+    OutputConditionIdentifier: PDFString.of("sRGB IEC61966-2.1"),
+    OutputCondition: PDFString.of("sRGB"),
+    Info: PDFString.of("sRGB IEC61966-2.1"),
+    DestOutputProfile: iccRef,
+  });
+  const outputIntentRef = pdf.context.register(outputIntent);
+
+  // Le Catalog contient un /OutputIntents qui est un array de un ou
+  // plusieurs OutputIntent. PDF/A demande au moins un.
+  pdf.catalog.set(
+    PDFName.of("OutputIntents"),
+    pdf.context.obj([outputIntentRef]),
+  );
 }
 
 /**
@@ -78,12 +163,16 @@ export function applyPdfA3FacturxCompliance(pdf: PDFDocument, opts: FacturxOptio
  */
 function setAfRelationshipOnFilespecs(pdf: PDFDocument, relationship: string) {
   const root = pdf.catalog;
-  const names = root.lookup(PDFName.of("Names"), PDFDict);
-  if (!names) return;
-  const ef = names.lookup(PDFName.of("EmbeddedFiles"), PDFDict);
-  if (!ef) return;
-  const namesArr = ef.lookup(PDFName.of("Names"), PDFArray);
-  if (!namesArr) return;
+  // On utilise `lookup(name)` sans type-assertion : la variante typée
+  // throw "Expected instance of X but got Y" si la clé n'existe pas
+  // (ce qui est légitime — ex: aperçu PDF avant attach). On préfère
+  // tester instanceof manuellement et sortir proprement.
+  const names = root.lookup(PDFName.of("Names"));
+  if (!(names instanceof PDFDict)) return;
+  const ef = names.lookup(PDFName.of("EmbeddedFiles"));
+  if (!(ef instanceof PDFDict)) return;
+  const namesArr = ef.lookup(PDFName.of("Names"));
+  if (!(namesArr instanceof PDFArray)) return;
 
   const filespecRefs: PDFRef[] = [];
   for (let i = 1; i < namesArr.size(); i += 2) {

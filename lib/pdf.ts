@@ -622,7 +622,16 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
       addressLine1: data.client.address?.split(/\r?\n/)[0],
     },
   });
-  await embedFacturxXml(pdf, xml, data);
+  // L'embed Factur-X (XML structuré + métadonnées PDF/A-3) est isolé
+  // dans un try/catch : on préfère sortir un PDF visuel valide non-
+  // Factur-X plutôt que de planter la facture entière. Quand un fix
+  // est nécessaire (incompatibilité pdf-lib, format invalide, etc.),
+  // on log et on continue.
+  try {
+    await embedFacturxXml(pdf, xml, data);
+  } catch (e) {
+    console.error("[pdf] embedFacturxXml a échoué, PDF sortie sans Factur-X:", e);
+  }
 
   return await pdf.save();
 }
