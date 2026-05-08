@@ -2,7 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDate } from "@/lib/format";
-import { MessageSquare, Mail, ArrowRight } from "lucide-react";
+import { MessageSquare, Mail, ArrowRight, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -45,12 +46,19 @@ export default async function MessagesPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 animate-fade-in-up">
-      <div>
-        <h1 className="text-h1">Messages</h1>
-        <p className="mt-1 text-small text-ink-500">
-          Toutes les réponses de tes clients à tes factures et devis,
-          regroupées en conversations.
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-h1">Messages</h1>
+          <p className="mt-1 text-small text-ink-500">
+            Une conversation par client, qu&apos;il s&apos;agisse de réponses à
+            tes factures, à tes devis, ou de discussions libres.
+          </p>
+        </div>
+        <Link href="/messages/new">
+          <Button>
+            <Plus size={14} /> Nouveau message
+          </Button>
+        </Link>
       </div>
 
       {list.length === 0 ? (

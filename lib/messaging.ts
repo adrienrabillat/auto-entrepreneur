@@ -79,21 +79,26 @@ export async function storeInboundMessage(
     quoteId = data?.id ?? null;
   }
 
-  // 3. Find or create thread. Critère de match : (user_id, client_email,
-  //    invoice_id OR quote_id). Si on n'a pas de référence facture/devis,
-  //    on regroupe sur (user_id, client_email) — un thread "libre" par
-  //    expéditeur.
+  // 3. Find or create thread. Critère de match : (user_id, client_email).
+  //    Un seul thread par client — toutes les réponses du même client
+  //    (sur n'importe quelle facture/devis) atterrissent dans la même
+  //    conversation. C'est ce qui correspond au mental model de l'AE
+  //    ("ma conversation avec ce client") plutôt que le découpage
+  //    par document.
+  //
+  //    invoice_id / quote_id sont conservés comme "document d'origine"
+  //    sur le thread : si le thread n'existe pas encore et qu'on peut
+  //    déduire un doc depuis le subject, on le sauvegarde pour
+  //    l'affichage. Si le thread existe déjà, on ne change pas son
+  //    invoice_id (le premier reste prioritaire).
   let threadId: string | null = null;
   {
-    let query = admin
+    const { data: existing } = await admin
       .from("message_threads")
       .select("id")
       .eq("user_id", args.ownerId)
-      .eq("client_email", fromEmail.toLowerCase());
-    if (invoiceId) query = query.eq("invoice_id", invoiceId);
-    else if (quoteId) query = query.eq("quote_id", quoteId);
-    else query = query.is("invoice_id", null).is("quote_id", null);
-    const { data: existing } = await query.maybeSingle();
+      .eq("client_email", fromEmail.toLowerCase())
+      .maybeSingle();
     threadId = existing?.id ?? null;
   }
 
