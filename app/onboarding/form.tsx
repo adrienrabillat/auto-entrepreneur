@@ -970,10 +970,20 @@ function StepActivity({ v, setV }: { v: Values; setV: (v: Values) => void }) {
             className="h-12 w-full rounded-xl bg-surface px-3 text-body shadow-hair focus:outline-none focus:shadow-glow transition-shadow appearance-none"
           >
             <option value="monthly">Mensuelle</option>
-            <option value="quarterly">Trimestrielle</option>
+            {/* Trimestriel temporairement désactivé : le cron côté serveur
+                déclare chaque mois (table monthly_declarations). Tant qu'on
+                n'a pas implémenté l'agrégation 3 mois, on force la mensuelle
+                pour éviter qu'un AE en trimestriel reçoive 3 déclarations
+                mensuelles à la place. À ré-activer après le sprint
+                "périodicité trimestrielle". */}
+            <option value="quarterly" disabled>
+              Trimestrielle (bientôt disponible)
+            </option>
           </select>
           <p className="mt-1.5 text-xs text-ink-500">
-            Choisi à ton inscription URSSAF. Modifiable une fois par an avant le 31 octobre.
+            Choisi à ton inscription URSSAF. La déclaration trimestrielle
+            arrivera dans une prochaine version d&apos;Asthia — pour l&apos;instant
+            seule la déclaration mensuelle est supportée.
           </p>
         </div>
         <div>

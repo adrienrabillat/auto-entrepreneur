@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { guessActivityType, submitDeclaration } from "@/lib/urssaf";
+import {
+  activityKindToType,
+  guessActivityType,
+  submitDeclaration,
+  type ActivityKind,
+} from "@/lib/urssaf";
 
 /**
  * Returns the period (year, month) that should be declared when the cron fires
@@ -39,7 +44,17 @@ export type ProcessResult = {
  */
 export async function processUserDeclaration(
   admin: SupabaseClient,
-  user: { id: string; siret: string | null; metier: string | null },
+  user: {
+    id: string;
+    siret: string | null;
+    metier: string | null;
+    /**
+     * Catégorie d'activité choisie explicitement à l'onboarding.
+     * Si présente, elle PRIME sur l'heuristique `guessActivityType(metier)`
+     * — c'est la seule valeur fiable pour mapper sur la taxonomie URSSAF.
+     */
+    activity_kind?: ActivityKind | string | null;
+  },
   periodYear: number,
   periodMonth: number
 ): Promise<ProcessResult> {
@@ -124,13 +139,21 @@ export async function processUserDeclaration(
     };
   }
 
+  // Choix de la taxonomie URSSAF : on privilégie le `activity_kind` choisi
+  // explicitement par l'AE à l'onboarding. Fallback sur `guessActivityType()`
+  // pour les profils antérieurs qui n'ont pas encore de `activity_kind`
+  // renseigné (cas typique : compte créé avant la migration 2026-04-26c).
+  const activityType = user.activity_kind
+    ? activityKindToType(user.activity_kind)
+    : guessActivityType(user.metier ?? "");
+
   // Zero-revenue months still need a declaration (0 €).
   const result = await submitDeclaration({
     siret: user.siret,
     periodYear,
     periodMonth,
     revenueCents: total,
-    activityType: guessActivityType(user.metier ?? ""),
+    activityType,
   });
 
   if (!result.ok) {

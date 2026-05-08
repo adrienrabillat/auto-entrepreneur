@@ -40,7 +40,9 @@ async function run(request: NextRequest) {
 
   const userIdFilter = url.searchParams.get("userId");
 
-  let query = admin.from("profiles").select("id, siret, metier, urssaf_declaration_day, onboarded");
+  let query = admin
+    .from("profiles")
+    .select("id, siret, metier, activity_kind, urssaf_declaration_day, onboarded");
   if (userIdFilter) query = query.eq("id", userIdFilter);
   const { data: profiles, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -52,7 +54,12 @@ async function run(request: NextRequest) {
     try {
       const r = await processUserDeclaration(
         admin,
-        { id: p.id, siret: p.siret, metier: p.metier },
+        {
+          id: p.id,
+          siret: p.siret,
+          metier: p.metier,
+          activity_kind: p.activity_kind,
+        },
         period.periodYear,
         period.periodMonth
       );

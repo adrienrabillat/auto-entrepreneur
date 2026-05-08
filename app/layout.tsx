@@ -60,24 +60,24 @@ const themeBootScript = `
 }catch(e){}})();
 `;
 
-// Écran de chargement initial — affiché AVANT React pour éviter un flash
-// noir/blanc. Le conteneur est masqué dès que le body a des enfants React
-// rendus (via un MutationObserver léger).
-const splashScript = `
-(function(){try{
-  var el=document.getElementById('__splash');
-  if(!el) return;
-  var obs=new MutationObserver(function(){
-    if(document.getElementById('__next')||document.querySelector('main')){
-      el.style.opacity='0';
-      setTimeout(function(){el.remove();},300);
-      obs.disconnect();
-    }
-  });
-  obs.observe(document.body,{childList:true,subtree:true});
-  setTimeout(function(){if(el&&el.parentNode){el.style.opacity='0';setTimeout(function(){el.remove();},300);}},4000);
-}catch(e){}})();
-`;
+// NOTE — Splash screen retiré le 8 mai 2026.
+//
+// L'ancien splash (logo Asthia + spinner) était injecté en SSR avant le
+// montage React et masqué via un MutationObserver qui cherchait
+// `document.getElementById('__next')`. Or App Router Next.js 13+ ne crée
+// plus ce wrapper (c'était spécifique au Pages Router), donc le sélecteur
+// matchait rarement et seul le fallback `setTimeout(..., 4000)` finissait
+// par retirer le splash.
+//
+// Combiné au `Cache-Control: no-store, must-revalidate` du middleware
+// (qui force des hard navigations), le splash se ré-injectait à chaque
+// changement de page et restait 4 secondes avant de disparaître — d'où
+// la sensation de "boucle infinie" obligeant à un Cmd+R.
+//
+// Décision : on retire complètement ce splash en attendant la review URSSAF.
+// Si on veut le re-mettre plus tard, il faudra l'écrire avec un sélecteur
+// App-Router-compatible (par ex. cibler `[data-app-mounted]` posé via un
+// useEffect dans le RootLayout client).
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -89,45 +89,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body>
-        {/* Splash screen — visible pendant le chargement initial, disparaît
-            quand React est monté. Couleur de fond = CSS variable (respecte
-            le thème choisi). */}
-        <div
-          id="__splash"
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexDirection: "column",
-            gap: "16px",
-            background: "rgb(var(--c-bg, 244 245 247))",
-            transition: "opacity 300ms ease",
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/icon-192.png"
-            alt="Asthia"
-            width={56}
-            height={56}
-            style={{ borderRadius: "16px" }}
-          />
-          <div
-            style={{
-              width: "32px",
-              height: "32px",
-              border: "3px solid rgb(var(--c-ink-4, 194 198 208))",
-              borderTopColor: "rgb(var(--c-accent, 47 107 255))",
-              borderRadius: "50%",
-              animation: "asthia-spin 0.7s linear infinite",
-            }}
-          />
-          <style dangerouslySetInnerHTML={{ __html: "@keyframes asthia-spin { to { transform: rotate(360deg); } }" }} />
-        </div>
-        <script dangerouslySetInnerHTML={{ __html: splashScript }} />
         {children}
       </body>
     </html>

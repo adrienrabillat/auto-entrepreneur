@@ -33,9 +33,44 @@ export async function submitDeclaration(input: DeclarationInput): Promise<Declar
   return submitDeclarationMock(input);
 }
 
+/** Catégorie d'activité telle que choisie à l'onboarding (table profiles). */
+export type ActivityKind = "vente" | "service_bic" | "liberal_bnc" | "mixte";
+
 /**
- * Guess the URSSAF activity category from the user's free-text "metier".
- * Users can still override this when we wire the real API.
+ * Mapping explicite entre la catégorie choisie à l'onboarding et la
+ * taxonomie attendue par l'API URSSAF TDAE.
+ *
+ * Cas "mixte" : l'AE déclare à la fois du CA vente ET du CA service.
+ * Pour le moment on retombe sur BIC_SERVICE (le plus fréquent), MAIS
+ * idéalement la déclaration doit être splittée en deux lignes (BIC_VENTE
+ * + BIC_SERVICE) en agrégeant le CA par operation_type des factures.
+ * À implémenter avant le passage en URSSAF_LIVE — voir audit du 8/05/2026.
+ */
+export function activityKindToType(
+  kind: ActivityKind | string | null | undefined,
+): DeclarationInput["activityType"] {
+  switch (kind) {
+    case "vente":
+      return "BIC_VENTE";
+    case "service_bic":
+      return "BIC_SERVICE";
+    case "liberal_bnc":
+      return "BNC";
+    case "mixte":
+      // TODO: splitter par operation_type des factures
+      return "BIC_SERVICE";
+    default:
+      // Profil incomplet (activity_kind null) — fallback prudent sur BNC
+      // pour les libéraux pures, sinon BIC_SERVICE qui couvre la majorité.
+      return "BIC_SERVICE";
+  }
+}
+
+/**
+ * @deprecated Heuristique fragile basée sur le texte libre `metier`.
+ *   Préférer `activityKindToType(profile.activity_kind)`. Conservée pour
+ *   la rétro-compatibilité tant que d'anciens profils n'ont pas de
+ *   `activity_kind` renseigné.
  */
 export function guessActivityType(metier: string): DeclarationInput["activityType"] {
   const m = (metier ?? "").toLowerCase();

@@ -19,7 +19,7 @@ export async function POST(_req: Request) {
   const admin = createAdminClient();
   const { data: profile, error } = await admin
     .from("profiles")
-    .select("id, siret, metier, onboarded")
+    .select("id, siret, metier, activity_kind, onboarded")
     .eq("id", user.id)
     .single();
   if (error || !profile) return NextResponse.json({ error: "Profil introuvable" }, { status: 404 });
@@ -31,7 +31,12 @@ export async function POST(_req: Request) {
   try {
     const result = await processUserDeclaration(
       admin,
-      { id: profile.id, siret: profile.siret, metier: profile.metier },
+      {
+        id: profile.id,
+        siret: profile.siret,
+        metier: profile.metier,
+        activity_kind: profile.activity_kind,
+      },
       period.periodYear,
       period.periodMonth
     );

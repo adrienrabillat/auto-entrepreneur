@@ -55,10 +55,21 @@ export const REPRESENTATIVE_TITLE = "Entrepreneur individuel";
 
 /**
  * Contact public (RGPD, support, mentions légales).
- * Pour des raisons RGPD, il faut un email dédié — pas un perso.
+ *
+ * Pour la review URSSAF du 30/04/2026, on utilise temporairement le Gmail
+ * personnel d'Adrien — l'instructrice doit pouvoir nous joindre tout de
+ * suite sans dépendre d'un forwarding `contact@asthia.fr` non encore
+ * configuré.
+ *
+ * À remplacer par "contact@asthia.fr" dès que :
+ *   - le webhook Resend Inbound est branché (route Next.js qui re-émet
+ *     vers cette boîte Gmail), OU
+ *   - une boîte OVH `contact@asthia.fr` est créée avec redirection
+ *     automatique vers ce Gmail, OU
+ *   - Cloudflare Email Routing est configuré sur le domaine.
  */
-export const CONTACT_EMAIL = "contact@asthia.fr";
-export const PRIVACY_EMAIL = "privacy@asthia.fr";
+export const CONTACT_EMAIL = "adrien.rabillat@gmail.com";
+export const PRIVACY_EMAIL = "adrien.rabillat@gmail.com";
 
 /** URL canonique du site (sans slash final). */
 export const SITE_URL = "https://asthia.fr";
