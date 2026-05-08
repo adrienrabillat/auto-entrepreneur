@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ScrollText, FileText, Lock, ArrowRight } from "lucide-react";
+import { ScrollText, FileText, Lock, Receipt, ArrowRight } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -27,6 +27,13 @@ export default function LegalIndex() {
       title: "Conditions Générales d'Utilisation",
       desc:
         "Règles d'usage du Service, responsabilités de chacun, conditions de résiliation. À lire avant de créer un compte.",
+    },
+    {
+      href: "/legal/cgv",
+      icon: Receipt,
+      title: "Conditions Générales de Vente",
+      desc:
+        "Tarifs, modalités de paiement, droit de rétractation et résiliation. Service gratuit en phase de lancement.",
     },
     {
       href: "/legal/confidentialite",

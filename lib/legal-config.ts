@@ -3,43 +3,55 @@
  *
  * Tous les éléments d'identification de l'éditeur (raison sociale, SIREN,
  * adresse, contact…) sont stockés ici plutôt qu'éparpillés dans les pages
- * légales. Quand la SAS sera officiellement créée et immatriculée, il
- * suffira de mettre à jour ce seul fichier — toutes les pages
- * /legal/mentions-legales, /legal/cgu, /legal/confidentialite vont
- * automatiquement refléter les nouvelles infos.
+ * légales. Une seule source de vérité — toutes les pages
+ * /legal/mentions-legales, /legal/cgu, /legal/cgv, /legal/confidentialite
+ * reflètent automatiquement ces infos.
  *
- * IMPORTANT — TODO avant lancement public :
- *  ☐ Remplir LEGAL_NAME, SIREN, RCS_CITY, CAPITAL_EUR
- *  ☐ Adresse réelle du siège social
- *  ☐ Email de contact dédié (asthia.fr)
- *  ☐ Vérifier les infos hébergeur (selon où on déploie : Vercel, OVH, etc.)
- *  ☐ Faire relire par un avocat (CGU + RGPD = engagements forts)
+ * Statut actuel : Asthia est éditée par RABILLAT ADRIEN, entrepreneur
+ * individuel (micro-entrepreneur), inscrit au RNE le 03/02/2023.
+ * Si une société (SAS / SASU) est créée plus tard pour porter le service,
+ * il suffira de mettre à jour ce fichier (et de réactiver les champs
+ * RCS_CITY / CAPITAL_EUR qui ne s'appliquent pas à un EI).
  */
 
 /**
- * Identité de l'éditeur du site.
+ * Identité de l'éditeur du site (LCEN art. 6 III).
  *
- * Asthia est en cours de création (SAS / SASU). Les valeurs ci-dessous
- * sont des PLACEHOLDERS — à remplacer par les vraies infos une fois la
- * société immatriculée. Tant qu'on est en mode "placeholder", les pages
- * légales affichent un bandeau d'avertissement (cf. components LegalNotice).
+ * Pour un Entrepreneur Individuel, la "dénomination" légale est le nom
+ * patronymique de l'exploitant (ici Adrien Rabillat). On peut y adjoindre
+ * un nom commercial (Asthia) — c'est le SIREN qui fait foi.
  */
-export const LEGAL_NAME = "Asthia (en cours de création)";
-export const LEGAL_FORM = "SAS"; // ou "SASU" selon décision
-export const SIREN = "{À COMPLÉTER}";
-export const RCS_CITY = "{À COMPLÉTER}";
-export const CAPITAL_EUR = "{À COMPLÉTER}";
+export const LEGAL_NAME = "Adrien Rabillat";
+export const TRADE_NAME = "Asthia";
+export const LEGAL_FORM = "Entrepreneur individuel (micro-entrepreneur)";
+export const SIREN = "923 070 197";
+export const SIRET = "923 070 197 00010";
+export const VAT_NUMBER = "FR89923070197";
+export const APE_CODE = "96.09Z";
+export const APE_LABEL = "Autres services personnels n.c.a.";
+export const RNE_REG_DATE = "03/02/2023";
 
-/** Adresse du siège social (ou de domiciliation pendant la phase de création). */
-export const ADDRESS_LINE_1 = "{À COMPLÉTER}";
+/**
+ * Champs propres aux sociétés (SAS, SARL…) — vides pour un EI.
+ * La page Mentions légales conditionne l'affichage : si la chaîne est vide,
+ * la ligne n'apparaît pas.
+ */
+export const RCS_CITY = "";
+export const CAPITAL_EUR = "";
+
+/** Adresse du siège social (établissement principal). */
+export const ADDRESS_LINE_1 = "17 rue Victor Méric";
 export const ADDRESS_LINE_2 = "";
-export const POSTAL_CODE = "{À COMPLÉTER}";
-export const CITY = "{À COMPLÉTER}";
+export const POSTAL_CODE = "92110";
+export const CITY = "Clichy";
 export const COUNTRY = "France";
 
-/** Représentant légal (président de SAS ou président de SASU). */
-export const REPRESENTATIVE_NAME = "{À COMPLÉTER}";
-export const REPRESENTATIVE_TITLE = "Président";
+/**
+ * Représentant légal — pour un EI c'est l'exploitant lui-même
+ * (directeur de la publication au sens LCEN).
+ */
+export const REPRESENTATIVE_NAME = "Adrien Rabillat";
+export const REPRESENTATIVE_TITLE = "Entrepreneur individuel";
 
 /**
  * Contact public (RGPD, support, mentions légales).
@@ -71,12 +83,12 @@ export const OAUTH_PROVIDER_URL = "https://policies.google.com/privacy";
  * Date de la dernière mise à jour des CGU / mentions légales.
  * À mettre à jour manuellement à chaque modification matérielle de ces docs.
  */
-export const LAST_UPDATED = "6 mai 2026";
+export const LAST_UPDATED = "8 mai 2026";
 
 /**
- * Helper : true si l'identité de l'éditeur est encore en mode placeholder
- * (SAS pas créée). Permet aux pages légales d'afficher un avertissement
- * "ces mentions seront finalisées à la création de la société".
+ * Helper : true si l'identité de l'éditeur n'est pas encore renseignée.
+ * Conservé pour rétro-compatibilité avec d'éventuels composants
+ * `LegalNotice` qui afficheraient un bandeau d'avertissement.
  */
 export function isPlaceholder(): boolean {
   return SIREN.includes("À COMPLÉTER") || ADDRESS_LINE_1.includes("À COMPLÉTER");

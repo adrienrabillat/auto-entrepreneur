@@ -70,20 +70,42 @@ export default async function LandingPage({
       </section>
 
       {/* Footer minimaliste — accès aux pages légales avant connexion.
-          Sprint 5 #13 : obligatoire pour conformité LCEN. */}
+          Sprint 5 #13 : obligatoire pour conformité LCEN.
+          Le lien "L'essentiel du statut — Autoentrepreneur.urssaf.fr" est
+          requis par l'URSSAF dans le cadre du partenariat API TDAE
+          (Tierce Déclaration Auto-Entrepreneur) — il couvre les
+          informations sur le statut, le caractère obligatoire des
+          cotisations, leur rôle, et les éléments liés au droit du travail. */}
       <footer className="px-5 md:px-8 py-6 max-w-6xl mx-auto w-full">
-        <div className="flex items-center justify-center gap-4 text-xs text-ink-400">
-          <Link href="/legal/mentions-legales" className="hover:text-ink-700 transition-colors">
-            Mentions légales
-          </Link>
-          <span aria-hidden>·</span>
-          <Link href="/legal/cgu" className="hover:text-ink-700 transition-colors">
-            CGU
-          </Link>
-          <span aria-hidden>·</span>
-          <Link href="/legal/confidentialite" className="hover:text-ink-700 transition-colors">
-            Confidentialité
-          </Link>
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1 text-xs text-ink-400">
+            <Link href="/legal/mentions-legales" className="hover:text-ink-700 transition-colors">
+              Mentions légales
+            </Link>
+            <span aria-hidden>·</span>
+            <Link href="/legal/cgu" className="hover:text-ink-700 transition-colors">
+              CGU
+            </Link>
+            <span aria-hidden>·</span>
+            <Link href="/legal/cgv" className="hover:text-ink-700 transition-colors">
+              CGV
+            </Link>
+            <span aria-hidden>·</span>
+            <Link href="/legal/confidentialite" className="hover:text-ink-700 transition-colors">
+              Confidentialité
+            </Link>
+          </div>
+          <a
+            href="https://www.autoentrepreneur.urssaf.fr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-ink-400 hover:text-ink-700 transition-colors"
+          >
+            L&apos;essentiel du statut —{" "}
+            <span className="underline underline-offset-2">
+              Autoentrepreneur.urssaf.fr
+            </span>
+          </a>
         </div>
       </footer>
     </main>

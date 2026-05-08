@@ -1,7 +1,13 @@
 import {
   LEGAL_NAME,
+  TRADE_NAME,
   LEGAL_FORM,
   SIREN,
+  SIRET,
+  VAT_NUMBER,
+  APE_CODE,
+  APE_LABEL,
+  RNE_REG_DATE,
   RCS_CITY,
   CAPITAL_EUR,
   ADDRESS_LINE_1,
@@ -45,13 +51,26 @@ export default function MentionsLegales() {
       </p>
 
       <Section title="1. Éditeur du site">
-        <p>Le site <strong>{SITE_URL}</strong> (ci-après &laquo; Asthia &raquo;) est édité par&nbsp;:</p>
+        <p>
+          Le site <strong>{SITE_URL}</strong> (ci-après &laquo;&nbsp;{TRADE_NAME}&nbsp;&raquo;)
+          est édité par&nbsp;:
+        </p>
         <ul>
-          <li><strong>Raison sociale</strong> : {LEGAL_NAME}</li>
+          <li><strong>Nom de l&apos;exploitant</strong> : {LEGAL_NAME}</li>
+          <li><strong>Nom commercial</strong> : {TRADE_NAME}</li>
           <li><strong>Forme juridique</strong> : {LEGAL_FORM}</li>
           <li><strong>SIREN</strong> : {SIREN}</li>
-          <li><strong>RCS</strong> : {RCS_CITY}</li>
-          <li><strong>Capital social</strong> : {CAPITAL_EUR}</li>
+          <li><strong>SIRET (siège)</strong> : {SIRET}</li>
+          <li><strong>N° de TVA intracommunautaire</strong> : {VAT_NUMBER}</li>
+          <li>
+            <strong>Code APE / NAF</strong> : {APE_CODE} — {APE_LABEL}
+          </li>
+          <li>
+            <strong>Inscription au Registre National des Entreprises (RNE)</strong>
+            {" "}: le {RNE_REG_DATE}
+          </li>
+          {RCS_CITY ? <li><strong>RCS</strong> : {RCS_CITY}</li> : null}
+          {CAPITAL_EUR ? <li><strong>Capital social</strong> : {CAPITAL_EUR}</li> : null}
           <li>
             <strong>Siège social</strong> : {ADDRESS_LINE_1}
             {ADDRESS_LINE_2 ? `, ${ADDRESS_LINE_2}` : ""}, {POSTAL_CODE} {CITY}, {COUNTRY}

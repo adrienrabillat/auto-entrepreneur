@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, FileText, Lock, ScrollText } from "lucide-react";
+import { ArrowLeft, FileText, Lock, Receipt, ScrollText } from "lucide-react";
 import { isPlaceholder } from "@/lib/legal-config";
 
 /**
@@ -39,6 +39,13 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
               CGU
             </Link>
             <Link
+              href="/legal/cgv"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-surface-2 transition-colors"
+            >
+              <Receipt size={14} />
+              CGV
+            </Link>
+            <Link
               href="/legal/confidentialite"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-surface-2 transition-colors"
             >
@@ -70,6 +77,9 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
             </Link>
             <Link href="/legal/cgu" className="hover:text-ink-700 transition-colors">
               CGU
+            </Link>
+            <Link href="/legal/cgv" className="hover:text-ink-700 transition-colors">
+              CGV
             </Link>
             <Link href="/legal/confidentialite" className="hover:text-ink-700 transition-colors">
               Confidentialité
