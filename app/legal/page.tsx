@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ScrollText, FileText, Lock, Receipt, ArrowRight } from "lucide-react";
+import { ScrollText, FileText, Lock, Receipt, ArrowRight, Briefcase } from "lucide-react";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -41,6 +41,13 @@ export default function LegalIndex() {
       title: "Politique de confidentialité",
       desc:
         "Quelles données nous collectons, pourquoi, et comment exercer vos droits RGPD.",
+    },
+    {
+      href: "/legal/statut-auto-entrepreneur",
+      icon: Briefcase,
+      title: "Le statut auto-entrepreneur",
+      desc:
+        "Création du statut, spécificités, cotisations obligatoires et leur rôle, articulation avec le droit du travail. Référence officielle URSSAF.",
     },
   ] as const;
 

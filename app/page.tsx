@@ -107,6 +107,10 @@ export default async function LandingPage({
             <Link href="/legal/confidentialite" className="hover:text-ink-700 transition-colors">
               Confidentialité
             </Link>
+            <span aria-hidden>·</span>
+            <Link href="/legal/statut-auto-entrepreneur" className="hover:text-ink-700 transition-colors">
+              Statut auto-entrepreneur
+            </Link>
           </div>
           <a
             href="https://www.autoentrepreneur.urssaf.fr"
