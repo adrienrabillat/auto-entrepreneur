@@ -40,23 +40,98 @@ export const maxDuration = 30;
  *                            (défaut "contact@asthia.fr"). Si vide → on relaie tout.
  */
 
-type ResendInboundEmail = {
-  type?: string;
-  created_at?: string;
-  data?: {
-    from?: { address?: string; name?: string } | string;
-    to?: Array<{ address?: string; name?: string } | string> | string;
-    subject?: string;
-    html?: string | null;
-    text?: string | null;
-    attachments?: Array<{
-      filename?: string;
-      content?: string; // base64 selon doc
-      url?: string; // URL signée temporaire selon doc (à fetch puis ré-attacher)
-      content_type?: string;
-    }>;
-  };
+/**
+ * Format du payload Resend Inbound.
+ *
+ * Découverte (mai 2026) : Resend envoie le mail entrant À LA RACINE du
+ * payload, pas wrappé sous `data` comme l'event type "email.received"
+ * laissait penser. La forme observée :
+ *   {
+ *     "object": "email",
+ *     "id": "...", "to": [...], "from": "...",
+ *     "subject": "...", "html": "...", "text": "...",
+ *     "headers": {...}, "last_event": "received"
+ *   }
+ *
+ * On reste tolérant : on lit d'abord à la racine, puis sous `data` en
+ * fallback (au cas où Resend changerait le format ou wrapperait selon
+ * la version du webhook).
+ */
+type EmailFields = {
+  from?: { address?: string; name?: string } | string;
+  to?: Array<{ address?: string; name?: string } | string> | string;
+  subject?: string;
+  // Variantes connues du corps de mail dans Resend Inbound
+  html?: string | null;
+  text?: string | null;
+  body_html?: string | null;
+  body_text?: string | null;
+  htmlBody?: string | null;
+  textBody?: string | null;
+  bodyHtml?: string | null;
+  bodyText?: string | null;
+  parsed?: { html?: string | null; text?: string | null } | null;
+  body?: { html?: string | null; text?: string | null } | null;
+  attachments?: Array<{
+    filename?: string;
+    content?: string; // base64 selon doc
+    url?: string; // URL signée temporaire selon doc (à fetch puis ré-attacher)
+    content_type?: string;
+  }>;
 };
+
+type ResendInboundEmail = EmailFields & {
+  type?: string;
+  object?: string;
+  last_event?: string;
+  created_at?: string;
+  data?: EmailFields;
+};
+
+/**
+ * Sélectionne les champs du mail soit à la racine (cas observé), soit
+ * sous `data` (fallback si Resend wrapperait le payload). Renvoie le
+ * premier des deux qui contient au moins un identifiant de mail (subject
+ * OU from), sinon la racine par défaut.
+ */
+function pickEmailFields(payload: ResendInboundEmail): EmailFields {
+  const root: EmailFields = payload;
+  const wrapped: EmailFields | undefined = payload.data;
+  const looksLikeEmail = (e?: EmailFields) =>
+    Boolean(e && (e.subject || e.from || e.html || e.text));
+  if (looksLikeEmail(root)) return root;
+  if (looksLikeEmail(wrapped)) return wrapped!;
+  return root; // dernier recours : on prend la racine pour logger les clés présentes
+}
+
+/**
+ * Extrait le corps HTML et texte du mail, en testant toutes les variantes
+ * connues. Retourne `{html, text}` avec strings vides si rien n'est trouvé.
+ */
+function extractBody(data: EmailFields): {
+  html: string;
+  text: string;
+} {
+  const candidatesHtml: Array<string | null | undefined> = [
+    data.html,
+    data.body_html,
+    data.htmlBody,
+    data.bodyHtml,
+    data.parsed?.html,
+    data.body?.html,
+  ];
+  const candidatesText: Array<string | null | undefined> = [
+    data.text,
+    data.body_text,
+    data.textBody,
+    data.bodyText,
+    data.parsed?.text,
+    data.body?.text,
+  ];
+  const html = candidatesHtml.find((s) => typeof s === "string" && s.length > 0) ?? "";
+  const text = candidatesText.find((s) => typeof s === "string" && s.length > 0) ?? "";
+  return { html, text };
+}
 
 export async function POST(req: NextRequest) {
   // ─── 1. Vérification de la signature Svix ───────────────────────────
@@ -151,7 +226,10 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const data = payload.data ?? {};
+  // Resend envoie le mail à la racine du payload, mais on garde le fallback
+  // sous `data` au cas où le format change. pickEmailFields renvoie la
+  // bonne section automatiquement.
+  const data: EmailFields = pickEmailFields(payload);
 
   // Normalise le from / to qui peuvent être soit objets soit strings
   // selon la version de l'API Resend Inbound.
@@ -223,10 +301,25 @@ export async function POST(req: NextRequest) {
     </div>
   `.trim();
 
-  const bodyHtml = data.html
-    ? data.html
-    : data.text
-      ? `<pre style="font-family:inherit;white-space:pre-wrap;margin:0">${escapeHtml(data.text)}</pre>`
+  const { html: extractedHtml, text: extractedText } = extractBody(data);
+
+  // Diagnostic : si après avoir testé toutes les variantes connues on n'a
+  // toujours rien, on log les clés présentes pour identifier la nouvelle
+  // forme du payload Resend. Sans ce log, impossible de savoir où cherche
+  // le body côté Resend Inbound (la forme a déjà changé deux fois).
+  if (!extractedHtml && !extractedText) {
+    console.warn(
+      "[inbound/contact] corps vide — clés data:",
+      Object.keys(data),
+      "subject:",
+      data.subject,
+    );
+  }
+
+  const bodyHtml = extractedHtml
+    ? extractedHtml
+    : extractedText
+      ? `<pre style="font-family:inherit;white-space:pre-wrap;margin:0">${escapeHtml(extractedText)}</pre>`
       : "<em>(corps vide)</em>";
   const forwardHtml = headerHtml + bodyHtml;
 
@@ -235,7 +328,7 @@ export async function POST(req: NextRequest) {
     `De : ${fromName} <${fromAddress}>\n` +
     `À : ${toList.join(", ")}\n` +
     `\n────────────────────────────────────\n\n`;
-  const forwardText = headerText + (data.text ?? "(corps vide)");
+  const forwardText = headerText + (extractedText || "(corps vide)");
 
   // Pièces jointes : Resend Inbound peut renvoyer soit du base64 inline
   // (`content`), soit une URL signée à télécharger (`url`). On gère
