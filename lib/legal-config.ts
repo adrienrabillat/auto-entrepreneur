@@ -56,20 +56,27 @@ export const REPRESENTATIVE_TITLE = "Entrepreneur individuel";
 /**
  * Contact public (RGPD, support, mentions légales).
  *
- * Pour la review URSSAF du 30/04/2026, on utilise temporairement le Gmail
- * personnel d'Adrien — l'instructrice doit pouvoir nous joindre tout de
- * suite sans dépendre d'un forwarding `contact@asthia.fr` non encore
- * configuré.
+ * `contact@asthia.fr` est l'adresse officielle affichée partout sur le
+ * site (mentions légales, CGU, CGV, footer). Elle doit aboutir quelque
+ * part — le forwarding vers la boîte personnelle d'Adrien est assuré
+ * par l'une des méthodes suivantes (à brancher OBLIGATOIREMENT avant
+ * de remettre cette adresse en prod) :
  *
- * À remplacer par "contact@asthia.fr" dès que :
- *   - le webhook Resend Inbound est branché (route Next.js qui re-émet
- *     vers cette boîte Gmail), OU
- *   - une boîte OVH `contact@asthia.fr` est créée avec redirection
- *     automatique vers ce Gmail, OU
- *   - Cloudflare Email Routing est configuré sur le domaine.
+ *   1. Boîte OVH gratuite `contact@asthia.fr` créée dans MX Plan, avec
+ *      règle de redirection vers `adrien.rabillat@gmail.com`. Solution
+ *      la plus simple, conserve les MX OVH par défaut.
+ *   2. Resend Inbound : webhook Next.js qui reçoit les mails entrants
+ *      sur asthia.fr et les ré-émet via Resend Outbound vers Gmail.
+ *      Demande de toucher aux MX du domaine — voir avertissement
+ *      Resend "Routing emails to Resend will disable old MX records".
+ *   3. Cloudflare Email Routing — gratuit, simple, mais demande de
+ *      migrer la zone DNS d'OVH vers Cloudflare.
+ *
+ * ⚠️ Si aucune des 3 méthodes n'est active, les emails envoyés à
+ * `contact@asthia.fr` seront PERDUS — y compris ceux de l'URSSAF.
  */
-export const CONTACT_EMAIL = "adrien.rabillat@gmail.com";
-export const PRIVACY_EMAIL = "adrien.rabillat@gmail.com";
+export const CONTACT_EMAIL = "contact@asthia.fr";
+export const PRIVACY_EMAIL = "contact@asthia.fr";
 
 /** URL canonique du site (sans slash final). */
 export const SITE_URL = "https://asthia.fr";

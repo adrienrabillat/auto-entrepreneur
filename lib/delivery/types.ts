@@ -12,7 +12,7 @@
  * et retourne un résultat uniforme (id externe, statut, timestamp).
  */
 
-export type DeliveryChannel = "gmail" | "pdp";
+export type DeliveryChannel = "gmail" | "pdp" | "resend";
 
 /**
  * Contexte destinataire — utilisé par le dispatcher pour choisir le canal.
