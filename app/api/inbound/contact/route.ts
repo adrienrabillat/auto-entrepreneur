@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import crypto from "crypto";
+import { Resend } from "resend";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -8,202 +9,83 @@ export const maxDuration = 30;
  * Webhook Resend Inbound — relais "contact@asthia.fr → ma boîte perso".
  *
  * Pourquoi cette route ?
- *  Les MX du domaine `asthia.fr` pointent vers Resend (`inbound-smtp.eu-west-1.amazonaws.com`),
- *  donc OVH ne reçoit aucun mail et la redirection OVH classique ne marche
- *  pas. Resend ne propose pas (encore) de simple forwarding via son UI : on
- *  doit donc capter chaque mail entrant via webhook et le ré-émettre nous-même.
+ *  Les MX de `asthia.fr` pointent vers Resend Inbound, donc OVH ne reçoit
+ *  aucun mail et la redirection OVH classique ne s'applique pas. On capte
+ *  chaque mail entrant via webhook puis on demande à Resend de le forwarder
+ *  vers la boîte Gmail perso.
  *
  * Comment ça marche :
- *  1. Resend reçoit un mail à `*@asthia.fr` (ex: `contact@asthia.fr`).
- *  2. Resend POST sur cette URL avec le contenu du mail (signé via Svix).
- *  3. On vérifie la signature pour s'assurer que l'appel vient bien de Resend
- *     (sinon n'importe qui pourrait spammer notre relais).
- *  4. On filtre sur les adresses qu'on veut effectivement relayer (par défaut
- *     `contact@asthia.fr`).
- *  5. On ré-émet via l'API Resend Outbound vers `INBOUND_FORWARD_TO`
- *     (par défaut `adrien.rabillat@gmail.com`), en mettant l'expéditeur
- *     d'origine en Reply-To pour qu'on puisse répondre directement.
+ *  1. Resend reçoit un mail à `*@asthia.fr` (ex: contact@asthia.fr).
+ *  2. Resend POSTe un webhook `email.received` ici (signé via Svix).
+ *     Le webhook ne contient QUE des metadata (from / to / subject /
+ *     email_id) — pas le corps. C'est un choix produit Resend pour
+ *     limiter la taille des webhooks et supporter les grosses PJ
+ *     (cf. https://resend.com/docs/dashboard/receiving/introduction).
+ *  3. On vérifie la signature Svix.
+ *  4. On filtre sur la liste blanche de destinataires (`INBOUND_FILTER_TO`,
+ *     défaut `contact@asthia.fr`).
+ *  5. On appelle `resend.emails.receiving.forward(...)` qui : (a) fetch le
+ *     mail complet (corps + PJ) côté Resend via leur API privée Inbound,
+ *     (b) le réémet en passthrough vers `INBOUND_FORWARD_TO`. Pas de
+ *     manipulation manuelle du corps, pas de risque de body vide.
  *
- * Configuration côté Resend :
+ * Configuration Resend :
  *  - Resend → Webhooks → Add Endpoint
- *  - URL : https://asthia.fr/api/inbound/contact
- *  - Events : `email.received` (ou équivalent dans l'UI Resend)
- *  - Copier le "Signing Secret" qui s'affiche → coller dans Vercel ENV
- *    sous le nom `RESEND_WEBHOOK_SECRET`
+ *  - URL : https://www.asthia.fr/api/inbound/contact (avec le `www`,
+ *    sinon redirect 308 et Svix ne suit pas).
+ *  - Events : `email.received`.
+ *  - Copier le "Signing Secret" → `RESEND_WEBHOOK_SECRET` dans Vercel.
  *
- * Variables d'environnement requises (Vercel) :
- *  - RESEND_API_KEY        : clé API Resend (envoi outbound)
- *  - RESEND_WEBHOOK_SECRET : secret Svix pour vérifier les webhooks Resend
- *  - INBOUND_FORWARD_TO    : email destination (défaut "adrien.rabillat@gmail.com")
- *  - INBOUND_FORWARD_FROM  : email expéditeur du forward (défaut "Asthia Contact <noreply@asthia.fr>")
- *  - INBOUND_FILTER_TO     : adresse(s) qu'on relaie, séparées par virgule
- *                            (défaut "contact@asthia.fr"). Si vide → on relaie tout.
+ * Variables d'environnement :
+ *  - RESEND_API_KEY        : clé API Resend (obligatoire — utilisée pour
+ *                            le forward et déjà nécessaire pour le reste
+ *                            de l'app).
+ *  - RESEND_WEBHOOK_SECRET : secret Svix pour vérifier les webhooks.
+ *  - INBOUND_FORWARD_TO    : email destination (défaut "adrien.rabillat@gmail.com").
+ *  - INBOUND_FORWARD_FROM  : email expéditeur du forward (défaut "Asthia Contact <noreply@asthia.fr>").
+ *  - INBOUND_FILTER_TO     : adresses qu'on relaie, séparées par virgule
+ *                            (défaut "contact@asthia.fr"). Vide → tout relayer.
  */
 
 /**
- * Format du payload Resend Inbound.
+ * Forme du payload `email.received` côté webhook Resend (mai 2026).
  *
- * Découverte (mai 2026) : Resend envoie le mail entrant À LA RACINE du
- * payload, pas wrappé sous `data` comme l'event type "email.received"
- * laissait penser. La forme observée :
- *   {
- *     "object": "email",
- *     "id": "...", "to": [...], "from": "...",
- *     "subject": "...", "html": "...", "text": "...",
- *     "headers": {...}, "last_event": "received"
- *   }
- *
- * On reste tolérant : on lit d'abord à la racine, puis sous `data` en
- * fallback (au cas où Resend changerait le format ou wrapperait selon
- * la version du webhook).
+ * Important : la doc parlait historiquement de `data.html` / `data.text`
+ * mais en réalité le webhook ne contient QUE les metadata listés ici. Le
+ * corps doit être récupéré séparément via l'API (ce que fait
+ * `resend.emails.receiving.forward()` en interne).
  */
-type EmailFields = {
-  from?: { address?: string; name?: string } | string;
-  to?: Array<{ address?: string; name?: string } | string> | string;
-  subject?: string;
-  /** ID de l'email — utilisé pour fetch le corps via l'API Resend si
-   *  le webhook ne le contient pas (cas réel : Resend envoie seulement
-   *  des metadata dans le webhook email.received). */
-  email_id?: string;
-  id?: string;
-  // Variantes connues du corps de mail dans Resend Inbound
-  html?: string | null;
-  text?: string | null;
-  body_html?: string | null;
-  body_text?: string | null;
-  htmlBody?: string | null;
-  textBody?: string | null;
-  bodyHtml?: string | null;
-  bodyText?: string | null;
-  parsed?: { html?: string | null; text?: string | null } | null;
-  body?: { html?: string | null; text?: string | null } | null;
-  attachments?: Array<{
-    filename?: string;
-    content?: string; // base64 selon doc
-    url?: string; // URL signée temporaire selon doc (à fetch puis ré-attacher)
-    content_type?: string;
-  }>;
-};
-
-type ResendInboundEmail = EmailFields & {
+type ResendInboundWebhook = {
   type?: string;
-  object?: string;
-  last_event?: string;
   created_at?: string;
-  data?: EmailFields;
+  data?: {
+    email_id?: string;
+    created_at?: string;
+    from?: string;
+    to?: string[];
+    bcc?: string[];
+    cc?: string[];
+    message_id?: string;
+    subject?: string;
+    attachments?: Array<{ id?: string; filename?: string }>;
+  };
 };
-
-/**
- * Sélectionne les champs du mail soit à la racine (cas observé), soit
- * sous `data` (fallback si Resend wrapperait le payload). Renvoie le
- * premier des deux qui contient au moins un identifiant de mail (subject
- * OU from), sinon la racine par défaut.
- */
-function pickEmailFields(payload: ResendInboundEmail): EmailFields {
-  const root: EmailFields = payload;
-  const wrapped: EmailFields | undefined = payload.data;
-  const looksLikeEmail = (e?: EmailFields) =>
-    Boolean(e && (e.subject || e.from || e.html || e.text));
-  if (looksLikeEmail(root)) return root;
-  if (looksLikeEmail(wrapped)) return wrapped!;
-  return root; // dernier recours : on prend la racine pour logger les clés présentes
-}
-
-/**
- * Récupère le corps complet d'un mail via l'API Resend.
- *
- * Pourquoi c'est nécessaire : le webhook `email.received` ne contient
- * que des metadata (from, to, subject, email_id…) — PAS le `html` / `text`.
- * Pour avoir le corps il faut faire un GET séparé sur l'email.
- *
- * Retourne des strings vides en cas d'échec — l'erreur est loggée mais
- * on ne bloque pas le forward (header sera quand même envoyé, juste sans
- * le corps si le fetch échoue).
- */
-async function fetchEmailBody(
-  emailId: string,
-): Promise<{ html: string; text: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    console.warn("[inbound/contact] RESEND_API_KEY absente, fetch body impossible");
-    return { html: "", text: "" };
-  }
-  try {
-    const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!res.ok) {
-      const txt = await res.text();
-      console.warn(
-        `[inbound/contact] GET /emails/${emailId} a échoué (${res.status}):`,
-        txt.slice(0, 300),
-      );
-      return { html: "", text: "" };
-    }
-    const json = (await res.json()) as { html?: unknown; text?: unknown };
-    return {
-      html: typeof json.html === "string" ? json.html : "",
-      text: typeof json.text === "string" ? json.text : "",
-    };
-  } catch (e) {
-    console.error("[inbound/contact] fetch body exception:", e);
-    return { html: "", text: "" };
-  }
-}
-
-/**
- * Extrait le corps HTML et texte du mail, en testant toutes les variantes
- * connues. Retourne `{html, text}` avec strings vides si rien n'est trouvé.
- */
-function extractBody(data: EmailFields): {
-  html: string;
-  text: string;
-} {
-  const candidatesHtml: Array<string | null | undefined> = [
-    data.html,
-    data.body_html,
-    data.htmlBody,
-    data.bodyHtml,
-    data.parsed?.html,
-    data.body?.html,
-  ];
-  const candidatesText: Array<string | null | undefined> = [
-    data.text,
-    data.body_text,
-    data.textBody,
-    data.bodyText,
-    data.parsed?.text,
-    data.body?.text,
-  ];
-  const html = candidatesHtml.find((s) => typeof s === "string" && s.length > 0) ?? "";
-  const text = candidatesText.find((s) => typeof s === "string" && s.length > 0) ?? "";
-  return { html, text };
-}
 
 export async function POST(req: NextRequest) {
   // ─── 1. Vérification de la signature Svix ───────────────────────────
-  // Resend signe ses webhooks via Svix. On vérifie ici pour s'assurer
-  // que l'appel vient bien de Resend (sinon n'importe qui pourrait
-  // POST sur cette URL et utiliser notre app comme relais de spam).
-  //
-  // Format Svix : la valeur du header `svix-signature` contient une ou
-  // plusieurs signatures séparées par espace, chacune au format
-  // "v1,<base64-hmac-sha256(secret, '{svix-id}.{svix-timestamp}.{body}')>".
-  // Tolérance de timestamp : ±5 minutes pour bloquer les replays.
+  // Resend signe ses webhooks via Svix. On vérifie ici pour bloquer les
+  // appels non authentifiés (sans ça, n'importe qui pourrait POST sur
+  // notre URL et utiliser notre relais pour spammer).
   const secret = process.env.RESEND_WEBHOOK_SECRET;
   const svixId = req.headers.get("svix-id");
   const svixTimestamp = req.headers.get("svix-timestamp");
   const svixSignature = req.headers.get("svix-signature");
 
-  // On lit le body en RAW (avant le JSON.parse) parce que la signature
-  // est calculée sur le body brut — si on stringify après parse, les
-  // espaces et l'ordre des clés peuvent différer et la vérif échoue.
+  // Body en RAW : la signature Svix est calculée sur le body brut, donc
+  // un re-stringify après JSON.parse casserait la vérif.
   const rawBody = await req.text();
 
   if (!secret) {
-    // Mode dev : on accepte sans vérification mais on log un warning.
-    // À NE JAMAIS laisser tel quel en prod — si le secret n'est pas
-    // configuré, on refuse l'appel pour éviter d'être un relais ouvert.
     if (process.env.NODE_ENV === "production") {
       console.error("[inbound/contact] RESEND_WEBHOOK_SECRET non défini en prod — refus");
       return NextResponse.json(
@@ -214,22 +96,16 @@ export async function POST(req: NextRequest) {
     console.warn("[inbound/contact] RESEND_WEBHOOK_SECRET non défini (mode dev)");
   } else {
     if (!svixId || !svixTimestamp || !svixSignature) {
-      return NextResponse.json(
-        { error: "Missing Svix headers" },
-        { status: 401 },
-      );
+      return NextResponse.json({ error: "Missing Svix headers" }, { status: 401 });
     }
-    // Bloque les replays : on rejette tout ce qui a plus de 5 min.
+    // Tolérance ±5 min pour bloquer les replays.
     const tsSec = parseInt(svixTimestamp, 10);
     if (!Number.isFinite(tsSec) || Math.abs(Date.now() / 1000 - tsSec) > 300) {
-      return NextResponse.json(
-        { error: "Timestamp out of range" },
-        { status: 401 },
-      );
+      return NextResponse.json({ error: "Timestamp out of range" }, { status: 401 });
     }
 
-    // Le secret Svix peut être préfixé par "whsec_" — la doc demande
-    // d'enlever ce préfixe avant le base64-decode.
+    // Le secret Svix peut être préfixé "whsec_" — la doc demande de
+    // l'enlever avant le base64-decode.
     const rawSecret = secret.startsWith("whsec_") ? secret.slice(6) : secret;
     let secretBuf: Buffer;
     try {
@@ -246,8 +122,7 @@ export async function POST(req: NextRequest) {
       .digest("base64");
 
     // Le header peut contenir plusieurs signatures (rotation de secret).
-    // On accepte si AU MOINS UNE matche notre expected, en comparaison
-    // constant-time pour ne pas leaker via timing attack.
+    // On accepte si AU MOINS UNE matche, en comparaison constant-time.
     const candidates = svixSignature
       .split(" ")
       .map((s) => s.trim())
@@ -267,40 +142,30 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── 2. Parse du payload ─────────────────────────────────────────────
-  let payload: ResendInboundEmail;
+  let payload: ResendInboundWebhook;
   try {
-    payload = JSON.parse(rawBody) as ResendInboundEmail;
+    payload = JSON.parse(rawBody) as ResendInboundWebhook;
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Resend envoie le mail à la racine du payload, mais on garde le fallback
-  // sous `data` au cas où le format change. pickEmailFields renvoie la
-  // bonne section automatiquement.
-  const data: EmailFields = pickEmailFields(payload);
+  if (payload.type !== "email.received") {
+    // Pas un événement qui nous concerne — on accuse réception sans rien faire.
+    return NextResponse.json({ ok: true, ignored: true, type: payload.type });
+  }
 
-  // Normalise le from / to qui peuvent être soit objets soit strings
-  // selon la version de l'API Resend Inbound.
-  const fromAddress = typeof data.from === "string"
-    ? data.from
-    : data.from?.address || "";
-  const fromName = typeof data.from === "string"
-    ? data.from.split("@")[0]
-    : data.from?.name || fromAddress;
+  const data = payload.data ?? {};
+  const emailId = data.email_id;
+  const toList = Array.isArray(data.to) ? data.to.filter(Boolean) : [];
 
-  const toRaw = data.to;
-  const toList: string[] = Array.isArray(toRaw)
-    ? toRaw
-        .map((r) => (typeof r === "string" ? r : r.address || ""))
-        .filter(Boolean)
-    : typeof toRaw === "string"
-      ? [toRaw]
-      : [];
+  if (!emailId) {
+    console.error("[inbound/contact] webhook sans email_id, clés data:", Object.keys(data));
+    return NextResponse.json({ error: "Missing email_id" }, { status: 400 });
+  }
 
   // ─── 3. Filtrage des destinataires ──────────────────────────────────
-  // Par défaut on relaie UNIQUEMENT contact@asthia.fr. Pour relayer
-  // d'autres adresses, lister dans INBOUND_FILTER_TO séparées par
-  // virgule (ex: "contact@asthia.fr,support@asthia.fr"). Mettre vide
+  // Par défaut on ne relaie que `contact@asthia.fr`. Pour relayer plusieurs
+  // adresses, lister dans INBOUND_FILTER_TO séparées par virgule. Vide
   // pour tout relayer.
   const filterRaw = (process.env.INBOUND_FILTER_TO ?? "contact@asthia.fr").trim();
   if (filterRaw.length > 0) {
@@ -310,162 +175,54 @@ export async function POST(req: NextRequest) {
       .filter(Boolean);
     const matched = toList.some((addr) => allowed.includes(addr.toLowerCase()));
     if (!matched) {
-      // Pas une erreur — juste un mail entrant qu'on ne veut pas relayer
-      // (par ex. si Resend nous notifiait sur d'autres adresses).
+      // Pas une erreur — on n'a juste pas vocation à relayer cette adresse.
       return NextResponse.json({ ok: true, skipped: true, to: toList });
     }
   }
 
-  // ─── 4. Construction du forward ─────────────────────────────────────
+  // ─── 4. Forward via le helper Resend ────────────────────────────────
+  // `resend.emails.receiving.forward()` fetch le corps + PJ côté Resend
+  // et réémet le mail. Avec `passthrough: true` (par défaut), le mail est
+  // transféré tel quel — corps original, PJ inline, formatage préservé.
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.error("[inbound/contact] RESEND_API_KEY manquante — impossible de forwarder");
-    return NextResponse.json(
-      { error: "RESEND_API_KEY not configured" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "RESEND_API_KEY not configured" }, { status: 500 });
   }
 
   const forwardTo = process.env.INBOUND_FORWARD_TO || "adrien.rabillat@gmail.com";
   const forwardFrom =
     process.env.INBOUND_FORWARD_FROM || "Asthia Contact <noreply@asthia.fr>";
-  const originalSubject = data.subject || "(sans objet)";
-  const forwardSubject = `[Asthia] ${originalSubject}`;
 
-  // En-tête HTML qui rappelle le mail d'origine, suivi du contenu brut.
-  // Le Reply-To pointe sur l'expéditeur d'origine, donc un simple
-  // "Répondre" depuis Gmail répond directement à la bonne personne
-  // (pas à noreply@asthia.fr).
-  const safeFromName = escapeHtml(fromName);
-  const safeFromAddress = escapeHtml(fromAddress);
-  const safeToList = escapeHtml(toList.join(", "));
-  const headerHtml = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-                font-size:13px;color:#6e7585;background:#f4f5f7;
-                border-radius:12px;padding:12px 16px;margin-bottom:16px;line-height:1.5;">
-      <div><strong>Reçu par Asthia</strong> — relayé automatiquement vers ta boîte perso.</div>
-      <div>De : <strong style="color:#0b0d12">${safeFromName}</strong> &lt;${safeFromAddress}&gt;</div>
-      <div>À : ${safeToList}</div>
-    </div>
-  `.trim();
-
-  // Étape A : on essaie d'abord d'extraire le corps directement du
-  // payload du webhook (au cas où Resend l'inclurait — historiquement la
-  // doc évoquait html/text dans data).
-  let { html: extractedHtml, text: extractedText } = extractBody(data);
-
-  // Étape B : si pas trouvé, on fetch le mail complet via l'API Resend.
-  // C'est le cas réel observé en mai 2026 : le webhook ne contient que
-  // les metadata, pas le body. On utilise email_id (forme observée) ou
-  // id (fallback) pour le GET.
-  if (!extractedHtml && !extractedText) {
-    const emailId = data.email_id || data.id;
-    if (emailId) {
-      const fetched = await fetchEmailBody(emailId);
-      extractedHtml = fetched.html;
-      extractedText = fetched.text;
-    } else {
-      console.warn(
-        "[inbound/contact] corps vide ET pas d'email_id — clés data:",
-        Object.keys(data),
-        "subject:",
-        data.subject,
-      );
-    }
-  }
-
-  const bodyHtml = extractedHtml
-    ? extractedHtml
-    : extractedText
-      ? `<pre style="font-family:inherit;white-space:pre-wrap;margin:0">${escapeHtml(extractedText)}</pre>`
-      : "<em>(corps vide)</em>";
-  const forwardHtml = headerHtml + bodyHtml;
-
-  const headerText =
-    `Reçu par Asthia — relayé automatiquement vers ta boîte perso.\n` +
-    `De : ${fromName} <${fromAddress}>\n` +
-    `À : ${toList.join(", ")}\n` +
-    `\n────────────────────────────────────\n\n`;
-  const forwardText = headerText + (extractedText || "(corps vide)");
-
-  // Pièces jointes : Resend Inbound peut renvoyer soit du base64 inline
-  // (`content`), soit une URL signée à télécharger (`url`). On gère
-  // d'abord le cas inline (le plus simple). Pour les URLs, on fetch
-  // chaque PJ et on convertit en base64 — best-effort, on ne bloque pas
-  // le forward si le fetch échoue (la PJ sera juste manquante).
-  const attachments: Array<{ filename: string; content: string }> = [];
-  for (const a of data.attachments ?? []) {
-    if (!a.filename) continue;
-    if (a.content) {
-      attachments.push({ filename: a.filename, content: a.content });
-    } else if (a.url) {
-      try {
-        const r = await fetch(a.url);
-        if (r.ok) {
-          const buf = Buffer.from(await r.arrayBuffer());
-          attachments.push({
-            filename: a.filename,
-            content: buf.toString("base64"),
-          });
-        }
-      } catch (e) {
-        console.warn("[inbound/contact] PJ non récupérable:", a.filename, e);
-      }
-    }
-  }
-
-  // ─── 5. Envoi du forward via Resend Outbound ───────────────────────
-  const sendRes = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      from: forwardFrom,
-      to: [forwardTo],
-      reply_to: fromAddress || undefined,
-      subject: forwardSubject,
-      html: forwardHtml,
-      text: forwardText,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    }),
+  const resend = new Resend(apiKey);
+  const { data: forwardData, error: forwardError } = await resend.emails.receiving.forward({
+    emailId,
+    to: forwardTo,
+    from: forwardFrom,
+    // passthrough: true (défaut) → le mail est transféré "tel quel" :
+    // corps original, PJ inline, formatage préservé. Si on voulait un
+    // wrapper "Forwarded message" type Gmail, on passerait `passthrough:
+    // false` + un `text`/`html` d'introduction. Pour un simple alias
+    // perso, le passthrough est plus naturel à l'usage.
   });
 
-  if (!sendRes.ok) {
-    const errText = await sendRes.text();
+  if (forwardError) {
     console.error(
-      "[inbound/contact] Forward Resend a échoué:",
-      sendRes.status,
-      errText.slice(0, 500),
+      "[inbound/contact] resend.emails.receiving.forward a échoué:",
+      forwardError.message,
+      forwardError,
     );
-    // On retourne 500 pour que Resend retente automatiquement (Svix
-    // gère le retry exponentiel sur 5xx — 4xx sont considérés comme
-    // permanents et ne sont pas retentés).
+    // 500 pour que Svix retente automatiquement (4xx = erreur permanente
+    // non retentée).
     return NextResponse.json(
-      { error: "Forward failed", detail: errText.slice(0, 200) },
+      { error: "Forward failed", detail: forwardError.message },
       { status: 500 },
     );
   }
 
-  const sendData = (await sendRes.json()) as { id?: string };
   return NextResponse.json({
     ok: true,
     forwardedTo: forwardTo,
-    forwardId: sendData.id ?? null,
+    forwardId: forwardData?.id ?? null,
   });
-}
-
-/**
- * Échappe les caractères HTML dangereux pour empêcher qu'un mail
- * malveillant injecte du HTML dans le mail forwardé (ex: <script>
- * dans le subject ou le from name).
- */
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
