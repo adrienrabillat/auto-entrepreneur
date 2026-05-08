@@ -34,6 +34,23 @@ export default async function SettingsPage() {
 
   const gmailActive = Boolean(profile.gmail_refresh_token);
 
+  // Détection du mode d'authentification : un utilisateur qui s'est inscrit
+  // par email/mot de passe (instructeur URSSAF, AE sans compte Google…) n'a
+  // pas d'identité Google liée. Dans ce cas, l'envoi de factures passe par
+  // Resend (identité unifiée Asthia) et le bloc "Reconnecter Gmail" n'a
+  // aucun sens — il enverrait l'utilisateur sur un OAuth Google qu'il n'a
+  // jamais initié. On masque donc le bloc.
+  //
+  // Garde-fou : si `gmailActive` est vrai (refresh token déjà stocké),
+  // on garde la carte affichée — l'utilisateur a déjà connecté Gmail à un
+  // moment, on lui laisse la possibilité de reconnecter.
+  const linkedProviders =
+    (user as { app_metadata?: { providers?: string[]; provider?: string } } | null)
+      ?.app_metadata?.providers ??
+    (user?.app_metadata?.provider ? [user.app_metadata.provider] : []);
+  const hasGoogleIdentity = linkedProviders.includes("google");
+  const showGmailCard = hasGoogleIdentity || gmailActive;
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
@@ -43,34 +60,36 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <div className="surface p-5 space-y-4">
-        <div className="flex items-center gap-4">
-          <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-gradient-subtle text-brand-600">
-            <Mail size={18} />
+      {showGmailCard && (
+        <div className="surface p-5 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-gradient-subtle text-brand-600">
+              <Mail size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-ink-900">Gmail</span>
+                {gmailActive ? (
+                  <Badge tone="success">Actif</Badge>
+                ) : (
+                  <Badge tone="warn">Non connecté</Badge>
+                )}
+              </div>
+              <div className="text-small text-ink-500 truncate">
+                {profile.gmail_connected_email ?? "Aucune adresse liée pour l'instant"}
+              </div>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-ink-900">Gmail</span>
-              {gmailActive ? (
-                <Badge tone="success">Actif</Badge>
-              ) : (
-                <Badge tone="warn">Non connecté</Badge>
-              )}
-            </div>
-            <div className="text-small text-ink-500 truncate">
-              {profile.gmail_connected_email ?? "Aucune adresse liée pour l'instant"}
-            </div>
+          <div className="flex items-start justify-between gap-4 pt-4 border-t border-ink-100 flex-wrap">
+            <p className="text-small text-ink-500 flex-1 min-w-[220px]">
+              Si l&apos;envoi d&apos;email échoue avec une erreur de permission,
+              reconnecte Gmail en cochant bien &laquo;&nbsp;Envoyer des e-mails en
+              votre nom&nbsp;&raquo; sur l&apos;écran Google.
+            </p>
+            <ReconnectGmailButton />
           </div>
         </div>
-        <div className="flex items-start justify-between gap-4 pt-4 border-t border-ink-100 flex-wrap">
-          <p className="text-small text-ink-500 flex-1 min-w-[220px]">
-            Si l&apos;envoi d&apos;email échoue avec une erreur de permission,
-            reconnecte Gmail en cochant bien &laquo;&nbsp;Envoyer des e-mails en
-            votre nom&nbsp;&raquo; sur l&apos;écran Google.
-          </p>
-          <ReconnectGmailButton />
-        </div>
-      </div>
+      )}
 
       <div className="surface p-5 space-y-4">
         <div className="flex items-start gap-4">
