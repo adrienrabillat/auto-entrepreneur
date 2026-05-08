@@ -1,5 +1,6 @@
 import { PDFDocument, PDFName, PDFString, PDFHexString, StandardFonts, rgb } from "pdf-lib";
 import { buildFacturxMinimumXml } from "@/lib/facturx";
+import { applyPdfA3FacturxCompliance } from "@/lib/pdfa3";
 
 /**
  * Générateur PDF facture — refonte minimaliste.
@@ -621,7 +622,7 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
       addressLine1: data.client.address?.split(/\r?\n/)[0],
     },
   });
-  await embedFacturxXml(pdf, xml);
+  await embedFacturxXml(pdf, xml, data);
 
   return await pdf.save();
 }
@@ -721,7 +722,7 @@ function operationLabel(o: OperationType): string {
     : "Prestation de services";
 }
 
-async function embedFacturxXml(pdf: PDFDocument, xml: string) {
+async function embedFacturxXml(pdf: PDFDocument, xml: string, data: InvoicePdfData) {
   const xmlBytes = new TextEncoder().encode(xml);
   await pdf.attach(xmlBytes, "factur-x.xml", {
     mimeType: "application/xml",
@@ -730,26 +731,25 @@ async function embedFacturxXml(pdf: PDFDocument, xml: string) {
     modificationDate: new Date(),
   });
 
-  const root = pdf.catalog;
-  const names = root.lookup(PDFName.of("Names"));
-  type NamesDict = { lookup(n: PDFName): unknown };
-  const ef = (names as NamesDict | undefined)?.lookup?.(PDFName.of("EmbeddedFiles"));
-  type EFDict = {
-    lookup(n: PDFName): { size?(): number; get?(i: number): unknown } | undefined;
-  };
-  const arr = (ef as EFDict | undefined)?.lookup?.(PDFName.of("Names"));
-  const size = typeof arr?.size === "function" ? arr.size() : 0;
-  for (let i = 1; i < size; i += 2) {
-    const spec = arr?.get?.(i) as { set?(n: PDFName, v: unknown): void } | undefined;
-    if (spec && typeof spec.set === "function") {
-      spec.set(PDFName.of("AFRelationship"), PDFName.of("Alternative"));
-      spec.set(PDFName.of("Desc"), PDFString.of("Factur-X XML"));
-      const afArr = pdf.context.obj([spec]);
-      root.set(PDFName.of("AF"), afArr);
-    }
-  }
+  // Applique tout le bagage PDF/A-3 + Factur-X (XMP metadata,
+  // AFRelationship sur le Filespec, déclarations de schema). Externalisé
+  // dans lib/pdfa3.ts pour garder ce fichier focalisé sur le rendu visuel.
+  const isCreditNote = data.documentKind === "credit_note";
+  const isQuote = data.documentKind === "quote";
+  const docNoun = isCreditNote ? "Avoir" : isQuote ? "Devis" : "Facture";
+  applyPdfA3FacturxCompliance(pdf, {
+    facturxFileName: "factur-x.xml",
+    conformanceLevel: "BASIC",
+    documentType: "INVOICE",
+    issuedAtIso: new Date(data.issuedOn).toISOString(),
+    title: `${docNoun} ${data.number}`,
+    description: data.description,
+    author: data.seller.businessName || data.seller.displayName,
+  });
+
   pdf.setKeywords(["Factur-X", "BASIC", "EN16931", "CII", "auto-entrepreneur"]);
   void PDFHexString;
+  void PDFString;
 }
 
 /**

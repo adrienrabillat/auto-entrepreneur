@@ -375,8 +375,20 @@ export async function sendInvoice(
   const htmlGreeting = `<p>Bonjour${invoice.client_name ? " " + escapeHtml(invoice.client_name) : ""},</p>`;
   const htmlSignature = `<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span>`;
 
+  // Bannière logo en haut du mail si l'AE a uploadé un logo.
+  // Le `<img src="cid:logo">` référence l'inline attachment passé via
+  // `email.inlineAttachments`. Tous les clients mail gèrent les CID,
+  // y compris Gmail (qui par défaut bloque les images externes mais
+  // affiche les inline).
+  const htmlLogoBanner = logo
+    ? `<div style="padding-bottom:18px;margin-bottom:16px;border-bottom:1px solid #E2E8F0;">
+        <img src="cid:logo" alt="${escapeHtml(profile.display_name ?? "")}" style="max-height:48px;max-width:240px;display:block;" />
+      </div>`
+    : "";
+
   const html = isCreditNote
     ? `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
+        ${htmlLogoBanner}
         ${htmlGreeting}
         <p>Tu trouveras en pièce jointe l'avoir <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>${
           relatedNumber ? ` relatif à la facture <strong>${escapeHtml(relatedNumber)}</strong>` : ""
@@ -387,6 +399,7 @@ export async function sendInvoice(
       </div>`
     : alreadyPaid
       ? `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
+          ${htmlLogoBanner}
           ${htmlGreeting}
           <p>Voici en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
           <p style="background:#ECF8EE;border:1px solid #16A34A;border-radius:8px;padding:10px 14px;color:#14532D;"><strong>Facture acquittée · Solde dû : 0,00 €</strong><br/>Aucun règlement n'est dû.</p>
@@ -394,6 +407,7 @@ export async function sendInvoice(
           <p>Merci pour la confiance,${htmlSignature}</p>
         </div>`
       : `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
+          ${htmlLogoBanner}
           ${htmlGreeting}
           <p>Tu trouveras en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
           <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
@@ -418,7 +432,25 @@ export async function sendInvoice(
       prepaid: alreadyPaid,
     },
     pdf: { bytes: pdfBytes, filename },
-    email: { subject, text, html, bccSelf: true },
+    email: {
+      subject,
+      text,
+      html,
+      bccSelf: true,
+      // Logo en pièce jointe inline (référencée par <img src="cid:logo">
+      // dans le HTML). Si pas de logo, pas d'attachment — la bannière
+      // n'est pas non plus rendue côté HTML.
+      inlineAttachments: logo
+        ? [
+            {
+              contentId: "logo",
+              filename: `logo.${logo.mimeType === "image/png" ? "png" : "jpg"}`,
+              contentType: logo.mimeType,
+              bytes: logo.bytes,
+            },
+          ]
+        : undefined,
+    },
     sender: {
       displayName: profile.display_name ?? profile.email,
       email: profile.email,

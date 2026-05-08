@@ -56,6 +56,17 @@ export type DeliveryInput = {
     text: string;
     html: string;
     bccSelf?: boolean;
+    /** Pièces jointes inline référencées dans le HTML via `cid:<id>`.
+     *  Utilisé pour embed le logo de l'AE en bannière haut-de-mail
+     *  sans dépendre d'un hébergement externe (les clients mail
+     *  préfèrent les inline pour des raisons de privacy). Les bytes
+     *  sont passés en clair, l'adaptateur encode en base64. */
+    inlineAttachments?: Array<{
+      contentId: string;
+      filename: string;
+      contentType: string;
+      bytes: Uint8Array;
+    }>;
   };
   /** Infos profil émetteur nécessaires à l'envoi. */
   sender: {

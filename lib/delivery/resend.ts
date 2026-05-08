@@ -70,8 +70,42 @@ export const resendAdapter: DeliveryAdapter = {
     const replyTo =
       input.sender.asthiaAddress || input.sender.email || undefined;
 
-    // Resend exige le PDF en base64 dans le champ `content`.
+    // Resend exige les bytes en base64 dans le champ `content`.
     const pdfBase64 = bytesToBase64(input.pdf.bytes);
+
+    // Construit le tableau d'attachments : 1 PDF (toujours) + N inline
+    // attachments (logo, etc., référencés en `cid:` depuis le HTML).
+    type ResendAttachment = {
+      filename: string;
+      content: string;
+      contentType?: string;
+      // Resend supporte les ID inline pour les images du HTML email,
+      // via le header Content-ID. La SDK et l'API REST acceptent
+      // `content_id`/`contentId` selon la version — on utilise les
+      // deux noms pour rester compatible.
+      content_id?: string;
+      contentId?: string;
+      content_disposition?: "inline" | "attachment";
+      contentDisposition?: "inline" | "attachment";
+    };
+    const attachments: ResendAttachment[] = [
+      {
+        filename: input.pdf.filename,
+        content: pdfBase64,
+        contentType: "application/pdf",
+      },
+    ];
+    for (const inl of input.email.inlineAttachments ?? []) {
+      attachments.push({
+        filename: inl.filename,
+        content: bytesToBase64(inl.bytes),
+        contentType: inl.contentType,
+        content_id: inl.contentId,
+        contentId: inl.contentId,
+        content_disposition: "inline",
+        contentDisposition: "inline",
+      });
+    }
 
     const payload = {
       from,
@@ -86,12 +120,7 @@ export const resendAdapter: DeliveryAdapter = {
       subject: input.email.subject,
       html: input.email.html,
       text: input.email.text,
-      attachments: [
-        {
-          filename: input.pdf.filename,
-          content: pdfBase64,
-        },
-      ],
+      attachments,
     };
 
     const res = await fetch("https://api.resend.com/emails", {

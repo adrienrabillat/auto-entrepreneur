@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureAsthiaAlias } from "@/lib/asthia-alias";
+import { loadLogoForPdf } from "@/lib/logo-loader";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -55,13 +56,16 @@ export async function POST(req: Request) {
   if (!subject) return NextResponse.json({ error: "Objet manquant" }, { status: 400 });
   if (!text) return NextResponse.json({ error: "Message vide" }, { status: 400 });
 
-  // Profile (pour From et Reply-To).
+  // Profile (pour From, Reply-To, et logo banner).
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, email")
+    .select("display_name, email, logo_path")
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Profil introuvable" }, { status: 500 });
+
+  // Logo pour la bannière HTML (cid:logo).
+  const logo = await loadLogoForPdf(supabase, profile.logo_path);
 
   // Alias Asthia personnel.
   const admin = createAdminClient();
@@ -111,10 +115,17 @@ export async function POST(req: Request) {
     threadId = created.id;
   }
 
-  // HTML simple à partir du texte (conserve les sauts de ligne).
-  const html = `<div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;white-space:pre-wrap;">${escapeHtml(
-    text,
-  )}</div>`;
+  // HTML simple à partir du texte (conserve les sauts de ligne) +
+  // bannière logo si configuré.
+  const htmlLogoBanner = logo
+    ? `<div style="padding-bottom:18px;margin-bottom:16px;border-bottom:1px solid #E2E8F0;">
+        <img src="cid:logo" alt="${escapeHtml(profile.display_name ?? "")}" style="max-height:48px;max-width:240px;display:block;" />
+      </div>`
+    : "";
+  const html = `<div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
+    ${htmlLogoBanner}
+    <div style="white-space:pre-wrap;">${escapeHtml(text)}</div>
+  </div>`;
 
   // Envoi via Resend.
   const apiKey = process.env.RESEND_API_KEY;
@@ -122,6 +133,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "RESEND_API_KEY manquante" }, { status: 500 });
   }
   const resend = new Resend(apiKey);
+  // Bytes via Buffer (le SDK Resend attend `string | Buffer` pour
+  // `content`). On utilise Buffer.from pour rester compatible.
+  const logoAttachment = logo
+    ? [
+        {
+          filename: `logo.${logo.mimeType === "image/png" ? "png" : "jpg"}`,
+          content: Buffer.from(logo.bytes),
+          contentType: logo.mimeType,
+          contentId: "logo",
+          contentDisposition: "inline" as const,
+        },
+      ]
+    : undefined;
   const { data: sent, error: sendErr } = await resend.emails.send({
     from,
     to: [clientEmail],
@@ -129,6 +153,7 @@ export async function POST(req: Request) {
     text,
     html,
     replyTo: fromAddress,
+    attachments: logoAttachment,
   });
   if (sendErr) {
     return NextResponse.json(
