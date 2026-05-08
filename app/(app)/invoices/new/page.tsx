@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { NewInvoiceForm, type ClientOption } from "./form";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { canSendEmail } from "@/lib/delivery/availability";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,11 @@ export default async function NewInvoicePage() {
   ]);
 
   const gmailConnected = Boolean(profile?.gmail_refresh_token);
+  // Capacité d'envoi : Gmail OU Resend dispo (cf. lib/delivery/availability.ts).
+  // On garde aussi `gmailConnected` pour personnaliser le copy "depuis xxx@gmail.com".
+  const sendEnabled = canSendEmail({
+    gmailRefreshToken: profile?.gmail_refresh_token,
+  });
   const bankingReady = Boolean(profile?.iban && profile?.bic);
 
   const clients: ClientOption[] = (clientsRaw ?? []).map((c) => ({
@@ -50,8 +56,10 @@ export default async function NewInvoicePage() {
       </h1>
       <p className="mt-1 text-small text-ink-500">
         Décris ta prestation, indique le montant et l&apos;email du client. La facture part
-        {gmailConnected ? ` depuis ${profile?.gmail_connected_email}` : " depuis ta boîte Gmail"}, avec
-        une copie pour toi.
+        {gmailConnected
+          ? ` depuis ${profile?.gmail_connected_email}`
+          : " depuis l'identité Asthia (factures@asthia.fr)"}
+        , avec une copie pour toi.
       </p>
 
       {!bankingReady ? (
@@ -65,19 +73,19 @@ export default async function NewInvoicePage() {
         </div>
       ) : null}
 
-      {!gmailConnected ? (
+      {!sendEnabled ? (
         <div className="mt-5 rounded-2xl p-4 text-small bg-warn-500/10 flex items-start gap-3 text-warn-600">
           <AlertTriangle size={18} className="shrink-0 mt-0.5" />
           <p>
-            Gmail n&apos;est pas encore connecté. Tu pourras quand même créer la facture en brouillon ; pour
-            l&apos;envoyer, reconnecte-toi avec Google depuis la page d&apos;accueil (la 1ʳᵉ connexion
-            autorise l&apos;envoi).
+            Aucun canal email disponible pour l&apos;instant. Tu peux créer la
+            facture en brouillon ; pour l&apos;envoyer, connecte Gmail depuis
+            Profil ou contacte le support pour activer l&apos;envoi via Asthia.
           </p>
         </div>
       ) : null}
 
       <div className="mt-6">
-        <NewInvoiceForm gmailConnected={gmailConnected} clients={clients} />
+        <NewInvoiceForm canSendEmail={sendEnabled} clients={clients} />
       </div>
     </div>
   );

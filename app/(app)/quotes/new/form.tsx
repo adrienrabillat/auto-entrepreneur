@@ -101,10 +101,11 @@ function composeManualAddress(
  *   - Pas de Factur-X (réservé aux factures B2B)
  */
 export function NewQuoteForm({
-  gmailConnected,
+  canSendEmail,
   clients,
 }: {
-  gmailConnected: boolean;
+  /** true si un canal email est dispo (Gmail OU Resend). */
+  canSendEmail: boolean;
   clients: ClientOption[];
 }) {
   const router = useRouter();
@@ -371,8 +372,10 @@ export function NewQuoteForm({
       setError(err);
       return;
     }
-    if (action === "send" && !gmailConnected) {
-      setError("Gmail n'est pas connecté. Va dans Paramètres → Reconnecter Gmail.");
+    if (action === "send" && !canSendEmail) {
+      setError(
+        "Aucun canal email disponible. Connecte Gmail depuis Profil ou contacte le support pour activer l'envoi via Asthia.",
+      );
       return;
     }
     setBusy(action);
@@ -928,8 +931,8 @@ export function NewQuoteForm({
             <Button
               type="button"
               onClick={() => submit("send")}
-              disabled={busy !== null || !gmailConnected}
-              title={!gmailConnected ? "Gmail doit être connecté pour envoyer" : ""}
+              disabled={busy !== null || !canSendEmail}
+              title={!canSendEmail ? "Aucun canal email disponible" : ""}
             >
               {busy === "send" ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               Créer & envoyer

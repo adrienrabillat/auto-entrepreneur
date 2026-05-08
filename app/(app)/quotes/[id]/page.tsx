@@ -7,6 +7,7 @@ import { QuoteActions } from "./actions";
 import { ArrowLeft, ExternalLink, ArrowRight } from "lucide-react";
 import { cleanClientName } from "@/lib/display-name";
 import { SavedFlash } from "@/components/ui/saved-flash";
+import { canSendEmail } from "@/lib/delivery/availability";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,10 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     | (typeof quoteRes.data & { converted_invoice: { number: string } | null })
     | null;
   if (!quote) notFound();
-  const gmailConnected = Boolean(profileRes.data?.gmail_refresh_token);
+  // Capacité d'envoi : Gmail OU Resend dispo. Cf. lib/delivery/availability.ts.
+  const sendEnabled = canSendEmail({
+    gmailRefreshToken: profileRes.data?.gmail_refresh_token,
+  });
   const convertedInvoiceNumber = quote.converted_invoice?.number ?? null;
 
   // Cas spécial : le devis a un converted_invoice_id mais le JOIN ne renvoie
@@ -157,7 +161,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           </div>
         ) : null}
 
-        <QuoteActions quote={quote} gmailConnected={gmailConnected} invoiceDeleted={invoiceDeleted} />
+        <QuoteActions quote={quote} canSendEmail={sendEnabled} invoiceDeleted={invoiceDeleted} />
       </section>
 
       <section className="surface p-0 overflow-hidden">

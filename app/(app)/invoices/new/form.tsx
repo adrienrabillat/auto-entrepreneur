@@ -79,10 +79,11 @@ function composeManualAddress(
 }
 
 export function NewInvoiceForm({
-  gmailConnected,
+  canSendEmail,
   clients,
 }: {
-  gmailConnected: boolean;
+  /** true si un canal email est dispo (Gmail OU Resend). */
+  canSendEmail: boolean;
   clients: ClientOption[];
 }) {
   const router = useRouter();
@@ -923,9 +924,9 @@ export function NewInvoiceForm({
             value={`Émise ${formatFrDate(todayIso())}${executionDate ? ` · exécutée ${formatFrDate(executionDate)}` : ""}${dueOn && kind === "to_pay" ? ` · échue ${formatFrDate(dueOn)}` : ""}`}
           />
 
-          {!gmailConnected && kind === "to_pay" ? (
+          {!canSendEmail && kind === "to_pay" ? (
             <div className="rounded-2xl bg-warn-500/10 p-3.5 text-small text-warn-600">
-              Gmail pas connecté → tu ne pourras qu&apos;enregistrer en brouillon. Reconnecte-toi avec Google pour envoyer.
+              Aucun canal email dispo → tu ne pourras qu&apos;enregistrer en brouillon. Connecte Gmail depuis Profil ou contacte le support pour activer Asthia.
             </div>
           ) : null}
         </Card>
@@ -960,7 +961,7 @@ export function NewInvoiceForm({
             <Button variant="secondary" type="button" onClick={() => submit("save")} disabled={busy !== null}>
               {busy === "save" ? "Enregistrement…" : "Brouillon"}
             </Button>
-            <Button type="button" onClick={() => submit("send")} disabled={busy !== null || !gmailConnected}>
+            <Button type="button" onClick={() => submit("send")} disabled={busy !== null || !canSendEmail}>
               {busy === "send" ? (
                 <><Loader2 size={14} className="animate-spin" /> Envoi…</>
               ) : (

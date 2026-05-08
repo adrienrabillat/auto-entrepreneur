@@ -7,6 +7,7 @@ import { InvoiceActions } from "./actions";
 import { ArrowLeft, ExternalLink, FileWarning } from "lucide-react";
 import { cleanClientName } from "@/lib/display-name";
 import { SavedFlash } from "@/components/ui/saved-flash";
+import { canSendEmail } from "@/lib/delivery/availability";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,12 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
   ]);
   const invoice = invoiceRes.data;
   if (!invoice) notFound();
-  const gmailConnected = Boolean(profileRes.data?.gmail_refresh_token);
+  // Capacité d'envoi : Gmail OU Resend dispo. On ne gate plus le bouton
+  // sur Gmail seul, sinon les comptes email/mdp ne pourraient jamais
+  // envoyer alors que Resend est en place côté serveur.
+  const sendEnabled = canSendEmail({
+    gmailRefreshToken: profileRes.data?.gmail_refresh_token,
+  });
 
   const isCreditNote = invoice.invoice_type === "credit_note";
   const docLabel = isCreditNote ? "Avoir" : "Facture";
@@ -166,7 +172,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
           <p className="text-body text-ink-800 whitespace-pre-wrap">{invoice.description}</p>
         </div>
 
-        <InvoiceActions invoice={invoice} gmailConnected={gmailConnected} />
+        <InvoiceActions invoice={invoice} canSendEmail={sendEnabled} />
       </section>
 
       <section className="surface p-0 overflow-hidden">

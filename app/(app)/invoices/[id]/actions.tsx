@@ -28,10 +28,11 @@ type Invoice = {
 
 export function InvoiceActions({
   invoice,
-  gmailConnected,
+  canSendEmail,
 }: {
   invoice: Invoice;
-  gmailConnected: boolean;
+  /** true si un canal email est dispo (Gmail OU Resend). */
+  canSendEmail: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -170,7 +171,7 @@ export function InvoiceActions({
             par construction mais peut quand même être envoyé/renvoyé). */}
         {(invoice.status !== "paid" && invoice.status !== "cancelled") || isCreditNote ? (
           <Button
-            disabled={!gmailConnected || busy !== null}
+            disabled={!canSendEmail || busy !== null}
             onClick={() => run("send", `/api/invoices/${invoice.id}/send`)}
           >
             <Send size={16} />
@@ -324,9 +325,10 @@ export function InvoiceActions({
         </div>
       </ConfirmDialog>
 
-      {!gmailConnected && invoice.status !== "paid" ? (
+      {!canSendEmail && invoice.status !== "paid" ? (
         <p className="text-xs text-ink-500">
-          Gmail non connecté — reconnecte-toi avec Google depuis la page d&apos;accueil pour pouvoir envoyer.
+          Aucun canal email disponible. Connecte Gmail depuis Profil, ou
+          contacte le support pour activer l&apos;envoi via Asthia.
         </p>
       ) : null}
       {error && !confirmOpen && !creditNoteOpen ? (

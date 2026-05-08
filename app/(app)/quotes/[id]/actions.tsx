@@ -29,11 +29,12 @@ type Quote = {
  */
 export function QuoteActions({
   quote,
-  gmailConnected,
+  canSendEmail,
   invoiceDeleted = false,
 }: {
   quote: Quote;
-  gmailConnected: boolean;
+  /** true si un canal email est dispo (Gmail OU Resend). */
+  canSendEmail: boolean;
   invoiceDeleted?: boolean;
 }) {
   const router = useRouter();
@@ -65,8 +66,10 @@ export function QuoteActions({
   }
 
   async function handleSend() {
-    if (!gmailConnected) {
-      setError("Gmail n'est pas connecté. Va dans Paramètres → Reconnecter Gmail.");
+    if (!canSendEmail) {
+      setError(
+        "Aucun canal email disponible. Connecte Gmail depuis Profil ou contacte le support pour activer l'envoi via Asthia.",
+      );
       return;
     }
     await action("send", () =>
@@ -144,7 +147,7 @@ export function QuoteActions({
           variant={quote.status === "draft" ? "primary" : "secondary"}
           onClick={handleSend}
           disabled={busy !== null}
-          title={!gmailConnected ? "Gmail non connecté" : ""}
+          title={!canSendEmail ? "Aucun canal email disponible" : ""}
         >
           {busy === "send" ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           {quote.status === "draft" ? "Envoyer" : "Renvoyer"}
