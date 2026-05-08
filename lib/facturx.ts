@@ -134,22 +134,22 @@ export function buildFacturxBasicXml(inp: FacturxInput): string {
       : "";
 
   // Payment means : 58 = SEPA credit transfer (virement). Inclut l'IBAN
-  // si fourni. NB: l'élément `<ram:Information>` n'est PAS autorisé
-  // dans le profil BASIC (XSD restrictif) — on l'omet pour passer la
-  // validation XSD côté validateurs stricts (b2brouter, FNFE-MPE).
+  // si fourni.
+  //
+  // Limitations du profil BASIC :
+  //  - `<ram:Information>` n'est PAS autorisé (réservé au profil EN16931+).
+  //  - `<ram:PayeeSpecifiedCreditorFinancialInstitution>` (qui porte le
+  //    BIC) n'est PAS non plus autorisé en BASIC. Le BIC arrive seulement
+  //    à partir d'EN16931 (BT-86 dans la sémantique mais seulement
+  //    encodable au profil supérieur).
+  // On les omet ici pour passer la validation XSD stricte. Le BIC reste
+  // visible côté PDF dans le bloc bancaire — c'est légalement suffisant.
   const paymentMeansBlock = inp.iban
     ? `      <ram:SpecifiedTradeSettlementPaymentMeans>
         <ram:TypeCode>58</ram:TypeCode>
         <ram:PayeePartyCreditorFinancialAccount>
           <ram:IBANID>${esc(cleanIban(inp.iban))}</ram:IBANID>
-        </ram:PayeePartyCreditorFinancialAccount>${
-          inp.bic
-            ? `
-        <ram:PayeeSpecifiedCreditorFinancialInstitution>
-          <ram:BICID>${esc(cleanBic(inp.bic))}</ram:BICID>
-        </ram:PayeeSpecifiedCreditorFinancialInstitution>`
-            : ""
-        }
+        </ram:PayeePartyCreditorFinancialAccount>
       </ram:SpecifiedTradeSettlementPaymentMeans>`
     : `      <ram:SpecifiedTradeSettlementPaymentMeans>
         <ram:TypeCode>58</ram:TypeCode>
