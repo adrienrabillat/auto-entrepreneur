@@ -226,6 +226,19 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+
+  // Diagnostic temporaire : on log un résumé du payload brut. Resend a
+  // visiblement plusieurs formats selon les versions de webhook ; voir
+  // la forme exacte permet de trancher sans tâtonner.
+  console.log(
+    "[inbound/contact] payload keys (root):",
+    Object.keys(payload),
+    "data keys:",
+    payload.data ? Object.keys(payload.data) : "(no data)",
+    "rawBody preview:",
+    rawBody.slice(0, 600),
+  );
+
   // Resend envoie le mail à la racine du payload, mais on garde le fallback
   // sous `data` au cas où le format change. pickEmailFields renvoie la
   // bonne section automatiquement.
