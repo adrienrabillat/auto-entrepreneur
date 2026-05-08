@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { SettingsForm } from "./form";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { LogOut, Palette, Send } from "lucide-react";
+import { LogoUpload } from "./logo-upload";
+import { LogOut, Palette, Send, Image as ImageIcon } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,17 @@ export default async function SettingsPage() {
       .maybeSingle(),
   ]);
   const invoicesAlreadyEmitted = Boolean(firstInvoice);
+
+  // URL signée temporaire pour afficher le logo courant. createSignedUrl
+  // renvoie une URL valide ~1h ; suffisant pour la session de settings.
+  // Si pas de logo, logoUrl reste null et le composant montre l'état vide.
+  let logoUrl: string | null = null;
+  if (profile.logo_path) {
+    const { data: signed } = await supabase.storage
+      .from("logos")
+      .createSignedUrl(profile.logo_path, 3600);
+    logoUrl = signed?.signedUrl ?? null;
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -58,6 +70,21 @@ export default async function SettingsPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="surface p-5 space-y-4">
+        <div className="flex items-start gap-4">
+          <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600">
+            <ImageIcon size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-ink-900">Logo</div>
+            <div className="text-small text-ink-500">
+              Apparaît en haut à gauche de tes factures et devis. Optionnel.
+            </div>
+          </div>
+        </div>
+        <LogoUpload logoUrl={logoUrl} />
       </div>
 
       <div className="surface p-5 space-y-4">

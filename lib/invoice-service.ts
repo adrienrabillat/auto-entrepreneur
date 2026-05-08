@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateInvoicePdf, type InvoicePdfData, type OperationType } from "@/lib/pdf";
 import { deliverInvoice, type DeliveryResult } from "@/lib/delivery";
+import { loadLogoForPdf } from "@/lib/logo-loader";
+import { ensureAsthiaAlias } from "@/lib/asthia-alias";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   nextInvoiceNumber,
   nextDraftNumber,
@@ -38,6 +41,11 @@ type Profile = {
   mediator_website: string | null;
   gmail_refresh_token: string | null;
   gmail_connected_email: string | null;
+  /** Path Storage du logo (bucket 'logos'), ou null si pas uploadé. */
+  logo_path: string | null;
+  /** Alias unique style "prenom.nom" — utilisé pour construire l'adresse
+   *  d'envoi `<alias>@asthia.fr`. Généré au premier envoi si null. */
+  asthia_alias: string | null;
 };
 
 type InvoiceRow = {
@@ -164,6 +172,9 @@ export function pdfDataFromInvoice(
   /** Numéro de la facture originale, requis lorsque `invoice` est un avoir
    *  pour afficher la mention "Avoir relatif à la facture XXX" dans le PDF. */
   relatedInvoiceNumber?: string,
+  /** Logo déjà téléchargé (cf. `loadLogoForPdf`). Optionnel — si absent
+   *  le PDF se génère sans logo. */
+  logo?: { bytes: Uint8Array; mimeType: "image/png" | "image/jpeg" },
 ): InvoicePdfData {
   assertProfileReady(profile);
   const isCreditNote = invoice.invoice_type === "credit_note";
@@ -232,6 +243,7 @@ export function pdfDataFromInvoice(
       siren: invoice.client_siren ?? undefined,
       address: invoice.client_address ?? undefined,
     },
+    logo,
   };
 }
 
@@ -282,7 +294,18 @@ export async function sendInvoice(
     relatedNumber = original?.number;
   }
 
-  const pdfBytes = await generateInvoicePdf(pdfDataFromInvoice(profile, invoice, relatedNumber));
+  // Logo (optionnel). Téléchargé une fois ici pour être passé au PDF
+  // sans refaire un round-trip Storage côté pdf.ts.
+  const logo = await loadLogoForPdf(supabase, profile.logo_path);
+
+  // Alias Asthia : généré au premier envoi (lazy backfill). Utilise un
+  // client admin parce que la résolution scanne tous les profils pour
+  // détecter les collisions, et la RLS user-scopée bloquerait la lecture.
+  const asthiaAlias = await ensureAsthiaAlias(createAdminClient(), userId);
+
+  const pdfBytes = await generateInvoicePdf(
+    pdfDataFromInvoice(profile, invoice, relatedNumber, logo),
+  );
   const filename = isCreditNote
     ? `avoir-${invoice.number}.pdf`
     : `facture-${invoice.number}.pdf`;
@@ -399,6 +422,7 @@ export async function sendInvoice(
     sender: {
       displayName: profile.display_name ?? profile.email,
       email: profile.email,
+      asthiaAddress: `${asthiaAlias}@asthia.fr`,
     },
   });
   // delivery.channel / reference / status seront utilisés plus tard pour

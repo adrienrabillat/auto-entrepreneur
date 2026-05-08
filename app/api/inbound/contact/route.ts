@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import crypto from "crypto";
 import { Resend } from "resend";
+import { resolveAliasOwner } from "@/lib/asthia-alias";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { storeInboundMessage } from "@/lib/messaging";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -163,66 +166,107 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing email_id" }, { status: 400 });
   }
 
-  // ─── 3. Filtrage des destinataires ──────────────────────────────────
-  // Par défaut on ne relaie que `contact@asthia.fr`. Pour relayer plusieurs
-  // adresses, lister dans INBOUND_FILTER_TO séparées par virgule. Vide
-  // pour tout relayer.
-  const filterRaw = (process.env.INBOUND_FILTER_TO ?? "contact@asthia.fr").trim();
-  if (filterRaw.length > 0) {
-    const allowed = filterRaw
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean);
-    const matched = toList.some((addr) => allowed.includes(addr.toLowerCase()));
-    if (!matched) {
-      // Pas une erreur — on n'a juste pas vocation à relayer cette adresse.
-      return NextResponse.json({ ok: true, skipped: true, to: toList });
-    }
-  }
-
-  // ─── 4. Forward via le helper Resend ────────────────────────────────
-  // `resend.emails.receiving.forward()` fetch le corps + PJ côté Resend
-  // et réémet le mail. Avec `passthrough: true` (par défaut), le mail est
-  // transféré tel quel — corps original, PJ inline, formatage préservé.
+  // ─── 3. Routage par alias ──────────────────────────────────────────
+  // On supporte deux familles d'adresses entrantes :
+  //
+  //  A) `contact@asthia.fr` (legacy). Tous les mails à cette adresse
+  //     sont forwardés à `INBOUND_FORWARD_TO` (par défaut le mail perso
+  //     d'Adrien). Comportement historique conservé pour les contacts
+  //     marketing/support du domaine.
+  //
+  //  B) `<alias>@asthia.fr` (par utilisateur). On cherche un AE dont
+  //     `profiles.asthia_alias = <alias>`. Si trouvé, on forward vers
+  //     son email perso ET on stocke le message en base pour la
+  //     messagerie in-app.
+  //
+  // Si aucun mail entrant ne match A ou B, on skip silencieusement.
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.error("[inbound/contact] RESEND_API_KEY manquante — impossible de forwarder");
     return NextResponse.json({ error: "RESEND_API_KEY not configured" }, { status: 500 });
   }
-
-  const forwardTo = process.env.INBOUND_FORWARD_TO || "adrien.rabillat@gmail.com";
+  const resend = new Resend(apiKey);
+  const admin = createAdminClient();
   const forwardFrom =
     process.env.INBOUND_FORWARD_FROM || "Asthia Contact <noreply@asthia.fr>";
+  const legacyContactForwardTo =
+    process.env.INBOUND_FORWARD_TO || "adrien.rabillat@gmail.com";
 
-  const resend = new Resend(apiKey);
-  const { data: forwardData, error: forwardError } = await resend.emails.receiving.forward({
-    emailId,
-    to: forwardTo,
-    from: forwardFrom,
-    // passthrough: true (défaut) → le mail est transféré "tel quel" :
-    // corps original, PJ inline, formatage préservé. Si on voulait un
-    // wrapper "Forwarded message" type Gmail, on passerait `passthrough:
-    // false` + un `text`/`html` d'introduction. Pour un simple alias
-    // perso, le passthrough est plus naturel à l'usage.
-  });
-
-  if (forwardError) {
-    console.error(
-      "[inbound/contact] resend.emails.receiving.forward a échoué:",
-      forwardError.message,
-      forwardError,
-    );
-    // 500 pour que Svix retente automatiquement (4xx = erreur permanente
-    // non retentée).
-    return NextResponse.json(
-      { error: "Forward failed", detail: forwardError.message },
-      { status: 500 },
-    );
+  // On ne traite QUE les destinataires `*@asthia.fr` — un mail forward
+  // depuis Resend Inbound peut listait d'autres recipients en CC/BCC qui
+  // ne nous concernent pas.
+  const asthiaTos = toList.filter((addr) => addr.toLowerCase().endsWith("@asthia.fr"));
+  if (asthiaTos.length === 0) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "no asthia recipient", to: toList });
   }
 
-  return NextResponse.json({
-    ok: true,
-    forwardedTo: forwardTo,
-    forwardId: forwardData?.id ?? null,
-  });
+  const results: Array<{ to: string; status: "forwarded" | "skipped"; forwardId?: string | null; error?: string }> = [];
+
+  for (const addr of asthiaTos) {
+    const localPart = addr.split("@")[0]?.toLowerCase() ?? "";
+
+    // Cas A : legacy contact@asthia.fr
+    if (localPart === "contact") {
+      const { data: forwardData, error: forwardError } = await resend.emails.receiving.forward({
+        emailId,
+        to: legacyContactForwardTo,
+        from: forwardFrom,
+      });
+      if (forwardError) {
+        console.error("[inbound/contact] forward legacy contact a échoué:", forwardError);
+        results.push({ to: addr, status: "skipped", error: forwardError.message });
+      } else {
+        results.push({ to: addr, status: "forwarded", forwardId: forwardData?.id ?? null });
+      }
+      continue;
+    }
+
+    // Cas B : alias utilisateur. Résolution via `profiles.asthia_alias`.
+    const owner = await resolveAliasOwner(admin, localPart);
+    if (!owner) {
+      // Adresse @asthia.fr qui ne correspond à aucun utilisateur — ce
+      // n'est pas un cas d'erreur à proprement parler (typo client,
+      // ancien alias…). On skip et on log.
+      console.warn(`[inbound/contact] alias inconnu: ${localPart}`);
+      results.push({ to: addr, status: "skipped", error: "unknown alias" });
+      continue;
+    }
+
+    // Forward Resend → email perso de l'AE. C'est le filet de sécurité
+    // pour qu'il voie le message même s'il n'ouvre pas l'app.
+    const { data: forwardData, error: forwardError } = await resend.emails.receiving.forward({
+      emailId,
+      to: owner.email,
+      from: forwardFrom,
+    });
+    if (forwardError) {
+      console.error(
+        `[inbound/contact] forward alias=${localPart} a échoué:`,
+        forwardError,
+      );
+      results.push({ to: addr, status: "skipped", error: forwardError.message });
+      continue;
+    }
+
+    // Stockage en base pour la messagerie in-app. Best-effort : si ça
+    // échoue, on a quand même fait le forward, le user verra le mail
+    // dans son Gmail.
+    try {
+      await storeInboundMessage(admin, {
+        ownerId: owner.id,
+        ownerAlias: localPart,
+        emailId,
+        from: data.from ?? "",
+        subject: data.subject ?? "(sans objet)",
+        messageId: data.message_id ?? null,
+        receivedAtIso: data.created_at ?? new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn(`[inbound/contact] store message failed for ${localPart}:`, e);
+    }
+
+    results.push({ to: addr, status: "forwarded", forwardId: forwardData?.id ?? null });
+  }
+
+  return NextResponse.json({ ok: true, results });
 }

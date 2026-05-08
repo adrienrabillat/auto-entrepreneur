@@ -89,6 +89,14 @@ export type InvoicePdfData = {
     siren?: string;
     address?: string;
   };
+  /**
+   * Logo optionnel de l'AE — bytes bruts d'une image (PNG ou JPG, le
+   * format SVG n'est PAS supporté par pdf-lib donc à filtrer côté
+   * service avant d'arriver ici). Si présent, embed en haut à gauche
+   * du PDF, environ 80 px de haut. Si absent, le PDF se contente de
+   * son layout actuel sans rien afficher.
+   */
+  logo?: { bytes: Uint8Array; mimeType: "image/png" | "image/jpeg" };
 };
 
 // ---------------------------------------------------------------------------
@@ -173,12 +181,52 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   let y = height - 64;
 
   // ----------------------------------------------------------------
+  // LOGO — optionnel, en haut à gauche, max 56 px de haut. Embed PNG
+  // ou JPG. SVG non supporté par pdf-lib (il faudrait rasteriser avant,
+  // on filtre côté service).
+  // ----------------------------------------------------------------
+  if (data.logo) {
+    try {
+      const img =
+        data.logo.mimeType === "image/png"
+          ? await pdf.embedPng(data.logo.bytes)
+          : await pdf.embedJpg(data.logo.bytes);
+      const targetH = 56;
+      const scale = targetH / img.height;
+      const logoW = img.width * scale;
+      const logoH = targetH;
+      // pdf-lib drawImage : x/y = coin bas-gauche → on cale le bas du
+      // logo à `y - logoH` (rappel : le cursor `y` part du haut de la
+      // page côté logique, mais en pdf-lib y=0 est en bas).
+      page.drawImage(img, {
+        x: marginX,
+        y: y - logoH,
+        width: logoW,
+        height: logoH,
+      });
+      // Décale le cursor vers le bas pour ne pas overlapper le titre.
+      y -= logoH + 16;
+    } catch (e) {
+      // Fichier corrompu / format non géré → on log et on continue
+      // sans logo plutôt que de planter l'envoi de la facture.
+      console.warn("[pdf] logo embed failed, skipping:", e);
+    }
+  }
+
+  // ----------------------------------------------------------------
   // TITRE — "FACTURE" à gauche, numéro à droite.
   // Si acquittée : tampon vert "ACQUITTÉE" sous le titre.
   // ----------------------------------------------------------------
   draw(docTitle, marginX, y, { size: 28, font: bold, color: C_INK_900 });
-  draw(`#${data.number}`, rightX, y + 6, {
-    size: 13,
+  // Libellé "Référence facture/devis/avoir : F-2026-0001" — plus parlant
+  // pour le client et la compta qu'un simple `#F-2026-0001`.
+  const refLabel = isCreditNote
+    ? "Référence avoir"
+    : isQuote
+      ? "Référence devis"
+      : "Référence facture";
+  draw(`${refLabel} : ${data.number}`, rightX, y + 6, {
+    size: 11,
     font: regular,
     color: C_INK_500,
     align: "right",

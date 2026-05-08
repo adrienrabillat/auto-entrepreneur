@@ -46,7 +46,15 @@ export const resendAdapter: DeliveryAdapter = {
       );
     }
 
-    const fromEmail = process.env.RESEND_FROM_EMAIL || "factures@asthia.fr";
+    // From utilise l'alias Asthia personnel de l'AE
+    // (`<alias>@asthia.fr`) calculé en amont par invoice-service /
+    // quote-service via `ensureAsthiaAlias`. On garde un fallback de
+    // sécurité (`factures@asthia.fr`) au cas où l'alias n'aurait pas
+    // pu être généré — ne devrait jamais arriver en prod.
+    const fromEmail =
+      input.sender.asthiaAddress ||
+      process.env.RESEND_FROM_EMAIL ||
+      "factures@asthia.fr";
     const fromName = input.sender.displayName?.trim() || "Asthia";
     // RFC 5322 : si le nom contient une virgule ou un caractère spécial,
     // il faut le quoter. On reste simple : on enlève les guillemets pour
@@ -54,10 +62,13 @@ export const resendAdapter: DeliveryAdapter = {
     const safeName = fromName.replace(/"/g, "");
     const from = `${safeName} <${fromEmail}>`;
 
-    // Reply-To = vraie adresse de l'AE, pour que le client réponde
-    // directement à lui et pas à `factures@asthia.fr` (qui peut ou non
-    // être configurée pour forward selon la config Resend Inbound).
-    const replyTo = input.sender.email || undefined;
+    // Reply-To = adresse Asthia personnelle de l'AE pour que les
+    // réponses des clients passent par notre webhook inbound. On y
+    // les stocke dans la messagerie in-app + on forward vers le Gmail
+    // perso de l'AE comme filet. Si pas d'alias (cas dégradé), on
+    // tombe sur l'email perso direct.
+    const replyTo =
+      input.sender.asthiaAddress || input.sender.email || undefined;
 
     // Resend exige le PDF en base64 dans le champ `content`.
     const pdfBase64 = bytesToBase64(input.pdf.bytes);

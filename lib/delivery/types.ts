@@ -61,9 +61,16 @@ export type DeliveryInput = {
   sender: {
     displayName: string;
     /** Email perso/pro de l'AE — utilisé en `Reply-To` pour que les
-     *  réponses des clients arrivent directement chez l'AE plutôt que
-     *  sur l'identité technique `factures@asthia.fr`. */
+     *  réponses des clients arrivent vers l'AE même si la messagerie
+     *  in-app est down. Pour les comptes avec alias Asthia, on utilise
+     *  plutôt l'alias en Reply-To pour que les réponses passent par
+     *  notre webhook (cf. asthiaAddress). */
     email: string;
+    /** Adresse Asthia personnelle de l'AE (`<alias>@asthia.fr`). C'est
+     *  l'adresse utilisée comme `from` pour l'envoi sortant et comme
+     *  `Reply-To` pour que les réponses reviennent dans notre webhook
+     *  inbound (puis dans la messagerie in-app + forward Gmail). */
+    asthiaAddress: string;
   };
 };
 

@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateInvoicePdf, type InvoicePdfData, type OperationType } from "@/lib/pdf";
+import { loadLogoForPdf } from "@/lib/logo-loader";
 import { deliverInvoice } from "@/lib/delivery";
 import { nextQuoteNumber } from "@/lib/invoice-number";
 import { loadProfile, createInvoiceRow } from "@/lib/invoice-service";
+import { ensureAsthiaAlias } from "@/lib/asthia-alias";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { formatEUR } from "@/lib/format";
 
 /**
@@ -180,6 +183,7 @@ export async function generateQuotePdfBytes(
       siren: quote.client_siren ?? undefined,
       address: quote.client_address ?? undefined,
     },
+    logo: await loadLogoForPdf(supabase, profile.logo_path),
   };
 
   const bytes = await generateInvoicePdf(data);
@@ -231,8 +235,9 @@ ${quote.valid_until ? `<p>Valable jusqu'au <strong>${formatFr(quote.valid_until)
 <p>Pour accepter ce devis, répondez à cet email avec la mention « Bon pour accord ».</p>
 <p>Bien cordialement,<br>${escapeHtml(profile.display_name ?? "")}<br>${escapeHtml(profile.metier ?? "")}</p>`;
 
-  // Pour le devis on FORCE le canal Gmail : la PDP ne traite que les
-  // factures B2B au sens e-invoicing, pas les devis.
+  // Alias Asthia personnel — généré au premier envoi si encore null.
+  const asthiaAlias = await ensureAsthiaAlias(createAdminClient(), userId);
+
   await deliverInvoice(
     {
       recipient: {
@@ -253,6 +258,7 @@ ${quote.valid_until ? `<p>Valable jusqu'au <strong>${formatFr(quote.valid_until)
       sender: {
         displayName: profile.display_name ?? "",
         email: profile.email,
+        asthiaAddress: `${asthiaAlias}@asthia.fr`,
       },
     },
     // Pas de forceChannel : on laisse le dispatcher choisir (Resend

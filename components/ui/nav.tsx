@@ -3,17 +3,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { FileText, FilePen, LayoutDashboard, Receipt, Settings, Users } from "lucide-react";
+import {
+  FileText,
+  FilePen,
+  LayoutDashboard,
+  MessageSquare,
+  Receipt,
+  Settings,
+  Users,
+} from "lucide-react";
 
 // Items de navigation principaux (sidebar desktop + bottom-nav mobile).
-// Ordre : Accueil → Devis → Factures → Clients → URSSAF → Profil.
-// "Devis" est avant "Factures" parce que dans le flow naturel d'un AE
-// on émet un devis AVANT la facture (sauf vente directe). 6 items au
-// total → la grid mobile passe de grid-cols-5 à grid-cols-6.
+// Ordre : Accueil → Devis → Factures → Messages → Clients → URSSAF → Profil.
+// "Messages" rejoint la nav après l'ajout de la messagerie in-app — on le
+// place après Factures parce que les conversations sont liées aux
+// factures/devis envoyés.
 const items = [
   { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
   { href: "/quotes", label: "Devis", icon: FilePen },
   { href: "/invoices", label: "Factures", icon: FileText },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/declarations", label: "URSSAF", icon: Receipt },
   { href: "/settings", label: "Profil", icon: Settings },
@@ -96,7 +105,7 @@ export function MobileBottomNav() {
       className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-surface shadow-card"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="grid grid-cols-6">
+      <ul className="grid grid-cols-7">
         {items.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + "/");
           return (

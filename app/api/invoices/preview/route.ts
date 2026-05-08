@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { loadProfile } from "@/lib/invoice-service";
 import { generateInvoicePdf, type InvoicePdfData, type OperationType } from "@/lib/pdf";
+import { loadLogoForPdf } from "@/lib/logo-loader";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +116,7 @@ export async function POST(req: NextRequest) {
       siren: body.client_siren ?? undefined,
       address: body.client_address ?? undefined,
     },
+    logo: await loadLogoForPdf(supabase, profile.logo_path),
   };
 
   try {
