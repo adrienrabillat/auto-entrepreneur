@@ -1,4 +1,3 @@
-import { gmailAdapter } from "./gmail";
 import { pdpAdapter } from "./pdp";
 import { resendAdapter } from "./resend";
 import type {
@@ -16,24 +15,14 @@ export type { DeliveryAdapter, DeliveryInput, DeliveryResult, DeliveryChannel } 
  * Priorité :
  *  1. PDP (si configurée ET destinataire B2B français avec SIREN)
  *     → conforme obligation e-invoicing 2026/2027
- *  2. Resend (si RESEND_API_KEY défini)
- *     → identité unifiée Asthia (factures@asthia.fr), pas besoin de
- *       Gmail connecté côté AE. Adapté aux comptes créés par
- *       email/mot de passe (instructeur URSSAF, AE sans Google…).
- *  3. Gmail (fallback historique)
- *     → conserve le comportement original pour les AE qui ont
- *       connecté leur Gmail à l'onboarding et n'ont pas Resend dispo.
- *
- * L'ordre est important :
- *  - PDP gagne toujours si elle peut (obligation légale B2B 2026/2027).
- *  - Resend gagne sur Gmail si la clé est configurée — pour donner aux
- *    factures une identité Asthia plutôt que perso. Si l'AE préfère
- *    Gmail, il peut forcer via `forceChannel: "gmail"`.
+ *  2. Resend
+ *     → identité unifiée Asthia (factures@asthia.fr). Canal d'envoi
+ *       email standard depuis la décommission Gmail (mai 2026).
  *
  * Pour forcer un canal spécifique (debug, dry-run, préférence user),
  * passer `forceChannel`.
  */
-const ADAPTERS: DeliveryAdapter[] = [pdpAdapter, resendAdapter, gmailAdapter];
+const ADAPTERS: DeliveryAdapter[] = [pdpAdapter, resendAdapter];
 
 export async function deliverInvoice(
   input: DeliveryInput,
@@ -48,7 +37,7 @@ export async function deliverInvoice(
   const candidate = ADAPTERS.find((a) => a.canDeliver(input));
   if (!candidate) {
     throw new Error(
-      "Aucun canal de livraison disponible. Vérifie la connexion Gmail, la clé RESEND_API_KEY, ou la configuration PDP."
+      "Aucun canal de livraison disponible. Vérifie RESEND_API_KEY ou la configuration PDP.",
     );
   }
   return candidate.deliver(input);

@@ -14,7 +14,7 @@ export default async function NewInvoicePage() {
   const [{ data: profile }, { data: clientsRaw }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("gmail_refresh_token, gmail_connected_email, display_name, iban, bic")
+      .select("display_name, iban, bic")
       .eq("id", user!.id)
       .maybeSingle(),
     supabase
@@ -25,12 +25,8 @@ export default async function NewInvoicePage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  const gmailConnected = Boolean(profile?.gmail_refresh_token);
-  // Capacité d'envoi : Gmail OU Resend dispo (cf. lib/delivery/availability.ts).
-  // On garde aussi `gmailConnected` pour personnaliser le copy "depuis xxx@gmail.com".
-  const sendEnabled = canSendEmail({
-    gmailRefreshToken: profile?.gmail_refresh_token,
-  });
+  // Capacité d'envoi : Resend uniquement (Gmail décommissionné mai 2026).
+  const sendEnabled = canSendEmail();
   const bankingReady = Boolean(profile?.iban && profile?.bic);
 
   const clients: ClientOption[] = (clientsRaw ?? []).map((c) => ({
@@ -55,11 +51,9 @@ export default async function NewInvoicePage() {
         <span className="text-gradient-brand">Nouvelle facture</span>
       </h1>
       <p className="mt-1 text-small text-ink-500">
-        Décris ta prestation, indique le montant et l&apos;email du client. La facture part
-        {gmailConnected
-          ? ` depuis ${profile?.gmail_connected_email}`
-          : " depuis l'identité Asthia (factures@asthia.fr)"}
-        , avec une copie pour toi.
+        Décris ta prestation, indique le montant et l&apos;email du client.
+        La facture part depuis <strong>factures@asthia.fr</strong>, avec une
+        copie pour toi.
       </p>
 
       {!bankingReady ? (
@@ -77,9 +71,9 @@ export default async function NewInvoicePage() {
         <div className="mt-5 rounded-2xl p-4 text-small bg-warn-500/10 flex items-start gap-3 text-warn-600">
           <AlertTriangle size={18} className="shrink-0 mt-0.5" />
           <p>
-            Aucun canal email disponible pour l&apos;instant. Tu peux créer la
-            facture en brouillon ; pour l&apos;envoyer, connecte Gmail depuis
-            Profil ou contacte le support pour activer l&apos;envoi via Asthia.
+            L&apos;envoi email est temporairement indisponible (clé Resend
+            manquante côté serveur). Tu peux créer la facture en brouillon
+            en attendant.
           </p>
         </div>
       ) : null}

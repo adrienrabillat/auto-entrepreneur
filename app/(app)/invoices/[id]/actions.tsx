@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input, Label, Textarea } from "@/components/ui/input";
+import { SavedToast } from "@/components/ui/feedback";
 import {
   Send,
   CheckCircle2,
@@ -42,6 +43,11 @@ export function InvoiceActions({
   const [cnReason, setCnReason] = useState("");
   const [cnAmountStr, setCnAmountStr] = useState("");
   const [cnPartial, setCnPartial] = useState(false);
+  // Toast de feedback après envoi/marquage. Visible 2,5 s, puis se cache
+  // automatiquement via onDone(). Utilisé pour confirmer un envoi email
+  // réussi ou un changement de statut, en complément du badge qui change
+  // côté hero.
+  const [flashMessage, setFlashMessage] = useState<string | null>(null);
 
   const isCreditNote = invoice.invoice_type === "credit_note";
 
@@ -65,9 +71,10 @@ export function InvoiceActions({
     }
   }
 
-  async function run(key: string, url: string, body?: object) {
+  async function run(key: string, url: string, body?: object, successMessage?: string) {
     try {
       await request(key, "POST", url, body);
+      if (successMessage) setFlashMessage(successMessage);
       router.refresh();
     } catch {
       /* already surfaced */
@@ -172,7 +179,18 @@ export function InvoiceActions({
         {(invoice.status !== "paid" && invoice.status !== "cancelled") || isCreditNote ? (
           <Button
             disabled={!canSendEmail || busy !== null}
-            onClick={() => run("send", `/api/invoices/${invoice.id}/send`)}
+            onClick={() =>
+              run(
+                "send",
+                `/api/invoices/${invoice.id}/send`,
+                undefined,
+                isCreditNote
+                  ? "Avoir envoyé par email"
+                  : invoice.sent_at
+                    ? "Facture renvoyée par email"
+                    : "Facture envoyée par email",
+              )
+            }
           >
             <Send size={16} />
             {busy === "send"
@@ -193,7 +211,14 @@ export function InvoiceActions({
             <Button
               variant="secondary"
               disabled={busy !== null}
-              onClick={() => run("paid", `/api/invoices/${invoice.id}/mark-paid`, { paid: true })}
+              onClick={() =>
+                run(
+                  "paid",
+                  `/api/invoices/${invoice.id}/mark-paid`,
+                  { paid: true },
+                  "Marquée comme payée",
+                )
+              }
             >
               <CheckCircle2 size={16} />
               {busy === "paid" ? "…" : "Marquer comme payée"}
@@ -202,7 +227,14 @@ export function InvoiceActions({
             <Button
               variant="secondary"
               disabled={busy !== null}
-              onClick={() => run("unpaid", `/api/invoices/${invoice.id}/mark-paid`, { paid: false })}
+              onClick={() =>
+                run(
+                  "unpaid",
+                  `/api/invoices/${invoice.id}/mark-paid`,
+                  { paid: false },
+                  "Paiement retiré",
+                )
+              }
             >
               <Undo2 size={16} />
               {busy === "unpaid" ? "…" : "Retirer le paiement"}
@@ -327,10 +359,18 @@ export function InvoiceActions({
 
       {!canSendEmail && invoice.status !== "paid" ? (
         <p className="text-xs text-ink-500">
-          Aucun canal email disponible. Connecte Gmail depuis Profil, ou
-          contacte le support pour activer l&apos;envoi via Asthia.
+          L&apos;envoi email est temporairement indisponible côté serveur
+          (clé Resend manquante). Réessaie dans quelques instants.
         </p>
       ) : null}
+
+      {/* Toast de feedback : "Facture envoyée par email", "Marquée comme
+          payée", etc. Disparaît tout seul après 2,5 s. */}
+      <SavedToast
+        visible={flashMessage !== null}
+        message={flashMessage ?? ""}
+        onDone={() => setFlashMessage(null)}
+      />
       {error && !confirmOpen && !creditNoteOpen ? (
         <p className="text-small font-medium text-danger-600 bg-danger-50 rounded-lg px-3 py-2">
           {error}

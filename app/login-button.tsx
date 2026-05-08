@@ -5,12 +5,12 @@ import { createClient } from "@/lib/supabase/browser";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/feedback";
 
-// gmail.send lets us send messages on the user's behalf.
-// userinfo.email/profile give us the basic identity for login.
+// Google sert uniquement à l'identification (login). L'envoi de factures
+// passe par Resend depuis mai 2026, donc plus besoin du scope gmail.send.
+// On garde le strict minimum : email + profile.
 const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
-  "https://www.googleapis.com/auth/gmail.send",
 ].join(" ");
 
 export function LoginButton({ next }: { next?: string }) {
@@ -32,9 +32,10 @@ export function LoginButton({ next }: { next?: string }) {
         redirectTo: redirectTo.toString(),
         scopes: SCOPES,
         queryParams: {
-          // access_type=offline + prompt=consent are required to get a refresh token
-          access_type: "offline",
-          prompt: "consent",
+          // Pas besoin de refresh token offline : on n'appelle plus
+          // d'API Google pour le compte de l'utilisateur. Le login
+          // standard suffit.
+          prompt: "select_account",
         },
       },
     });

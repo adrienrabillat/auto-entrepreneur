@@ -1,12 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * OAuth callback.
- * Supabase redirects here after Google sign-in with a ?code= param.
- * We exchange it for a session, then persist the user's Gmail refresh token
- * so we can send emails on their behalf later.
+ * Supabase redirects here après login Google (ou autre provider) avec un
+ * `?code=` param. On l'échange contre une session puis on redirige vers
+ * /onboarding si le profil n'est pas finalisé, sinon vers /dashboard
+ * (ou la page demandée via `?next=`).
+ *
+ * Historique : on persistait avant le `provider_refresh_token` Google
+ * pour envoyer les factures via gmail.send. Depuis la décommission
+ * Gmail (mai 2026), on ne stocke plus ce token — Google sert uniquement
+ * d'identité de login.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -21,25 +26,9 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.session) {
-    return NextResponse.redirect(`${origin}/?error=${encodeURIComponent(error?.message ?? "auth_failed")}`);
-  }
-
-  // provider_refresh_token is only returned on the very first Google OAuth
-  // consent. If the user already signed up we won't receive it again unless
-  // they pass prompt=consent (we do). Persist it into profiles.
-  const session = data.session;
-  const providerRefreshToken = (session as { provider_refresh_token?: string }).provider_refresh_token;
-  const providerEmail = data.user?.email ?? null;
-
-  if (providerRefreshToken) {
-    const admin = createAdminClient();
-    await admin
-      .from("profiles")
-      .update({
-        gmail_refresh_token: providerRefreshToken,
-        gmail_connected_email: providerEmail,
-      })
-      .eq("id", data.user!.id);
+    return NextResponse.redirect(
+      `${origin}/?error=${encodeURIComponent(error?.message ?? "auth_failed")}`,
+    );
   }
 
   // Decide where to send the user. If they haven't onboarded, force them through.

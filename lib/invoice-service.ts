@@ -214,7 +214,7 @@ export function pdfDataFromInvoice(
       country: profile.country || "France",
       phone: profile.phone ?? undefined,
       website: profile.website ?? undefined,
-      email: profile.gmail_connected_email ?? profile.email,
+      email: profile.email,
       iban: profile.iban!,
       bic: profile.bic!,
       rcsNumber: profile.rcs_number ?? undefined,
@@ -397,10 +397,8 @@ export async function sendInvoice(
     pdf: { bytes: pdfBytes, filename },
     email: { subject, text, html, bccSelf: true },
     sender: {
-      displayName: profile.display_name ?? profile.gmail_connected_email ?? profile.email,
+      displayName: profile.display_name ?? profile.email,
       email: profile.email,
-      gmailRefreshToken: profile.gmail_refresh_token,
-      gmailConnectedEmail: profile.gmail_connected_email,
     },
   });
   // delivery.channel / reference / status seront utilisés plus tard pour

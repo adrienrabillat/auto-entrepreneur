@@ -1,10 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { SettingsForm } from "./form";
-import { Badge } from "@/components/ui/card";
-import { ReconnectGmailButton } from "./reconnect-gmail";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Mail, LogOut, Palette } from "lucide-react";
+import { LogOut, Palette, Send } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -32,25 +30,6 @@ export default async function SettingsPage() {
   ]);
   const invoicesAlreadyEmitted = Boolean(firstInvoice);
 
-  const gmailActive = Boolean(profile.gmail_refresh_token);
-
-  // Détection du mode d'authentification : un utilisateur qui s'est inscrit
-  // par email/mot de passe (instructeur URSSAF, AE sans compte Google…) n'a
-  // pas d'identité Google liée. Dans ce cas, l'envoi de factures passe par
-  // Resend (identité unifiée Asthia) et le bloc "Reconnecter Gmail" n'a
-  // aucun sens — il enverrait l'utilisateur sur un OAuth Google qu'il n'a
-  // jamais initié. On masque donc le bloc.
-  //
-  // Garde-fou : si `gmailActive` est vrai (refresh token déjà stocké),
-  // on garde la carte affichée — l'utilisateur a déjà connecté Gmail à un
-  // moment, on lui laisse la possibilité de reconnecter.
-  const linkedProviders =
-    (user as { app_metadata?: { providers?: string[]; provider?: string } } | null)
-      ?.app_metadata?.providers ??
-    (user?.app_metadata?.provider ? [user.app_metadata.provider] : []);
-  const hasGoogleIdentity = linkedProviders.includes("google");
-  const showGmailCard = hasGoogleIdentity || gmailActive;
-
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
@@ -60,36 +39,26 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      {showGmailCard && (
-        <div className="surface p-5 space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-gradient-subtle text-brand-600">
-              <Mail size={18} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-ink-900">Gmail</span>
-                {gmailActive ? (
-                  <Badge tone="success">Actif</Badge>
-                ) : (
-                  <Badge tone="warn">Non connecté</Badge>
-                )}
-              </div>
-              <div className="text-small text-ink-500 truncate">
-                {profile.gmail_connected_email ?? "Aucune adresse liée pour l'instant"}
-              </div>
-            </div>
+      {/* Bloc info "Envoi via Asthia" — purement informatif. Tout l'envoi
+          de factures et de devis passe par l'identité unifiée
+          factures@asthia.fr (Resend), avec ton email perso en Reply-To. */}
+      <div className="surface p-5 space-y-3">
+        <div className="flex items-center gap-4">
+          <div className="h-11 w-11 shrink-0 grid place-items-center rounded-2xl bg-brand-gradient-subtle text-brand-600">
+            <Send size={18} />
           </div>
-          <div className="flex items-start justify-between gap-4 pt-4 border-t border-ink-100 flex-wrap">
-            <p className="text-small text-ink-500 flex-1 min-w-[220px]">
-              Si l&apos;envoi d&apos;email échoue avec une erreur de permission,
-              reconnecte Gmail en cochant bien &laquo;&nbsp;Envoyer des e-mails en
-              votre nom&nbsp;&raquo; sur l&apos;écran Google.
-            </p>
-            <ReconnectGmailButton />
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-ink-900">Envoi de factures</div>
+            <div className="text-small text-ink-500">
+              Tes factures et devis partent depuis{" "}
+              <strong className="font-medium">factures@asthia.fr</strong>. Quand
+              ton client clique &laquo;&nbsp;Répondre&nbsp;&raquo;, sa réponse
+              arrive directement sur{" "}
+              <strong className="font-medium">{profile.email}</strong>.
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       <div className="surface p-5 space-y-4">
         <div className="flex items-start gap-4">

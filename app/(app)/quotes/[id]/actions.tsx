@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Send, Check, X, ArrowRight, Trash2, Loader2, Pencil } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { ErrorBanner } from "@/components/ui/feedback";
+import { ErrorBanner, SavedToast } from "@/components/ui/feedback";
 
 type Quote = {
   id: string;
@@ -44,19 +44,27 @@ export function QuoteActions({
   // état d'erreur inline, identique au pattern utilisé dans
   // invoices/[id]/actions.tsx pour rester cohérent entre modules.
   const [error, setError] = useState<string | null>(null);
+  // Toast de feedback "Devis envoyé", "Marqué accepté", etc. Disparaît
+  // après 2,5 s.
+  const [flashMessage, setFlashMessage] = useState<string | null>(null);
 
   // Un devis converti est "figé" SAUF si la facture liée a été supprimée :
   // dans ce cas on réactive toutes les actions pour permettre reconversion.
   const isConverted = Boolean(quote.converted_invoice_id) && !invoiceDeleted;
 
   // Helpers : POST/PATCH/DELETE → erreur inline si KO, refresh si OK.
-  async function action(label: string, fn: () => Promise<Response>) {
+  async function action(
+    label: string,
+    fn: () => Promise<Response>,
+    successMessage?: string,
+  ) {
     setBusy(label);
     setError(null);
     try {
       const res = await fn();
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Erreur");
+      if (successMessage) setFlashMessage(successMessage);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur inattendue");
@@ -68,22 +76,33 @@ export function QuoteActions({
   async function handleSend() {
     if (!canSendEmail) {
       setError(
-        "Aucun canal email disponible. Connecte Gmail depuis Profil ou contacte le support pour activer l'envoi via Asthia.",
+        "L'envoi email est temporairement indisponible (clé Resend manquante côté serveur).",
       );
       return;
     }
-    await action("send", () =>
-      fetch(`/api/quotes/${quote.id}/send`, { method: "POST" }),
+    await action(
+      "send",
+      () => fetch(`/api/quotes/${quote.id}/send`, { method: "POST" }),
+      quote.status === "draft" ? "Devis envoyé par email" : "Devis renvoyé par email",
     );
   }
 
   async function handleStatus(status: "accepted" | "rejected" | "sent") {
-    await action(status, () =>
-      fetch(`/api/quotes/${quote.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      }),
+    const message =
+      status === "accepted"
+        ? "Devis marqué accepté"
+        : status === "rejected"
+          ? "Devis marqué refusé"
+          : "Devis remis en envoyé";
+    await action(
+      status,
+      () =>
+        fetch(`/api/quotes/${quote.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        }),
+      message,
     );
   }
 
@@ -231,6 +250,14 @@ export function QuoteActions({
         description={`Le devis ${quote.number} sera définitivement supprimé. Le client ne sera pas notifié.`}
         confirmLabel="Supprimer"
         variant="danger"
+      />
+
+      {/* Toast de feedback : "Devis envoyé par email", etc. Auto-dismiss
+          après 2,5 s. */}
+      <SavedToast
+        visible={flashMessage !== null}
+        message={flashMessage ?? ""}
+        onDone={() => setFlashMessage(null)}
       />
     </>
   );

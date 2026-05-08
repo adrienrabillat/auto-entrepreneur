@@ -15,27 +15,16 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
   const supabase = createClient();
   const user = await getCurrentUser();
 
-  const [invoiceRes, profileRes] = await Promise.all([
-    supabase
-      .from("invoices")
-      .select("*")
-      .eq("id", params.id)
-      .eq("user_id", user!.id)
-      .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("gmail_refresh_token, gmail_connected_email")
-      .eq("id", user!.id)
-      .maybeSingle(),
-  ]);
+  const invoiceRes = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("id", params.id)
+    .eq("user_id", user!.id)
+    .maybeSingle();
   const invoice = invoiceRes.data;
   if (!invoice) notFound();
-  // Capacité d'envoi : Gmail OU Resend dispo. On ne gate plus le bouton
-  // sur Gmail seul, sinon les comptes email/mdp ne pourraient jamais
-  // envoyer alors que Resend est en place côté serveur.
-  const sendEnabled = canSendEmail({
-    gmailRefreshToken: profileRes.data?.gmail_refresh_token,
-  });
+  // Capacité d'envoi : Resend uniquement (Gmail décommissionné mai 2026).
+  const sendEnabled = canSendEmail();
 
   const isCreditNote = invoice.invoice_type === "credit_note";
   const docLabel = isCreditNote ? "Avoir" : "Facture";

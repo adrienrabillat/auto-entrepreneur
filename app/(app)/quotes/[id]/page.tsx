@@ -26,27 +26,18 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   // au lieu d'un round-trip DB conditionnel après. Économie : 1 aller-retour
   // sur tous les devis convertis en facture (~70-150ms typique).
   // Le résultat est nesté sous la clé `converted_invoice` (alias choisi).
-  const [quoteRes, profileRes] = await Promise.all([
-    supabase
-      .from("quotes")
-      .select("*, converted_invoice:invoices!converted_invoice_id(number)")
-      .eq("id", params.id)
-      .eq("user_id", user!.id)
-      .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("gmail_refresh_token")
-      .eq("id", user!.id)
-      .maybeSingle(),
-  ]);
+  const quoteRes = await supabase
+    .from("quotes")
+    .select("*, converted_invoice:invoices!converted_invoice_id(number)")
+    .eq("id", params.id)
+    .eq("user_id", user!.id)
+    .maybeSingle();
   const quote = quoteRes.data as
     | (typeof quoteRes.data & { converted_invoice: { number: string } | null })
     | null;
   if (!quote) notFound();
-  // Capacité d'envoi : Gmail OU Resend dispo. Cf. lib/delivery/availability.ts.
-  const sendEnabled = canSendEmail({
-    gmailRefreshToken: profileRes.data?.gmail_refresh_token,
-  });
+  // Capacité d'envoi : Resend uniquement (Gmail décommissionné mai 2026).
+  const sendEnabled = canSendEmail();
   const convertedInvoiceNumber = quote.converted_invoice?.number ?? null;
 
   // Cas spécial : le devis a un converted_invoice_id mais le JOIN ne renvoie

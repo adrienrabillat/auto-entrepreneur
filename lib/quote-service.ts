@@ -162,7 +162,7 @@ export async function generateQuotePdfBytes(
       country: profile.country || "France",
       phone: profile.phone ?? undefined,
       website: profile.website ?? undefined,
-      email: profile.gmail_connected_email ?? profile.email,
+      email: profile.email,
       iban: profile.iban!,
       bic: profile.bic!,
       rcsNumber: profile.rcs_number ?? undefined,
@@ -253,11 +253,10 @@ ${quote.valid_until ? `<p>Valable jusqu'au <strong>${formatFr(quote.valid_until)
       sender: {
         displayName: profile.display_name ?? "",
         email: profile.email,
-        gmailRefreshToken: profile.gmail_refresh_token,
-        gmailConnectedEmail: profile.gmail_connected_email,
       },
     },
-    { forceChannel: "gmail" },
+    // Pas de forceChannel : on laisse le dispatcher choisir (Resend
+    // par défaut, PDP plus tard pour B2B FR).
   );
 
   // Mise à jour du statut. On ne change pas si déjà 'accepted' ou 'rejected'

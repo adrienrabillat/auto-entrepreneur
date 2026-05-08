@@ -23,7 +23,7 @@ export default async function NewQuotePage() {
   const [{ data: profile }, { data: clientsRaw }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("gmail_refresh_token, gmail_connected_email, siren, siret, address_line1, postal_code, city")
+      .select("siren, siret, address_line1, postal_code, city")
       .eq("id", user.id)
       .maybeSingle(),
     supabase
@@ -34,10 +34,8 @@ export default async function NewQuotePage() {
       .order("created_at", { ascending: false }),
   ]);
 
-  // Capacité d'envoi : Gmail OU Resend dispo (cf. lib/delivery/availability.ts).
-  const sendEnabled = canSendEmail({
-    gmailRefreshToken: profile?.gmail_refresh_token,
-  });
+  // Capacité d'envoi : Resend uniquement (Gmail décommissionné mai 2026).
+  const sendEnabled = canSendEmail();
   const profileReady = Boolean(
     profile?.siren && profile?.siret && profile?.address_line1 && profile?.postal_code && profile?.city,
   );
@@ -83,9 +81,9 @@ export default async function NewQuotePage() {
         <div className="mt-5 rounded-2xl p-4 text-small bg-warn-500/10 flex items-start gap-3 text-warn-600">
           <AlertTriangle size={18} className="shrink-0 mt-0.5" />
           <p>
-            Aucun canal email disponible. Tu pourras créer le devis en brouillon ;
-            pour l&apos;envoyer, connecte Gmail depuis Profil ou contacte le
-            support pour activer l&apos;envoi via Asthia.
+            L&apos;envoi email est temporairement indisponible (clé Resend
+            manquante côté serveur). Tu peux créer le devis en brouillon
+            en attendant.
           </p>
         </div>
       ) : null}

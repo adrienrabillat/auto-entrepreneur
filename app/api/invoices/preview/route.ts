@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
       country: profile.country || "France",
       phone: profile.phone ?? undefined,
       website: profile.website ?? undefined,
-      email: profile.gmail_connected_email ?? profile.email,
+      email: profile.email,
       iban: profile.iban ?? "",
       bic: profile.bic ?? "",
       rcsNumber: profile.rcs_number ?? undefined,
