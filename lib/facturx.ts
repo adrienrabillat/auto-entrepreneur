@@ -102,11 +102,20 @@ export function buildFacturxBasicXml(inp: FacturxInput): string {
   const sellerCountry = inp.seller.countryCode || "FR";
   const buyerCountry = inp.buyer.countryCode || "FR";
 
-  const sellerVatBlock = inp.seller.vatId
+  // BR-E-02 : pour une facture exonérée de TVA (CategoryCode=E), il faut
+  // soit le VAT ID (BT-31), soit l'identifiant fiscal du vendeur (BT-32),
+  // soit le VAT ID du représentant fiscal. Pour un AE en franchise en
+  // base, on n'a PAS de VAT ID. On émet donc un SpecifiedTaxRegistration
+  // avec schemeID="FC" (Tax Registration Code) en utilisant le SIREN
+  // comme tax registration identifier — c'est le pattern recommandé par
+  // FNFE-MPE pour les micros sans TVA.
+  const sellerTaxRegistrationBlock = inp.seller.vatId
     ? `        <ram:SpecifiedTaxRegistration>
           <ram:ID schemeID="VA">${esc(inp.seller.vatId)}</ram:ID>
         </ram:SpecifiedTaxRegistration>`
-    : "";
+    : `        <ram:SpecifiedTaxRegistration>
+          <ram:ID schemeID="FC">${esc(inp.seller.siren)}</ram:ID>
+        </ram:SpecifiedTaxRegistration>`;
 
   const buyerSirenBlock = inp.buyer.siren
     ? `        <ram:SpecifiedLegalOrganization>
@@ -124,11 +133,13 @@ export function buildFacturxBasicXml(inp: FacturxInput): string {
         </ram:PostalTradeAddress>`
       : "";
 
-  // Payment means : 58 = SEPA credit transfer (virement). Inclut l'IBAN si fourni.
+  // Payment means : 58 = SEPA credit transfer (virement). Inclut l'IBAN
+  // si fourni. NB: l'élément `<ram:Information>` n'est PAS autorisé
+  // dans le profil BASIC (XSD restrictif) — on l'omet pour passer la
+  // validation XSD côté validateurs stricts (b2brouter, FNFE-MPE).
   const paymentMeansBlock = inp.iban
     ? `      <ram:SpecifiedTradeSettlementPaymentMeans>
         <ram:TypeCode>58</ram:TypeCode>
-        <ram:Information>Virement SEPA</ram:Information>
         <ram:PayeePartyCreditorFinancialAccount>
           <ram:IBANID>${esc(cleanIban(inp.iban))}</ram:IBANID>
         </ram:PayeePartyCreditorFinancialAccount>${
@@ -142,27 +153,26 @@ export function buildFacturxBasicXml(inp: FacturxInput): string {
       </ram:SpecifiedTradeSettlementPaymentMeans>`
     : `      <ram:SpecifiedTradeSettlementPaymentMeans>
         <ram:TypeCode>58</ram:TypeCode>
-        <ram:Information>Virement SEPA</ram:Information>
       </ram:SpecifiedTradeSettlementPaymentMeans>`;
 
-  // Payment terms : échéance + description texte libre
-  const paymentTermsBlock =
-    inp.dueOnIso || inp.paymentTermsText
-      ? `      <ram:SpecifiedTradePaymentTerms>
-        ${
-          inp.paymentTermsText
-            ? `<ram:Description>${esc(inp.paymentTermsText)}</ram:Description>`
-            : ""
-        }${
-          dueCompact
+  // Payment terms : BR-CO-25 exige soit DueDate (BT-9) soit Description
+  // (BT-20) si le DuePayableAmount est positif. Pour rester safe on
+  // émet TOUJOURS un block PaymentTerms avec au minimum une description
+  // (fallback "À réception" pour les factures à régler, "Déjà réglée"
+  // pour les acquittées).
+  const paymentTermsDescription =
+    inp.paymentTermsText?.trim() ||
+    (inp.paid ? "Déjà réglée" : "Paiement à réception");
+  const paymentTermsBlock = `      <ram:SpecifiedTradePaymentTerms>
+        <ram:Description>${esc(paymentTermsDescription)}</ram:Description>${
+          dueCompact && !inp.paid
             ? `
         <ram:DueDateDateTime>
           <udt:DateTimeString format="102">${dueCompact}</udt:DateTimeString>
         </ram:DueDateDateTime>`
             : ""
         }
-      </ram:SpecifiedTradePaymentTerms>`
-      : "";
+      </ram:SpecifiedTradePaymentTerms>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rsm:CrossIndustryInvoice
@@ -225,7 +235,7 @@ export function buildFacturxBasicXml(inp: FacturxInput): string {
           <ram:CityName>${esc(inp.seller.city)}</ram:CityName>
           <ram:CountryID>${esc(sellerCountry)}</ram:CountryID>
         </ram:PostalTradeAddress>
-${sellerVatBlock}
+${sellerTaxRegistrationBlock}
       </ram:SellerTradeParty>
       <ram:BuyerTradeParty>
         <ram:Name>${esc(inp.buyer.name)}</ram:Name>
@@ -250,7 +260,6 @@ ${paymentMeansBlock}
         <ram:ExemptionReason>TVA non applicable, art. 293 B du CGI</ram:ExemptionReason>
         <ram:BasisAmount>${total}</ram:BasisAmount>
         <ram:CategoryCode>E</ram:CategoryCode>
-        <ram:ExemptionReasonCode>VATEX-FR-FRANCHISE</ram:ExemptionReasonCode>
         <ram:RateApplicablePercent>0.00</ram:RateApplicablePercent>
       </ram:ApplicableTradeTax>
 ${paymentTermsBlock}

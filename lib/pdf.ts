@@ -1,6 +1,6 @@
 import { PDFDocument, PDFName, PDFString, PDFHexString, StandardFonts, rgb } from "pdf-lib";
 import { buildFacturxMinimumXml } from "@/lib/facturx";
-import { applyPdfA3FacturxCompliance } from "@/lib/pdfa3";
+import { applyPdfA3FacturxCompliance, attachFacturxXml } from "@/lib/pdfa3";
 
 /**
  * Générateur PDF facture — refonte minimaliste.
@@ -733,12 +733,15 @@ function operationLabel(o: OperationType): string {
 
 async function embedFacturxXml(pdf: PDFDocument, xml: string, data: InvoicePdfData) {
   const xmlBytes = new TextEncoder().encode(xml);
-  await pdf.attach(xmlBytes, "factur-x.xml", {
-    mimeType: "application/xml",
-    description: "Factur-X (BASIC profile, EN 16931) — données structurées de la facture",
-    creationDate: new Date(),
-    modificationDate: new Date(),
-  });
+  // On contourne `pdf.attach()` parce qu'il ne sait pas écrire le champ
+  // `/AFRelationship` (obligatoire PDF/A-3 + Factur-X). Notre helper
+  // construit le Filespec manuellement avec ce champ dès la création.
+  await attachFacturxXml(
+    pdf,
+    xmlBytes,
+    "factur-x.xml",
+    "Factur-X (BASIC profile, EN 16931) — données structurées de la facture",
+  );
 
   // Applique tout le bagage PDF/A-3 + Factur-X (XMP metadata,
   // AFRelationship sur le Filespec, déclarations de schema). Externalisé

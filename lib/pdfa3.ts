@@ -55,6 +55,99 @@ export type FacturxOptions = {
 };
 
 /**
+ * Attache le XML Factur-X au PDF en construisant le Filespec
+ * MANUELLEMENT (au lieu d'utiliser `pdf.attach()` de pdf-lib).
+ *
+ * Pourquoi ? `pdf.attach()` ne supporte pas le champ `/AFRelationship`,
+ * qui est OBLIGATOIRE pour PDF/A-3 + Factur-X. Toute tentative de muter
+ * le Filespec après attach (en allant le chercher dans /Names/EmbeddedFiles)
+ * échoue silencieusement à la sérialisation — pdf-lib réécrit le dict
+ * sans nos modifications. La seule façon fiable est de construire le
+ * Filespec NOUS-MÊMES avec /AFRelationship dès le départ.
+ *
+ * Le Filespec final ressemble à :
+ *   <<
+ *     /Type /Filespec
+ *     /F (factur-x.xml)
+ *     /UF (factur-x.xml)
+ *     /AFRelationship /Alternative
+ *     /Desc (Factur-X (BASIC profile, EN 16931) ...)
+ *     /EF << /F <stream> /UF <stream> >>
+ *   >>
+ */
+export async function attachFacturxXml(
+  pdf: PDFDocument,
+  xmlBytes: Uint8Array,
+  filename: string,
+  description: string,
+) {
+  // 1. Stream du fichier embarqué (le XML lui-même), avec mimetype et
+  //    Params/Size (recommandé par ISO 32000-2 §7.11).
+  const efDictParams = pdf.context.obj({
+    Size: xmlBytes.length,
+    CheckSum: PDFString.of(""),
+  });
+  const efStream = PDFRawStream.of(
+    pdf.context.obj({
+      Type: "EmbeddedFile",
+      Subtype: "application/xml",
+      Length: xmlBytes.length,
+      Params: efDictParams,
+    }),
+    xmlBytes,
+  );
+  const efStreamRef = pdf.context.register(efStream);
+
+  // 2. Filespec : pointe vers le stream + porte la métadonnée AFRelationship.
+  const filespec = pdf.context.obj({
+    Type: "Filespec",
+    F: PDFString.of(filename),
+    UF: PDFHexString.fromText(filename),
+    AFRelationship: PDFName.of("Alternative"),
+    Desc: PDFString.of(description),
+    EF: pdf.context.obj({
+      F: efStreamRef,
+      UF: efStreamRef,
+    }),
+  });
+  const filespecRef = pdf.context.register(filespec);
+
+  // 3. Inscription dans le name tree /Names/EmbeddedFiles/Names.
+  //    Création de l'arbre s'il n'existe pas (cas d'un PDF neuf).
+  const root = pdf.catalog;
+  const names = ensureDict(root, PDFName.of("Names"), pdf);
+  const ef = ensureDict(names, PDFName.of("EmbeddedFiles"), pdf);
+  const efNamesArr = ensureArray(ef, PDFName.of("Names"), pdf);
+  efNamesArr.push(PDFString.of(filename));
+  efNamesArr.push(filespecRef);
+
+  // 4. /AF sur le Catalog : array contenant les refs des Filespecs.
+  //    Si déjà présent, on append ; sinon on crée.
+  const afArr = ensureArray(root, PDFName.of("AF"), pdf);
+  afArr.push(filespecRef);
+}
+
+/**
+ * Helpers : récupère ou crée un sous-dictionnaire / sous-array d'un dict
+ * PDF. Utile pour construire le name tree des EmbeddedFiles incrémentalement.
+ */
+function ensureDict(parent: PDFDict, key: PDFName, pdf: PDFDocument): PDFDict {
+  const existing = parent.lookup(key);
+  if (existing instanceof PDFDict) return existing;
+  const created = pdf.context.obj({});
+  parent.set(key, created);
+  return created;
+}
+
+function ensureArray(parent: PDFDict, key: PDFName, pdf: PDFDocument): PDFArray {
+  const existing = parent.lookup(key);
+  if (existing instanceof PDFArray) return existing;
+  const created = pdf.context.obj([]);
+  parent.set(key, created);
+  return created;
+}
+
+/**
  * Applique les modifications PDF/A-3 + Factur-X au document. À appeler
  * APRÈS l'attach du factur-x.xml mais AVANT le `pdf.save()`.
  *
@@ -65,11 +158,8 @@ export type FacturxOptions = {
  * cassées serait pire.
  */
 export function applyPdfA3FacturxCompliance(pdf: PDFDocument, opts: FacturxOptions) {
-  try {
-    setAfRelationshipOnFilespecs(pdf, "Alternative");
-  } catch (e) {
-    console.warn("[pdfa3] setAfRelationshipOnFilespecs failed:", e);
-  }
+  // Note : l'AFRelationship est désormais set au moment de l'attach
+  // (cf. `attachFacturxXml`), donc plus besoin de le faire ici.
   try {
     attachOutputIntent(pdf);
   } catch (e) {
@@ -152,54 +242,6 @@ function attachOutputIntent(pdf: PDFDocument) {
     PDFName.of("OutputIntents"),
     pdf.context.obj([outputIntentRef]),
   );
-}
-
-/**
- * Parcourt les pièces jointes embarquées (`/Names/EmbeddedFiles`) et
- * définit `/AFRelationship` sur leur Filespec. Crée aussi (ou maintient)
- * l'array `/AF` sur le Catalog pointant vers ces Filespecs — ce qui
- * permet à un lecteur PDF de découvrir les attachments associés sans
- * fouiller dans Names.
- */
-function setAfRelationshipOnFilespecs(pdf: PDFDocument, relationship: string) {
-  const root = pdf.catalog;
-  // On utilise `lookup(name)` sans type-assertion : la variante typée
-  // throw "Expected instance of X but got Y" si la clé n'existe pas
-  // (ce qui est légitime — ex: aperçu PDF avant attach). On préfère
-  // tester instanceof manuellement et sortir proprement.
-  const names = root.lookup(PDFName.of("Names"));
-  if (!(names instanceof PDFDict)) return;
-  const ef = names.lookup(PDFName.of("EmbeddedFiles"));
-  if (!(ef instanceof PDFDict)) return;
-  const namesArr = ef.lookup(PDFName.of("Names"));
-  if (!(namesArr instanceof PDFArray)) return;
-
-  const filespecRefs: PDFRef[] = [];
-  for (let i = 1; i < namesArr.size(); i += 2) {
-    // Le Names array est un tableau plat [name1, value1, name2, value2,...].
-    // Les "value" sont des Filespec — on récupère leur ref pour pouvoir
-    // les ajouter à `/AF` du catalog, et on fait un lookup pour pouvoir
-    // muter leur AFRelationship.
-    const raw = namesArr.get(i);
-    let spec: PDFDict | undefined;
-    let ref: PDFRef | undefined;
-    if (raw instanceof PDFRef) {
-      ref = raw;
-      const dereffed = pdf.context.lookup(raw);
-      if (dereffed instanceof PDFDict) spec = dereffed;
-    } else if (raw instanceof PDFDict) {
-      spec = raw;
-    }
-    if (!spec) continue;
-    spec.set(PDFName.of("AFRelationship"), PDFName.of(relationship));
-    if (ref) filespecRefs.push(ref);
-  }
-
-  if (filespecRefs.length > 0) {
-    // Ajoute l'array /AF sur le catalog. Si une /AF existe déjà, on
-    // l'écrase avec celle qui est correctement construite ici.
-    root.set(PDFName.of("AF"), pdf.context.obj(filespecRefs));
-  }
 }
 
 /**
