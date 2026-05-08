@@ -61,6 +61,11 @@ type EmailFields = {
   from?: { address?: string; name?: string } | string;
   to?: Array<{ address?: string; name?: string } | string> | string;
   subject?: string;
+  /** ID de l'email — utilisé pour fetch le corps via l'API Resend si
+   *  le webhook ne le contient pas (cas réel : Resend envoie seulement
+   *  des metadata dans le webhook email.received). */
+  email_id?: string;
+  id?: string;
   // Variantes connues du corps de mail dans Resend Inbound
   html?: string | null;
   text?: string | null;
@@ -102,6 +107,48 @@ function pickEmailFields(payload: ResendInboundEmail): EmailFields {
   if (looksLikeEmail(root)) return root;
   if (looksLikeEmail(wrapped)) return wrapped!;
   return root; // dernier recours : on prend la racine pour logger les clés présentes
+}
+
+/**
+ * Récupère le corps complet d'un mail via l'API Resend.
+ *
+ * Pourquoi c'est nécessaire : le webhook `email.received` ne contient
+ * que des metadata (from, to, subject, email_id…) — PAS le `html` / `text`.
+ * Pour avoir le corps il faut faire un GET séparé sur l'email.
+ *
+ * Retourne des strings vides en cas d'échec — l'erreur est loggée mais
+ * on ne bloque pas le forward (header sera quand même envoyé, juste sans
+ * le corps si le fetch échoue).
+ */
+async function fetchEmailBody(
+  emailId: string,
+): Promise<{ html: string; text: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn("[inbound/contact] RESEND_API_KEY absente, fetch body impossible");
+    return { html: "", text: "" };
+  }
+  try {
+    const res = await fetch(`https://api.resend.com/emails/${emailId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      console.warn(
+        `[inbound/contact] GET /emails/${emailId} a échoué (${res.status}):`,
+        txt.slice(0, 300),
+      );
+      return { html: "", text: "" };
+    }
+    const json = (await res.json()) as { html?: unknown; text?: unknown };
+    return {
+      html: typeof json.html === "string" ? json.html : "",
+      text: typeof json.text === "string" ? json.text : "",
+    };
+  } catch (e) {
+    console.error("[inbound/contact] fetch body exception:", e);
+    return { html: "", text: "" };
+  }
 }
 
 /**
@@ -227,18 +274,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // Diagnostic temporaire : on log un résumé du payload brut. Resend a
-  // visiblement plusieurs formats selon les versions de webhook ; voir
-  // la forme exacte permet de trancher sans tâtonner.
-  console.log(
-    "[inbound/contact] payload keys (root):",
-    Object.keys(payload),
-    "data keys:",
-    payload.data ? Object.keys(payload.data) : "(no data)",
-    "rawBody preview:",
-    rawBody.slice(0, 600),
-  );
-
   // Resend envoie le mail à la racine du payload, mais on garde le fallback
   // sous `data` au cas où le format change. pickEmailFields renvoie la
   // bonne section automatiquement.
@@ -314,19 +349,29 @@ export async function POST(req: NextRequest) {
     </div>
   `.trim();
 
-  const { html: extractedHtml, text: extractedText } = extractBody(data);
+  // Étape A : on essaie d'abord d'extraire le corps directement du
+  // payload du webhook (au cas où Resend l'inclurait — historiquement la
+  // doc évoquait html/text dans data).
+  let { html: extractedHtml, text: extractedText } = extractBody(data);
 
-  // Diagnostic : si après avoir testé toutes les variantes connues on n'a
-  // toujours rien, on log les clés présentes pour identifier la nouvelle
-  // forme du payload Resend. Sans ce log, impossible de savoir où cherche
-  // le body côté Resend Inbound (la forme a déjà changé deux fois).
+  // Étape B : si pas trouvé, on fetch le mail complet via l'API Resend.
+  // C'est le cas réel observé en mai 2026 : le webhook ne contient que
+  // les metadata, pas le body. On utilise email_id (forme observée) ou
+  // id (fallback) pour le GET.
   if (!extractedHtml && !extractedText) {
-    console.warn(
-      "[inbound/contact] corps vide — clés data:",
-      Object.keys(data),
-      "subject:",
-      data.subject,
-    );
+    const emailId = data.email_id || data.id;
+    if (emailId) {
+      const fetched = await fetchEmailBody(emailId);
+      extractedHtml = fetched.html;
+      extractedText = fetched.text;
+    } else {
+      console.warn(
+        "[inbound/contact] corps vide ET pas d'email_id — clés data:",
+        Object.keys(data),
+        "subject:",
+        data.subject,
+      );
+    }
   }
 
   const bodyHtml = extractedHtml
