@@ -145,20 +145,23 @@ function formatFrenchDate(iso: string | undefined): string {
 
 /**
  * Forward un mail entrant avec le bon `Reply-To` pointant sur l'expéditeur
- * original. Le SDK Resend `receiving.forward()` n'accepte pas de
- * `replyTo` custom, donc on contourne :
- *  1. On fetch le mail complet (html + text) via `receiving.get(emailId)`.
- *  2. On reconstruit un nouveau mail avec notre intro en haut + le corps
- *     original en dessous + `replyTo` = adresse de l'expéditeur d'origine.
- *  3. On envoie via `emails.send()`.
+ * original ET les pièces jointes préservées.
+ *
+ * Le SDK Resend `receiving.forward()` n'accepte pas de `replyTo` custom,
+ * donc on contourne :
+ *  1. `receiving.get(emailId)` pour le corps html/text.
+ *  2. `receiving.attachments.list({emailId})` pour la liste des PJ avec
+ *     leurs `download_url` signés (valides ~1 h).
+ *  3. `emails.send()` avec replyTo + html/text custom + attachments
+ *     passés via `path: download_url` (Resend fetch côté serveur, pas
+ *     besoin de download/base64 nous-même).
  *
  * Bénéfice : quand l'AE clique "Répondre" dans Gmail/Apple Mail, le mail
- * va directement à l'expéditeur original (pas à `noreply@asthia.fr`).
+ * va directement à l'expéditeur original. Les PJ apparaissent comme
+ * attachments natifs dans l'email forwardé.
  *
- * Limites de cette implémentation :
- *  - Pas de récup des pièces jointes (le mail original peut contenir des
- *    PJ qui ne seront pas relayées). À ajouter plus tard si besoin via
- *    `resend.emails.receiving.attachments.list()`.
+ * Limite : si une PJ dépasse 25 MB (limite Resend), `emails.send()`
+ * va rejeter. On log l'erreur mais on ne fail pas tout.
  */
 async function forwardWithReplyTo(args: {
   resend: Resend;
@@ -169,9 +172,9 @@ async function forwardWithReplyTo(args: {
   intro: { html: string; text: string };
   fromHeader: string; // pour extraire l'email à mettre en Reply-To
   subject: string;
-  attachmentsCount: number; // 0 si pas de PJ, sinon on l'indique dans l'intro
+  attachmentsCount: number;
 }): Promise<{ id: string | null; error: Error | null }> {
-  // 1. Fetch le mail complet pour avoir html/text/attachments.
+  // 1. Fetch le mail complet pour avoir html/text.
   const { data: email, error: getErr } = await args.resend.emails.receiving.get(
     args.emailId,
   );
@@ -182,34 +185,46 @@ async function forwardWithReplyTo(args: {
     };
   }
 
-  // 2. Extraction de l'adresse de l'expéditeur original pour le replyTo.
+  // 2. Fetch les pièces jointes (signed URLs valides ~1 h). On ne fail
+  //    pas le forward si la liste échoue : on continue sans PJ.
+  let attachmentsForSend: Array<{ filename: string; path: string; content_type?: string }> = [];
+  if (args.attachmentsCount > 0) {
+    try {
+      const { data: attData, error: attErr } =
+        await args.resend.emails.receiving.attachments.list({ emailId: args.emailId });
+      if (attErr) {
+        console.warn("[inbound/contact] attachments.list failed:", attErr.message);
+      } else if (attData?.data) {
+        attachmentsForSend = attData.data.map((a) => ({
+          filename: a.filename || "attachment",
+          path: a.download_url, // Resend fetch côté serveur via cette URL
+          content_type: a.content_type,
+        }));
+      }
+    } catch (e) {
+      console.warn("[inbound/contact] attachments.list exception:", e);
+    }
+  }
+
+  // 3. Extraction de l'adresse de l'expéditeur original pour le replyTo.
   const { fromEmail } = parseFromHeader(args.fromHeader);
   const replyTo = fromEmail || undefined;
 
-  // 3. Construction du corps : intro + séparateur + corps original.
-  const attachmentsNote =
-    args.attachmentsCount > 0
-      ? `\n📎 ${args.attachmentsCount} pièce${args.attachmentsCount > 1 ? "s" : ""} jointe${args.attachmentsCount > 1 ? "s" : ""} dans le mail original (non relayée${args.attachmentsCount > 1 ? "s" : ""} dans cette version).\n`
-      : "";
-
+  // 4. Construction du corps : intro + séparateur + corps original.
   const separatorHtml = `<hr style="border:none;border-top:1px solid #E2E8F0;margin:18px 0;" />`;
   const separatorText = "\n─────────── Message original ───────────\n\n";
 
   const html =
     args.intro.html +
-    (attachmentsNote
-      ? `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:10px 14px;border-radius:6px;margin-bottom:18px;font-size:13px;">${escapeHtmlSafe(attachmentsNote.trim())}</div>`
-      : "") +
     separatorHtml +
     (email.html || (email.text ? `<pre style="white-space:pre-wrap;font-family:inherit;margin:0;">${escapeHtmlSafe(email.text)}</pre>` : "<em>(corps vide)</em>"));
 
   const text =
     args.intro.text +
-    attachmentsNote +
     separatorText +
     (email.text || "(corps vide)");
 
-  // 4. Envoi via emails.send avec replyTo.
+  // 5. Envoi via emails.send avec replyTo + attachments.
   const { data: sent, error: sendErr } = await args.resend.emails.send({
     from: args.forwardFrom,
     to: [args.forwardTo],
@@ -217,6 +232,7 @@ async function forwardWithReplyTo(args: {
     subject: args.subject || "(sans objet)",
     html,
     text,
+    attachments: attachmentsForSend.length > 0 ? attachmentsForSend : undefined,
   });
 
   if (sendErr) {
