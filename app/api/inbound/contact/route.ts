@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { Resend } from "resend";
 import { resolveAliasOwner } from "@/lib/asthia-alias";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { storeInboundMessage } from "@/lib/messaging";
+import { parseFromHeader, storeInboundMessage } from "@/lib/messaging";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -73,6 +73,166 @@ type ResendInboundWebhook = {
     attachments?: Array<{ id?: string; filename?: string }>;
   };
 };
+
+/**
+ * Construit le HTML + texte d'introduction qu'on injecte en haut du mail
+ * forwardé pour que l'AE voie clairement QUI lui a envoyé (le From de
+ * l'enveloppe Resend reste "Asthia Contact <noreply@asthia.fr>", donc
+ * sans cet encart le vrai expéditeur n'est pas mis en avant côté Gmail).
+ *
+ * Utilisé en mode `passthrough: false` : Resend ajoute ensuite un footer
+ * "Forwarded message" + le contenu original.
+ */
+function buildForwardIntro(args: {
+  fromHeader: string;
+  subject: string;
+  receivedAtIso: string;
+  recipientLabel: string; // ex: "contact@asthia.fr" ou "adrien.rabillat@asthia.fr"
+}): { html: string; text: string } {
+  const { fromName, fromEmail } = parseFromHeader(args.fromHeader);
+  const senderDisplay = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+  const dateFr = formatFrenchDate(args.receivedAtIso);
+  const safeSubject = args.subject?.trim() || "(sans objet)";
+
+  const escapeHtmlLocal = (s: string) =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;color:#1F2937;line-height:1.55;">
+  <div style="background:#EFF6FB;border-left:4px solid #065A82;padding:14px 18px;border-radius:6px;margin-bottom:18px;">
+    <div style="font-weight:600;color:#065A82;margin-bottom:8px;font-size:13px;letter-spacing:0.02em;text-transform:uppercase;">📬 Reçu sur ${escapeHtmlLocal(args.recipientLabel)}</div>
+    <div style="margin:4px 0;"><strong>De&nbsp;:</strong> ${escapeHtmlLocal(senderDisplay)}</div>
+    <div style="margin:4px 0;"><strong>Sujet&nbsp;:</strong> ${escapeHtmlLocal(safeSubject)}</div>
+    <div style="margin:4px 0;color:#6B7280;font-size:13px;"><strong>Reçu le&nbsp;:</strong> ${escapeHtmlLocal(dateFr)}</div>
+  </div>
+</div>`;
+
+  const text = [
+    `📬 Reçu sur ${args.recipientLabel}`,
+    `De     : ${senderDisplay}`,
+    `Sujet  : ${safeSubject}`,
+    `Reçu le: ${dateFr}`,
+    "─────────────────────────────────────────",
+    "",
+  ].join("\n");
+
+  return { html, text };
+}
+
+/**
+ * Format date ISO en français lisible : "9 mai 2026 à 14:32".
+ */
+function formatFrenchDate(iso: string | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  try {
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return d.toISOString();
+  }
+}
+
+/**
+ * Forward un mail entrant avec le bon `Reply-To` pointant sur l'expéditeur
+ * original. Le SDK Resend `receiving.forward()` n'accepte pas de
+ * `replyTo` custom, donc on contourne :
+ *  1. On fetch le mail complet (html + text) via `receiving.get(emailId)`.
+ *  2. On reconstruit un nouveau mail avec notre intro en haut + le corps
+ *     original en dessous + `replyTo` = adresse de l'expéditeur d'origine.
+ *  3. On envoie via `emails.send()`.
+ *
+ * Bénéfice : quand l'AE clique "Répondre" dans Gmail/Apple Mail, le mail
+ * va directement à l'expéditeur original (pas à `noreply@asthia.fr`).
+ *
+ * Limites de cette implémentation :
+ *  - Pas de récup des pièces jointes (le mail original peut contenir des
+ *    PJ qui ne seront pas relayées). À ajouter plus tard si besoin via
+ *    `resend.emails.receiving.attachments.list()`.
+ */
+async function forwardWithReplyTo(args: {
+  resend: Resend;
+  emailId: string;
+  forwardTo: string;
+  forwardFrom: string;
+  recipientLabel: string; // ex: "contact@asthia.fr"
+  intro: { html: string; text: string };
+  fromHeader: string; // pour extraire l'email à mettre en Reply-To
+  subject: string;
+  attachmentsCount: number; // 0 si pas de PJ, sinon on l'indique dans l'intro
+}): Promise<{ id: string | null; error: Error | null }> {
+  // 1. Fetch le mail complet pour avoir html/text/attachments.
+  const { data: email, error: getErr } = await args.resend.emails.receiving.get(
+    args.emailId,
+  );
+  if (getErr || !email) {
+    return {
+      id: null,
+      error: new Error(getErr?.message || "Receiving.get failed"),
+    };
+  }
+
+  // 2. Extraction de l'adresse de l'expéditeur original pour le replyTo.
+  const { fromEmail } = parseFromHeader(args.fromHeader);
+  const replyTo = fromEmail || undefined;
+
+  // 3. Construction du corps : intro + séparateur + corps original.
+  const attachmentsNote =
+    args.attachmentsCount > 0
+      ? `\n📎 ${args.attachmentsCount} pièce${args.attachmentsCount > 1 ? "s" : ""} jointe${args.attachmentsCount > 1 ? "s" : ""} dans le mail original (non relayée${args.attachmentsCount > 1 ? "s" : ""} dans cette version).\n`
+      : "";
+
+  const separatorHtml = `<hr style="border:none;border-top:1px solid #E2E8F0;margin:18px 0;" />`;
+  const separatorText = "\n─────────── Message original ───────────\n\n";
+
+  const html =
+    args.intro.html +
+    (attachmentsNote
+      ? `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:10px 14px;border-radius:6px;margin-bottom:18px;font-size:13px;">${escapeHtmlSafe(attachmentsNote.trim())}</div>`
+      : "") +
+    separatorHtml +
+    (email.html || (email.text ? `<pre style="white-space:pre-wrap;font-family:inherit;margin:0;">${escapeHtmlSafe(email.text)}</pre>` : "<em>(corps vide)</em>"));
+
+  const text =
+    args.intro.text +
+    attachmentsNote +
+    separatorText +
+    (email.text || "(corps vide)");
+
+  // 4. Envoi via emails.send avec replyTo.
+  const { data: sent, error: sendErr } = await args.resend.emails.send({
+    from: args.forwardFrom,
+    to: [args.forwardTo],
+    replyTo,
+    subject: args.subject || "(sans objet)",
+    html,
+    text,
+  });
+
+  if (sendErr) {
+    return { id: null, error: new Error(sendErr.message) };
+  }
+  return { id: sent?.id ?? null, error: null };
+}
+
+function escapeHtmlSafe(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 export async function POST(req: NextRequest) {
   // ─── 1. Vérification de la signature Svix ───────────────────────────
@@ -207,16 +367,28 @@ export async function POST(req: NextRequest) {
 
     // Cas A : legacy contact@asthia.fr
     if (localPart === "contact") {
-      const { data: forwardData, error: forwardError } = await resend.emails.receiving.forward({
+      const intro = buildForwardIntro({
+        fromHeader: data.from ?? "",
+        subject: data.subject ?? "",
+        receivedAtIso: data.created_at ?? new Date().toISOString(),
+        recipientLabel: addr,
+      });
+      const { id: forwardId, error: forwardError } = await forwardWithReplyTo({
+        resend,
         emailId,
-        to: legacyContactForwardTo,
-        from: forwardFrom,
+        forwardTo: legacyContactForwardTo,
+        forwardFrom,
+        recipientLabel: addr,
+        intro,
+        fromHeader: data.from ?? "",
+        subject: data.subject ?? "",
+        attachmentsCount: data.attachments?.length ?? 0,
       });
       if (forwardError) {
         console.error("[inbound/contact] forward legacy contact a échoué:", forwardError);
         results.push({ to: addr, status: "skipped", error: forwardError.message });
       } else {
-        results.push({ to: addr, status: "forwarded", forwardId: forwardData?.id ?? null });
+        results.push({ to: addr, status: "forwarded", forwardId });
       }
       continue;
     }
@@ -234,10 +406,22 @@ export async function POST(req: NextRequest) {
 
     // Forward Resend → email perso de l'AE. C'est le filet de sécurité
     // pour qu'il voie le message même s'il n'ouvre pas l'app.
-    const { data: forwardData, error: forwardError } = await resend.emails.receiving.forward({
+    const intro = buildForwardIntro({
+      fromHeader: data.from ?? "",
+      subject: data.subject ?? "",
+      receivedAtIso: data.created_at ?? new Date().toISOString(),
+      recipientLabel: addr,
+    });
+    const { id: forwardId, error: forwardError } = await forwardWithReplyTo({
+      resend,
       emailId,
-      to: owner.email,
-      from: forwardFrom,
+      forwardTo: owner.email,
+      forwardFrom,
+      recipientLabel: addr,
+      intro,
+      fromHeader: data.from ?? "",
+      subject: data.subject ?? "",
+      attachmentsCount: data.attachments?.length ?? 0,
     });
     if (forwardError) {
       console.error(
@@ -265,7 +449,7 @@ export async function POST(req: NextRequest) {
       console.warn(`[inbound/contact] store message failed for ${localPart}:`, e);
     }
 
-    results.push({ to: addr, status: "forwarded", forwardId: forwardData?.id ?? null });
+    results.push({ to: addr, status: "forwarded", forwardId });
   }
 
   return NextResponse.json({ ok: true, results });
