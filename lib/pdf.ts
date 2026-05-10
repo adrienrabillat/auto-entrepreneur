@@ -182,57 +182,60 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   let y = height - 64;
 
   // ----------------------------------------------------------------
-  // LOGO — optionnel, posé dans le coin haut-gauche du PDF. Max 38 px
-  // de haut, marge gauche réduite à 28 pt pour être plus proche du
-  // bord. Le titre "FACTURE/DEVIS" reste à sa place habituelle (on ne
-  // décale plus le cursor verticalement) — le logo est en overlay
-  // dans la zone d'en-tête. Embed PNG ou JPG (SVG/WebP convertis en
-  // amont par lib/logo-loader.ts).
+  // TITRE — "FACTURE" à gauche, libellé "Référence facture : ..."
+  // décalé sous le titre (alignement gauche) pour laisser de la
+  // place au logo centré entre les deux.
+  // Si acquittée : tampon vert "ACQUITTÉE" sous le titre.
   // ----------------------------------------------------------------
+  draw(docTitle, marginX, y, { size: 28, font: bold, color: C_INK_900 });
+
+  // ----------------------------------------------------------------
+  // LOGO — optionnel, centré horizontalement entre le titre et la
+  // ligne "Référence facture". Donne au PDF un look plus posé /
+  // designé que le coin haut-gauche qui chevauchait le titre.
+  // ----------------------------------------------------------------
+  let logoBlockHeight = 0;
   if (data.logo) {
     try {
       const img =
         data.logo.mimeType === "image/png"
           ? await pdf.embedPng(data.logo.bytes)
           : await pdf.embedJpg(data.logo.bytes);
-      const targetH = 38;
+      const targetH = 50;
       const scale = targetH / img.height;
       const logoW = img.width * scale;
       const logoH = targetH;
-      // pdf-lib drawImage : x/y = coin bas-gauche → on cale le bas du
-      // logo à `height - 28 - logoH` pour qu'il soit aligné en haut
-      // du PDF avec une marge fine (28 pt depuis le bord supérieur).
-      const logoMarginX = 28;
-      const logoMarginTop = 28;
+      // Centrage horizontal : la moitié de la largeur de la page.
+      const logoX = (width - logoW) / 2;
+      // Verticalement : juste sous la baseline du titre, avec une
+      // petite marge de respiration. La baseline du titre est à `y`,
+      // donc on commence le logo à `y - 8` (descend 8 pt sous la
+      // baseline) puis on cale `y` du drawImage à logo_top - logoH.
+      const logoTop = y - 12;
       page.drawImage(img, {
-        x: logoMarginX,
-        y: height - logoMarginTop - logoH,
+        x: logoX,
+        y: logoTop - logoH,
         width: logoW,
         height: logoH,
       });
-      // Pas de décalage vertical du cursor : le titre "FACTURE" reste
-      // à sa position habituelle. Le logo est dans le coin sans
-      // déplacer le contenu.
+      logoBlockHeight = logoH + 16; // hauteur logo + marge sous logo
     } catch (e) {
-      // Fichier corrompu / format non géré → on log et on continue
-      // sans logo plutôt que de planter l'envoi de la facture.
       console.warn("[pdf] logo embed failed, skipping:", e);
     }
   }
 
-  // ----------------------------------------------------------------
-  // TITRE — "FACTURE" à gauche, numéro à droite.
-  // Si acquittée : tampon vert "ACQUITTÉE" sous le titre.
-  // ----------------------------------------------------------------
-  draw(docTitle, marginX, y, { size: 28, font: bold, color: C_INK_900 });
-  // Libellé "Référence facture/devis/avoir : F-2026-0001" — plus parlant
-  // pour le client et la compta qu'un simple `#F-2026-0001`.
+  // Décale le cursor sous le titre + le logo (s'il y en a un).
+  y -= 14 + logoBlockHeight;
+
+  // Libellé "Référence facture/devis/avoir : F-2026-0001" — sur sa
+  // propre ligne, alignement droit pour conserver la hiérarchie
+  // visuelle (titre = gros à gauche, métadonnée = petit à droite).
   const refLabel = isCreditNote
     ? "Référence avoir"
     : isQuote
       ? "Référence devis"
       : "Référence facture";
-  draw(`${refLabel} : ${data.number}`, rightX, y + 6, {
+  draw(`${refLabel} : ${data.number}`, rightX, y, {
     size: 11,
     font: regular,
     color: C_INK_500,
