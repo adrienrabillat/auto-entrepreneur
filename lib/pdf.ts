@@ -182,9 +182,12 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   let y = height - 64;
 
   // ----------------------------------------------------------------
-  // LOGO — optionnel, en haut à gauche, max 56 px de haut. Embed PNG
-  // ou JPG. SVG non supporté par pdf-lib (il faudrait rasteriser avant,
-  // on filtre côté service).
+  // LOGO — optionnel, posé dans le coin haut-gauche du PDF. Max 38 px
+  // de haut, marge gauche réduite à 28 pt pour être plus proche du
+  // bord. Le titre "FACTURE/DEVIS" reste à sa place habituelle (on ne
+  // décale plus le cursor verticalement) — le logo est en overlay
+  // dans la zone d'en-tête. Embed PNG ou JPG (SVG/WebP convertis en
+  // amont par lib/logo-loader.ts).
   // ----------------------------------------------------------------
   if (data.logo) {
     try {
@@ -192,21 +195,24 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
         data.logo.mimeType === "image/png"
           ? await pdf.embedPng(data.logo.bytes)
           : await pdf.embedJpg(data.logo.bytes);
-      const targetH = 56;
+      const targetH = 38;
       const scale = targetH / img.height;
       const logoW = img.width * scale;
       const logoH = targetH;
       // pdf-lib drawImage : x/y = coin bas-gauche → on cale le bas du
-      // logo à `y - logoH` (rappel : le cursor `y` part du haut de la
-      // page côté logique, mais en pdf-lib y=0 est en bas).
+      // logo à `height - 28 - logoH` pour qu'il soit aligné en haut
+      // du PDF avec une marge fine (28 pt depuis le bord supérieur).
+      const logoMarginX = 28;
+      const logoMarginTop = 28;
       page.drawImage(img, {
-        x: marginX,
-        y: y - logoH,
+        x: logoMarginX,
+        y: height - logoMarginTop - logoH,
         width: logoW,
         height: logoH,
       });
-      // Décale le cursor vers le bas pour ne pas overlapper le titre.
-      y -= logoH + 16;
+      // Pas de décalage vertical du cursor : le titre "FACTURE" reste
+      // à sa position habituelle. Le logo est dans le coin sans
+      // déplacer le contenu.
     } catch (e) {
       // Fichier corrompu / format non géré → on log et on continue
       // sans logo plutôt que de planter l'envoi de la facture.

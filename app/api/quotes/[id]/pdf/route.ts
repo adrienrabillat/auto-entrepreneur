@@ -9,20 +9,23 @@ export const dynamic = "force-dynamic";
  * volée, pas de cache). Sert à l'iframe d'aperçu sur la page de détail
  * et au téléchargement direct par le user.
  */
-export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Non authentifié" }, { status: 401 });
 
   try {
     const { bytes, filename } = await generateQuotePdfBytes(supabase, user.id, ctx.params.id);
+    // `?download=1` → force le téléchargement plutôt que l'affichage
+    // inline (utilisé par le bouton "Télécharger" de la page détail).
+    const disposition = req.nextUrl.searchParams.get("download") === "1"
+      ? "attachment"
+      : "inline";
     return new Response(bytes as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        // inline pour l'iframe ; le user peut toujours télécharger via
-        // le bouton dédié de l'UI (ou clic droit "Enregistrer sous").
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": `${disposition}; filename="${filename}"`,
         "Cache-Control": "private, no-store",
       },
     });

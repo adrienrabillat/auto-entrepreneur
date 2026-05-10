@@ -4,10 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDate, formatEUR } from "@/lib/format";
 import { InvoiceActions } from "./actions";
-import { ArrowLeft, ExternalLink, FileWarning } from "lucide-react";
+import { ArrowLeft, ExternalLink, FileWarning, Download } from "lucide-react";
 import { cleanClientName } from "@/lib/display-name";
 import { SavedFlash } from "@/components/ui/saved-flash";
 import { canSendEmail } from "@/lib/delivery/availability";
+import { DeliveryStatusBadge, type DeliveryStatus } from "@/components/ui/delivery-status-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -152,7 +153,16 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
           <Field label="Client">{cleanClientName(invoice.client_name) || invoice.client_email}</Field>
           <Field label="Email">{invoice.client_email}</Field>
           <Field label="Émise le">{formatDate(invoice.issued_on)}</Field>
-          <Field label="Envoyée le">{invoice.sent_at ? formatDate(invoice.sent_at) : "—"}</Field>
+          <Field label="Envoyée le">
+            {invoice.sent_at ? (
+              <span className="inline-flex items-center gap-2 flex-wrap">
+                {formatDate(invoice.sent_at)}
+                <DeliveryStatusBadge status={invoice.delivery_status as DeliveryStatus} size="sm" />
+              </span>
+            ) : (
+              "—"
+            )}
+          </Field>
           <Field label="Payée le">{invoice.paid_at ? formatDate(invoice.paid_at) : "—"}</Field>
           {isCreditNote ? <Field label="Type">Avoir</Field> : null}
         </div>
@@ -165,16 +175,29 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
       </section>
 
       <section className="surface p-0 overflow-hidden">
-        <div className="px-4 py-3 text-small flex items-center justify-between">
+        <div className="px-4 py-3 text-small flex items-center justify-between gap-3">
           <span className="font-medium text-ink-700">Aperçu PDF</span>
-          <a
-            className="inline-flex items-center gap-1 text-small font-medium text-brand-600 hover:text-brand-700 transition-colors"
-            href={`/api/invoices/${invoice.id}/pdf`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Ouvrir <ExternalLink size={14} />
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              className="inline-flex items-center gap-1 text-small font-medium text-brand-600 hover:text-brand-700 transition-colors"
+              href={`/api/invoices/${invoice.id}/pdf?download=1`}
+              download={
+                isCreditNote
+                  ? `avoir-${invoice.number}.pdf`
+                  : `facture-${invoice.number}.pdf`
+              }
+            >
+              <Download size={14} /> Télécharger
+            </a>
+            <a
+              className="inline-flex items-center gap-1 text-small font-medium text-ink-500 hover:text-brand-700 transition-colors"
+              href={`/api/invoices/${invoice.id}/pdf`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ouvrir <ExternalLink size={14} />
+            </a>
+          </div>
         </div>
         <iframe
           src={`/api/invoices/${invoice.id}/pdf`}

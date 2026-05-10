@@ -459,13 +459,17 @@ export async function sendInvoice(
   });
   // delivery.channel / reference / status seront utilisés plus tard pour
   // stocker la trace PDP en base et remonter les statuts dans l'UI.
-  void delivery;
-
   // Si acquittée : on ne redescend PAS le statut à "sent" (sinon on perd
   // l'info payé). On garde status=paid, on note juste sent_at + pdf_path.
+  // On stocke aussi le `resend_email_id` pour matcher les events de
+  // tracking (delivered, opened, bounced, complained) qui arriveront
+  // via le webhook /api/webhooks/resend-events.
   const patch: Record<string, unknown> = {
     sent_at: new Date().toISOString(),
     pdf_path: storagePath,
+    resend_email_id: delivery.reference,
+    delivery_status: "sent",
+    last_event_at: delivery.deliveredAtIso,
   };
   if (!alreadyPaid) patch.status = "sent";
   const { error: updErr } = await supabase

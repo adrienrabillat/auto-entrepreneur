@@ -176,6 +176,8 @@ export async function POST(req: Request) {
     html,
     resend_email_id: sent?.id ?? null,
     received_at: nowIso,
+    delivery_status: "sent",
+    last_event_at: nowIso,
   });
 
   return NextResponse.json({ ok: true, threadId, resendId: sent?.id ?? null });

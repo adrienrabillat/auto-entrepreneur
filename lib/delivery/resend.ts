@@ -111,6 +111,14 @@ export const resendAdapter: DeliveryAdapter = {
       from,
       to: [input.recipient.email],
       reply_to: replyTo,
+      // Tracking : ouvertures + clics. Resend insère un pixel invisible
+      // pour `open` et réécrit les liens pour `click`. Les events
+      // arrivent ensuite via webhook /api/webhooks/resend-events qui
+      // met à jour `delivery_status`, `delivered_at`, `opened_at`, etc.
+      // sur la facture/devis correspondant. Certains clients mail
+      // (Apple Mail, certaines confs Gmail privacy) bloquent le pixel
+      // d'ouverture, donc le statut "ouvert" peut être sous-estimé.
+      tracking: { open: true, click: true },
       // BCC l'AE sur ses propres factures pour qu'il garde une trace
       // dans sa boîte mail (comme avec Gmail). Sauf opt-out explicite.
       bcc:

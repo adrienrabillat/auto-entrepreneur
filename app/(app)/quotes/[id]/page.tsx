@@ -4,10 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDate, formatEUR } from "@/lib/format";
 import { QuoteActions } from "./actions";
-import { ArrowLeft, ExternalLink, ArrowRight } from "lucide-react";
+import { ArrowLeft, ExternalLink, ArrowRight, Download } from "lucide-react";
 import { cleanClientName } from "@/lib/display-name";
 import { SavedFlash } from "@/components/ui/saved-flash";
 import { canSendEmail } from "@/lib/delivery/availability";
+import { DeliveryStatusBadge, type DeliveryStatus } from "@/components/ui/delivery-status-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -134,7 +135,16 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           <Field label="Validité">
             {quote.valid_until ? formatDate(quote.valid_until) : "—"}
           </Field>
-          <Field label="Envoyé le">{quote.sent_at ? formatDate(quote.sent_at) : "—"}</Field>
+          <Field label="Envoyé le">
+            {quote.sent_at ? (
+              <span className="inline-flex items-center gap-2 flex-wrap">
+                {formatDate(quote.sent_at)}
+                <DeliveryStatusBadge status={quote.delivery_status as DeliveryStatus} size="sm" />
+              </span>
+            ) : (
+              "—"
+            )}
+          </Field>
           <Field label="Accepté le">
             {quote.accepted_at ? formatDate(quote.accepted_at) : "—"}
           </Field>
@@ -156,16 +166,25 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
       </section>
 
       <section className="surface p-0 overflow-hidden">
-        <div className="px-4 py-3 text-small flex items-center justify-between">
+        <div className="px-4 py-3 text-small flex items-center justify-between gap-3">
           <span className="font-medium text-ink-700">Aperçu PDF</span>
-          <a
-            className="inline-flex items-center gap-1 text-small font-medium text-brand-600 hover:text-brand-700 transition-colors"
-            href={`/api/quotes/${quote.id}/pdf`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Ouvrir <ExternalLink size={14} />
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              className="inline-flex items-center gap-1 text-small font-medium text-brand-600 hover:text-brand-700 transition-colors"
+              href={`/api/quotes/${quote.id}/pdf?download=1`}
+              download={`devis-${quote.number}.pdf`}
+            >
+              <Download size={14} /> Télécharger
+            </a>
+            <a
+              className="inline-flex items-center gap-1 text-small font-medium text-ink-500 hover:text-brand-700 transition-colors"
+              href={`/api/quotes/${quote.id}/pdf`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Ouvrir <ExternalLink size={14} />
+            </a>
+          </div>
         </div>
         <iframe
           src={`/api/quotes/${quote.id}/pdf`}

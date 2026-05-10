@@ -146,6 +146,8 @@ export async function POST(
     resend_email_id: sent?.id ?? null,
     in_reply_to: lastInbound?.message_id ?? null,
     received_at: nowIso,
+    delivery_status: "sent",
+    last_event_at: nowIso,
   });
 
   await admin

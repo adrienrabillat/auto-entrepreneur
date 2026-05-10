@@ -249,7 +249,7 @@ ${quote.valid_until ? `<p>Valable jusqu'au <strong>${formatFr(quote.valid_until)
   // Alias Asthia personnel — généré au premier envoi si encore null.
   const asthiaAlias = await ensureAsthiaAlias(createAdminClient(), userId);
 
-  await deliverInvoice(
+  const delivery = await deliverInvoice(
     {
       recipient: {
         siren: quote.client_siren,
@@ -290,6 +290,17 @@ ${quote.valid_until ? `<p>Valable jusqu'au <strong>${formatFr(quote.valid_until)
     // Pas de forceChannel : on laisse le dispatcher choisir (Resend
     // par défaut, PDP plus tard pour B2B FR).
   );
+
+  // Tracking : on stocke le resend_email_id pour matcher les events
+  // (delivered, opened, bounced) qui arriveront via webhook.
+  await supabase
+    .from("quotes")
+    .update({
+      resend_email_id: delivery.reference,
+      delivery_status: "sent",
+      last_event_at: delivery.deliveredAtIso,
+    })
+    .eq("id", quote.id);
 
   // Mise à jour du statut. On ne change pas si déjà 'accepted' ou 'rejected'
   // (l'user pourrait re-renvoyer un devis déjà accepté pour archivage).
