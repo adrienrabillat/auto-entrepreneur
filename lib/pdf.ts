@@ -182,20 +182,31 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   let y = height - 64;
 
   // ----------------------------------------------------------------
-  // EN-TÊTE — sur une seule ligne :
-  //   "FACTURE" à gauche  ·  [LOGO centré]  ·  "Référence facture: ..." à droite
-  // Si acquittée : tampon vert "ACQUITTÉE" sous le titre.
+  // EN-TÊTE — tout sur une seule ligne, alignés visuellement :
+  //   "FACTURE" à gauche · [LOGO centré] · "Référence facture: ..." à droite
+  //
+  // Les 3 éléments partagent la même baseline (`y`). Le logo a la même
+  // hauteur que les capitales du titre (≈ 22 pt pour un titre 28 pt) →
+  // visuellement il "tient" entre la baseline et le sommet du titre.
+  //
+  // Si acquittée : tampon vert "ACQUITTÉE" sous la ligne titre.
   // ----------------------------------------------------------------
-  draw(docTitle, marginX, y, { size: 28, font: bold, color: C_INK_900 });
+  const TITLE_SIZE = 28;
+  // Hauteur des capitales du titre : empiriquement ~71 % de la taille
+  // de police pour Helvetica Bold. C'est ce qui donne la hauteur
+  // visuelle de "FACTURE".
+  const TITLE_CAP_HEIGHT = TITLE_SIZE * 0.71;
+
+  draw(docTitle, marginX, y, { size: TITLE_SIZE, font: bold, color: C_INK_900 });
 
   // Libellé "Référence facture/devis/avoir : F-2026-0001" — à droite,
-  // sur la même ligne que le titre.
+  // baseline alignée avec le titre.
   const refLabel = isCreditNote
     ? "Référence avoir"
     : isQuote
       ? "Référence devis"
       : "Référence facture";
-  draw(`${refLabel} : ${data.number}`, rightX, y + 6, {
+  draw(`${refLabel} : ${data.number}`, rightX, y, {
     size: 11,
     font: regular,
     color: C_INK_500,
@@ -203,27 +214,25 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   });
 
   // LOGO — optionnel, centré horizontalement au milieu de la page,
-  // sur la MÊME LIGNE que le titre et la référence. Hauteur 36 pt
-  // pour rester proportionné au texte du titre (28 pt).
+  // de même hauteur que les capitales du titre pour qu'il s'aligne
+  // visuellement avec "FACTURE" et la référence.
   if (data.logo) {
     try {
       const img =
         data.logo.mimeType === "image/png"
           ? await pdf.embedPng(data.logo.bytes)
           : await pdf.embedJpg(data.logo.bytes);
-      const targetH = 36;
-      const scale = targetH / img.height;
+      const logoH = TITLE_CAP_HEIGHT; // ≈ 22 pt, hauteur d'un "F" du titre
+      const scale = logoH / img.height;
       const logoW = img.width * scale;
-      const logoH = targetH;
       // Centrage horizontal : milieu de la page.
       const logoX = (width - logoW) / 2;
-      // Centrage vertical sur la baseline du titre. Le titre fait
-      // 28 pt de hauteur réelle, sa baseline est à `y`. On centre
-      // le logo (36 pt) autour de cette ligne en remontant un peu.
-      const logoY = y - logoH / 2 + 6;
+      // Centrage vertical : bas du logo sur la baseline du titre,
+      // donc le logo "monte" depuis la baseline jusqu'à la hauteur
+      // des capitales — exactement comme le "F" de FACTURE.
       page.drawImage(img, {
         x: logoX,
-        y: logoY,
+        y,
         width: logoW,
         height: logoH,
       });
