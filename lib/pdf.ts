@@ -182,65 +182,55 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   let y = height - 64;
 
   // ----------------------------------------------------------------
-  // TITRE — "FACTURE" à gauche, libellé "Référence facture : ..."
-  // décalé sous le titre (alignement gauche) pour laisser de la
-  // place au logo centré entre les deux.
+  // EN-TÊTE — sur une seule ligne :
+  //   "FACTURE" à gauche  ·  [LOGO centré]  ·  "Référence facture: ..." à droite
   // Si acquittée : tampon vert "ACQUITTÉE" sous le titre.
   // ----------------------------------------------------------------
   draw(docTitle, marginX, y, { size: 28, font: bold, color: C_INK_900 });
 
-  // ----------------------------------------------------------------
-  // LOGO — optionnel, centré horizontalement entre le titre et la
-  // ligne "Référence facture". Donne au PDF un look plus posé /
-  // designé que le coin haut-gauche qui chevauchait le titre.
-  // ----------------------------------------------------------------
-  let logoBlockHeight = 0;
+  // Libellé "Référence facture/devis/avoir : F-2026-0001" — à droite,
+  // sur la même ligne que le titre.
+  const refLabel = isCreditNote
+    ? "Référence avoir"
+    : isQuote
+      ? "Référence devis"
+      : "Référence facture";
+  draw(`${refLabel} : ${data.number}`, rightX, y + 6, {
+    size: 11,
+    font: regular,
+    color: C_INK_500,
+    align: "right",
+  });
+
+  // LOGO — optionnel, centré horizontalement au milieu de la page,
+  // sur la MÊME LIGNE que le titre et la référence. Hauteur 36 pt
+  // pour rester proportionné au texte du titre (28 pt).
   if (data.logo) {
     try {
       const img =
         data.logo.mimeType === "image/png"
           ? await pdf.embedPng(data.logo.bytes)
           : await pdf.embedJpg(data.logo.bytes);
-      const targetH = 50;
+      const targetH = 36;
       const scale = targetH / img.height;
       const logoW = img.width * scale;
       const logoH = targetH;
-      // Centrage horizontal : la moitié de la largeur de la page.
+      // Centrage horizontal : milieu de la page.
       const logoX = (width - logoW) / 2;
-      // Verticalement : juste sous la baseline du titre, avec une
-      // petite marge de respiration. La baseline du titre est à `y`,
-      // donc on commence le logo à `y - 8` (descend 8 pt sous la
-      // baseline) puis on cale `y` du drawImage à logo_top - logoH.
-      const logoTop = y - 12;
+      // Centrage vertical sur la baseline du titre. Le titre fait
+      // 28 pt de hauteur réelle, sa baseline est à `y`. On centre
+      // le logo (36 pt) autour de cette ligne en remontant un peu.
+      const logoY = y - logoH / 2 + 6;
       page.drawImage(img, {
         x: logoX,
-        y: logoTop - logoH,
+        y: logoY,
         width: logoW,
         height: logoH,
       });
-      logoBlockHeight = logoH + 16; // hauteur logo + marge sous logo
     } catch (e) {
       console.warn("[pdf] logo embed failed, skipping:", e);
     }
   }
-
-  // Décale le cursor sous le titre + le logo (s'il y en a un).
-  y -= 14 + logoBlockHeight;
-
-  // Libellé "Référence facture/devis/avoir : F-2026-0001" — sur sa
-  // propre ligne, alignement droit pour conserver la hiérarchie
-  // visuelle (titre = gros à gauche, métadonnée = petit à droite).
-  const refLabel = isCreditNote
-    ? "Référence avoir"
-    : isQuote
-      ? "Référence devis"
-      : "Référence facture";
-  draw(`${refLabel} : ${data.number}`, rightX, y, {
-    size: 11,
-    font: regular,
-    color: C_INK_500,
-    align: "right",
-  });
 
   // Sous-titre "Avoir relatif à la facture XXX" pour les avoirs.
   // C'est une mention juridiquement attendue : le client (et le fisc) doit
