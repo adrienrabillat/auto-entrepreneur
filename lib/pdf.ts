@@ -213,26 +213,29 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     align: "right",
   });
 
-  // LOGO — optionnel, centré horizontalement au milieu de la page,
-  // de même hauteur que les capitales du titre pour qu'il s'aligne
-  // visuellement avec "FACTURE" et la référence.
+  // LOGO — optionnel, centré horizontalement au milieu de la page.
+  // Hauteur 32 pt (un peu plus grand que les capitales du titre à 22 pt
+  // pour que le logo soit visible/lisible sans être dominant).
+  // Centré verticalement sur le milieu visuel du titre pour ne pas
+  // déborder vers le haut ni vers le bas.
   if (data.logo) {
     try {
       const img =
         data.logo.mimeType === "image/png"
           ? await pdf.embedPng(data.logo.bytes)
           : await pdf.embedJpg(data.logo.bytes);
-      const logoH = TITLE_CAP_HEIGHT; // ≈ 22 pt, hauteur d'un "F" du titre
+      const logoH = 32;
       const scale = logoH / img.height;
       const logoW = img.width * scale;
       // Centrage horizontal : milieu de la page.
       const logoX = (width - logoW) / 2;
-      // Centrage vertical : bas du logo sur la baseline du titre,
-      // donc le logo "monte" depuis la baseline jusqu'à la hauteur
-      // des capitales — exactement comme le "F" de FACTURE.
+      // Centrage vertical sur le milieu des capitales du titre :
+      //   centre vertical du titre ≈ y + TITLE_CAP_HEIGHT/2 ≈ y + 11
+      //   bas du logo = centre - logoH/2 = y + 11 - 16 = y - 5
+      const logoY = y + TITLE_CAP_HEIGHT / 2 - logoH / 2;
       page.drawImage(img, {
         x: logoX,
-        y,
+        y: logoY,
         width: logoW,
         height: logoH,
       });
