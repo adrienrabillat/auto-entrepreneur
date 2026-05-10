@@ -187,7 +187,13 @@ async function forwardWithReplyTo(args: {
 
   // 2. Fetch les pièces jointes (signed URLs valides ~1 h). On ne fail
   //    pas le forward si la liste échoue : on continue sans PJ.
+  //    Resend bloque pour des raisons de sécurité certains types
+  //    exécutables (.js, .exe, .bat, etc.). On filtre AVANT l'envoi
+  //    pour ne pas que tout le forward échoue à cause d'une PJ
+  //    bloquée — on garde la liste des bloquées pour les signaler à
+  //    l'AE dans le corps du mail.
   let attachmentsForSend: Array<{ filename: string; path: string; content_type?: string }> = [];
+  let blockedAttachments: string[] = [];
   if (args.attachmentsCount > 0) {
     try {
       const { data: attData, error: attErr } =
@@ -195,11 +201,18 @@ async function forwardWithReplyTo(args: {
       if (attErr) {
         console.warn("[inbound/contact] attachments.list failed:", attErr.message);
       } else if (attData?.data) {
-        attachmentsForSend = attData.data.map((a) => ({
-          filename: a.filename || "attachment",
-          path: a.download_url, // Resend fetch côté serveur via cette URL
-          content_type: a.content_type,
-        }));
+        for (const a of attData.data) {
+          const filename = a.filename || "attachment";
+          if (isBlockedAttachmentType(filename)) {
+            blockedAttachments.push(filename);
+          } else {
+            attachmentsForSend.push({
+              filename,
+              path: a.download_url, // Resend fetch côté serveur via cette URL
+              content_type: a.content_type,
+            });
+          }
+        }
       }
     } catch (e) {
       console.warn("[inbound/contact] attachments.list exception:", e);
@@ -211,16 +224,34 @@ async function forwardWithReplyTo(args: {
   const replyTo = fromEmail || undefined;
 
   // 4. Construction du corps : intro + séparateur + corps original.
+  //    Si certaines PJ ont été bloquées, on l'indique en encart jaune
+  //    pour que l'AE sache de quoi il s'agit (et puisse demander au
+  //    client de renvoyer le fichier dans un format différent ou
+  //    via un service de partage type WeTransfer).
+  const blockedNoticeHtml = blockedAttachments.length > 0
+    ? `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:10px 14px;border-radius:6px;margin-bottom:18px;font-size:13px;color:#78350F;">
+        <strong>⚠️ ${blockedAttachments.length} pièce${blockedAttachments.length > 1 ? "s" : ""} jointe${blockedAttachments.length > 1 ? "s" : ""} bloquée${blockedAttachments.length > 1 ? "s" : ""} par Resend</strong> (type exécutable interdit pour des raisons de sécurité) :<br/>
+        ${blockedAttachments.map((f) => `• ${escapeHtmlSafe(f)}`).join("<br/>")}
+        <div style="margin-top:6px;color:#92400E;font-size:12px;">Demande au client de renvoyer le fichier dans un format différent (zip, .txt) ou via WeTransfer si nécessaire.</div>
+      </div>`
+    : "";
+
+  const blockedNoticeText = blockedAttachments.length > 0
+    ? `\n⚠️ ${blockedAttachments.length} pièce(s) jointe(s) bloquée(s) (type exécutable interdit) :\n${blockedAttachments.map((f) => `  - ${f}`).join("\n")}\n`
+    : "";
+
   const separatorHtml = `<hr style="border:none;border-top:1px solid #E2E8F0;margin:18px 0;" />`;
   const separatorText = "\n─────────── Message original ───────────\n\n";
 
   const html =
     args.intro.html +
+    blockedNoticeHtml +
     separatorHtml +
     (email.html || (email.text ? `<pre style="white-space:pre-wrap;font-family:inherit;margin:0;">${escapeHtmlSafe(email.text)}</pre>` : "<em>(corps vide)</em>"));
 
   const text =
     args.intro.text +
+    blockedNoticeText +
     separatorText +
     (email.text || "(corps vide)");
 
@@ -248,6 +279,32 @@ function escapeHtmlSafe(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+/**
+ * Liste des extensions bloquées par Resend (et la plupart des SMTP
+ * sérieux) parce qu'elles sont potentiellement exécutables. Si l'AE
+ * reçoit un fichier de ces types par mail, on ne peut pas le forwarder
+ * via emails.send() — Resend retourne une erreur explicite.
+ *
+ * Source : observations + standards (RFC 6376 + listes maintenues par
+ * Microsoft/Google pour leurs pièces jointes interdites).
+ */
+const BLOCKED_ATTACHMENT_EXTENSIONS = new Set([
+  "ade", "adp", "apk", "appx", "appxbundle", "bat", "cab", "chm", "cmd", "com",
+  "cpl", "diagcab", "diagcfg", "diagpack", "dll", "dmg", "ex", "ex_", "exe",
+  "hta", "img", "ins", "iso", "isp", "jar", "jnlp", "js", "jse", "lib",
+  "lnk", "mde", "msc", "msi", "msix", "msixbundle", "msp", "mst", "nsh",
+  "pif", "ps1", "ps1xml", "ps2", "ps2xml", "psc1", "psc2", "psm1", "py",
+  "reg", "scr", "sct", "shb", "sys", "vb", "vbe", "vbs", "vhd", "vxd",
+  "wsc", "wsf", "wsh", "xll",
+]);
+
+function isBlockedAttachmentType(filename: string): boolean {
+  const dot = filename.lastIndexOf(".");
+  if (dot < 0) return false;
+  const ext = filename.slice(dot + 1).toLowerCase();
+  return BLOCKED_ATTACHMENT_EXTENSIONS.has(ext);
 }
 
 export async function POST(req: NextRequest) {
