@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureAsthiaAlias } from "@/lib/asthia-alias";
 import { loadLogoForPdf } from "@/lib/logo-loader";
+import { buildSignatureHtml, buildSignatureText } from "@/lib/email-signature";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -47,11 +48,10 @@ export async function POST(
     .single();
   if (!thread) return NextResponse.json({ error: "Thread introuvable" }, { status: 404 });
 
-  // Profile email (pour Reply-To si l'alias n'est pas généré, pour le
-  // nom dans le From, et pour le logo banner).
+  // Profile email (pour Reply-To, From, signature et logo).
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, email, logo_path")
+    .select("display_name, business_name, metier, email, logo_path")
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Profil introuvable" }, { status: 500 });
@@ -80,16 +80,14 @@ export async function POST(
     ? thread.subject
     : `Re: ${thread.subject}`;
 
-  // HTML : bannière logo en haut + corps texte.
-  const htmlLogoBanner = logo
-    ? `<div style="padding-bottom:18px;margin-bottom:16px;border-bottom:1px solid #E2E8F0;">
-        <img src="cid:logo" alt="${escapeHtml(profile.display_name ?? "")}" style="max-height:48px;max-width:240px;display:block;" />
-      </div>`
-    : "";
+  // HTML : corps texte + signature en pied (logo + nom + métier).
+  const signatureHtml = buildSignatureHtml(profile, logo);
+  const signatureText = buildSignatureText(profile);
   const html = `<div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-    ${htmlLogoBanner}
     <div style="white-space:pre-wrap;">${escapeHtml(text)}</div>
+    ${signatureHtml}
   </div>`;
+  const textWithSignature = `${text}${signatureText}`;
 
   // Envoi via Resend.
   const apiKey = process.env.RESEND_API_KEY;
@@ -112,7 +110,7 @@ export async function POST(
     from,
     to: [thread.client_email],
     subject,
-    text,
+    text: textWithSignature,
     html,
     replyTo: fromAddress,
     attachments: logoAttachment,
@@ -141,7 +139,7 @@ export async function POST(
     from_name: profile.display_name ?? null,
     to_email: thread.client_email,
     subject,
-    text,
+    text: textWithSignature,
     html,
     resend_email_id: sent?.id ?? null,
     in_reply_to: lastInbound?.message_id ?? null,

@@ -7,6 +7,7 @@ import { loadProfile, createInvoiceRow } from "@/lib/invoice-service";
 import { ensureAsthiaAlias } from "@/lib/asthia-alias";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatEUR } from "@/lib/format";
+import { buildSignatureHtml, buildSignatureText } from "@/lib/email-signature";
 
 /**
  * Représentation d'une ligne brute de la table `quotes`. Schéma identique
@@ -212,6 +213,12 @@ export async function sendQuote(
 
   const prettyAmount = formatEUR(quote.amount_cents);
   const subject = `Devis ${quote.number} — ${profile.display_name}`;
+
+  // Logo (optionnel) — chargé pour l'embed inline dans la signature.
+  const logo = await loadLogoForPdf(supabase, profile.logo_path);
+  const signatureText = buildSignatureText(profile);
+  const signatureHtml = buildSignatureHtml(profile, logo);
+
   const text = [
     `Bonjour${quote.client_name ? " " + quote.client_name : ""},`,
     ``,
@@ -223,27 +230,18 @@ export async function sendQuote(
     `Pour accepter ce devis, répondez simplement à cet email avec la mention "Bon pour accord".`,
     ``,
     `Bien cordialement,`,
-    profile.display_name,
-    profile.metier ?? "",
-  ].filter(Boolean).join("\n");
-
-  // Logo (optionnel) — chargé pour l'embed inline dans le HTML.
-  const logo = await loadLogoForPdf(supabase, profile.logo_path);
-  const htmlLogoBanner = logo
-    ? `<div style="padding-bottom:18px;margin-bottom:16px;border-bottom:1px solid #E2E8F0;">
-        <img src="cid:logo" alt="${escapeHtml(profile.display_name ?? "")}" style="max-height:48px;max-width:240px;display:block;" />
-      </div>`
-    : "";
+  ].filter(Boolean).join("\n") + signatureText;
 
   // Version HTML simple pour les clients qui préfèrent le rendu riche.
+  // La signature (logo + nom + métier) est en pied, façon signature mail pro.
   const html = `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-${htmlLogoBanner}
 <p>Bonjour${quote.client_name ? " " + escapeHtml(quote.client_name) : ""},</p>
 <p>Vous trouverez en pièce jointe le devis <strong>${escapeHtml(quote.number)}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
 <p><em>Objet :</em> ${escapeHtml(quote.description)}</p>
 ${quote.valid_until ? `<p>Valable jusqu'au <strong>${formatFr(quote.valid_until)}</strong>.</p>` : ""}
 <p>Pour accepter ce devis, répondez à cet email avec la mention « Bon pour accord ».</p>
-<p>Bien cordialement,<br>${escapeHtml(profile.display_name ?? "")}<br>${escapeHtml(profile.metier ?? "")}</p>
+<p>Bien cordialement,</p>
+${signatureHtml}
 </div>`;
 
   // Alias Asthia personnel — généré au premier envoi si encore null.

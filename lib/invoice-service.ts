@@ -4,6 +4,7 @@ import { deliverInvoice, type DeliveryResult } from "@/lib/delivery";
 import { loadLogoForPdf } from "@/lib/logo-loader";
 import { ensureAsthiaAlias } from "@/lib/asthia-alias";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { buildSignatureHtml, buildSignatureText } from "@/lib/email-signature";
 import {
   nextInvoiceNumber,
   nextDraftNumber,
@@ -330,10 +331,10 @@ export async function sendInvoice(
       : `Facture ${invoice.number} — ${profile.display_name}`;
 
   const greeting = `Bonjour${invoice.client_name ? " " + invoice.client_name : ""},`;
-  const signature = [
-    profile.display_name,
-    profile.metier ?? "",
-  ].filter(Boolean).join("\n");
+  // La signature (logo + nom + métier en bas) est gérée par le helper
+  // commun email-signature. On la concatène après la salutation de
+  // fermeture ("Bien à toi," / "Merci !").
+  const signatureText = buildSignatureText(profile);
 
   const text = isCreditNote
     ? [
@@ -348,8 +349,7 @@ export async function sendInvoice(
         `Cet avoir sera déduit d'une prochaine facture ou remboursé selon les modalités convenues.`,
         ``,
         `Bien à toi,`,
-        signature,
-      ].join("\n")
+      ].join("\n") + signatureText
     : alreadyPaid
       ? [
           greeting,
@@ -359,8 +359,7 @@ export async function sendInvoice(
           `Objet : ${invoice.description}`,
           ``,
           `Merci pour la confiance,`,
-          signature,
-        ].join("\n")
+        ].join("\n") + signatureText
       : [
           greeting,
           ``,
@@ -369,49 +368,39 @@ export async function sendInvoice(
           `Objet : ${invoice.description}`,
           ``,
           `Merci !`,
-          signature,
-        ].join("\n");
+        ].join("\n") + signatureText;
 
   const htmlGreeting = `<p>Bonjour${invoice.client_name ? " " + escapeHtml(invoice.client_name) : ""},</p>`;
-  const htmlSignature = `<br/>${escapeHtml(profile.display_name ?? "")}<br/><span style="color:#6B6B68">${escapeHtml(profile.metier ?? "")}</span>`;
-
-  // Bannière logo en haut du mail si l'AE a uploadé un logo.
-  // Le `<img src="cid:logo">` référence l'inline attachment passé via
-  // `email.inlineAttachments`. Tous les clients mail gèrent les CID,
-  // y compris Gmail (qui par défaut bloque les images externes mais
-  // affiche les inline).
-  const htmlLogoBanner = logo
-    ? `<div style="padding-bottom:18px;margin-bottom:16px;border-bottom:1px solid #E2E8F0;">
-        <img src="cid:logo" alt="${escapeHtml(profile.display_name ?? "")}" style="max-height:48px;max-width:240px;display:block;" />
-      </div>`
-    : "";
+  // Bloc signature pied de mail (logo + nom + métier). Plus de bannière
+  // logo en haut — le logo arrive en bas, façon signature pro.
+  const signatureHtml = buildSignatureHtml(profile, logo);
 
   const html = isCreditNote
     ? `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-        ${htmlLogoBanner}
         ${htmlGreeting}
         <p>Tu trouveras en pièce jointe l'avoir <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>${
           relatedNumber ? ` relatif à la facture <strong>${escapeHtml(relatedNumber)}</strong>` : ""
         }.</p>
         <p style="background:#F1F5F9;border:1px solid #94A3B8;border-radius:8px;padding:10px 14px;color:#334155;"><strong>Avoir à valoir</strong><br/>Cet avoir sera déduit d'une prochaine facture ou remboursé selon les modalités convenues.</p>
         <p><em>Motif :</em> ${escapeHtml(invoice.description)}</p>
-        <p>Bien à toi,${htmlSignature}</p>
+        <p>Bien à toi,</p>
+        ${signatureHtml}
       </div>`
     : alreadyPaid
       ? `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-          ${htmlLogoBanner}
           ${htmlGreeting}
           <p>Voici en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
           <p style="background:#ECF8EE;border:1px solid #16A34A;border-radius:8px;padding:10px 14px;color:#14532D;"><strong>Facture acquittée · Solde dû : 0,00 €</strong><br/>Aucun règlement n'est dû.</p>
           <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
-          <p>Merci pour la confiance,${htmlSignature}</p>
+          <p>Merci pour la confiance,</p>
+          ${signatureHtml}
         </div>`
       : `<!doctype html><meta charset="utf-8" /><div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-          ${htmlLogoBanner}
           ${htmlGreeting}
           <p>Tu trouveras en pièce jointe la facture <strong>${invoice.number}</strong> d'un montant de <strong>${prettyAmount}</strong>.</p>
           <p><em>Objet :</em> ${escapeHtml(invoice.description)}</p>
-          <p>Merci !${htmlSignature}</p>
+          <p>Merci !</p>
+          ${signatureHtml}
         </div>`;
 
   // Dispatcher : choisit automatiquement Gmail ou PDP selon le destinataire

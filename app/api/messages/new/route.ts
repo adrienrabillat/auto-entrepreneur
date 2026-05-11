@@ -7,6 +7,7 @@ import { loadLogoForPdf } from "@/lib/logo-loader";
 import { loadProfile, pdfDataFromInvoice } from "@/lib/invoice-service";
 import { generateInvoicePdf } from "@/lib/pdf";
 import { generateQuotePdfBytes } from "@/lib/quote-service";
+import { buildSignatureHtml, buildSignatureText } from "@/lib/email-signature";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -59,10 +60,10 @@ export async function POST(req: Request) {
   if (!subject) return NextResponse.json({ error: "Objet manquant" }, { status: 400 });
   if (!text) return NextResponse.json({ error: "Message vide" }, { status: 400 });
 
-  // Profile (pour From, Reply-To, et logo banner).
+  // Profile (pour From, Reply-To, signature et logo).
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, email, logo_path")
+    .select("display_name, business_name, metier, email, logo_path")
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Profil introuvable" }, { status: 500 });
@@ -118,17 +119,16 @@ export async function POST(req: Request) {
     threadId = created.id;
   }
 
-  // HTML simple à partir du texte (conserve les sauts de ligne) +
-  // bannière logo si configuré.
-  const htmlLogoBanner = logo
-    ? `<div style="padding-bottom:18px;margin-bottom:16px;border-bottom:1px solid #E2E8F0;">
-        <img src="cid:logo" alt="${escapeHtml(profile.display_name ?? "")}" style="max-height:48px;max-width:240px;display:block;" />
-      </div>`
-    : "";
+  // HTML : corps texte + signature (logo + nom + métier) en bas, façon
+  // signature de mail pro. Plus de bannière en haut — le logo arrive en
+  // pied juste avant les pièces jointes.
+  const signatureHtml = buildSignatureHtml(profile, logo);
+  const signatureText = buildSignatureText(profile);
   const html = `<div style="font-family:Inter,Helvetica,Arial,sans-serif;color:#37352F;line-height:1.55;">
-    ${htmlLogoBanner}
     <div style="white-space:pre-wrap;">${escapeHtml(text)}</div>
+    ${signatureHtml}
   </div>`;
+  const textWithSignature = `${text}${signatureText}`;
 
   // Envoi via Resend.
   const apiKey = process.env.RESEND_API_KEY;
@@ -218,7 +218,7 @@ export async function POST(req: Request) {
     from,
     to: [clientEmail],
     subject,
-    text,
+    text: textWithSignature,
     html,
     replyTo: fromAddress,
     attachments: attachments.length > 0 ? attachments : undefined,
@@ -240,7 +240,7 @@ export async function POST(req: Request) {
     from_name: profile.display_name ?? null,
     to_email: clientEmail,
     subject,
-    text,
+    text: textWithSignature,
     html,
     resend_email_id: sent?.id ?? null,
     received_at: nowIso,
