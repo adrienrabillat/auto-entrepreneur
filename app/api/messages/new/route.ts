@@ -4,6 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureAsthiaAlias } from "@/lib/asthia-alias";
 import { loadLogoForPdf } from "@/lib/logo-loader";
+import { loadProfile, pdfDataFromInvoice } from "@/lib/invoice-service";
+import { generateInvoicePdf } from "@/lib/pdf";
+import { generateQuotePdfBytes } from "@/lib/quote-service";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -133,19 +136,84 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "RESEND_API_KEY manquante" }, { status: 500 });
   }
   const resend = new Resend(apiKey);
-  // Bytes via Buffer (le SDK Resend attend `string | Buffer` pour
-  // `content`). On utilise Buffer.from pour rester compatible.
-  const logoAttachment = logo
-    ? [
-        {
-          filename: `logo.${logo.mimeType === "image/png" ? "png" : "jpg"}`,
-          content: Buffer.from(logo.bytes),
-          contentType: logo.mimeType,
-          contentId: "logo",
-          contentDisposition: "inline" as const,
-        },
-      ]
-    : undefined;
+  // Construit la liste des attachments. Toujours :
+  //  - logo inline (cid:logo) pour la bannière HTML — si un logo est défini.
+  //  - PDF de la facture/devis si l'AE a sélectionné un document dans le
+  //    picker "À propos de". On régénère à la volée pour refléter les
+  //    dernières infos profil + permettre au client d'avoir directement
+  //    la pièce sans chercher dans ses mails précédents.
+  type ResendAttachment = {
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+    contentId?: string;
+    contentDisposition?: "inline" | "attachment";
+  };
+  const attachments: ResendAttachment[] = [];
+  if (logo) {
+    attachments.push({
+      filename: `logo.${logo.mimeType === "image/png" ? "png" : "jpg"}`,
+      content: Buffer.from(logo.bytes),
+      contentType: logo.mimeType,
+      contentId: "logo",
+      contentDisposition: "inline",
+    });
+  }
+  // PDF facture/devis — best-effort. Si la génération échoue (doc
+  // introuvable, autre user…) on log et on envoie quand même le mail
+  // sans PJ plutôt que de bloquer tout le flow.
+  if (body.invoiceId) {
+    try {
+      const fullProfile = await loadProfile(supabase, user.id);
+      const { data: invoice } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("id", body.invoiceId)
+        .eq("user_id", user.id)
+        .single();
+      if (invoice) {
+        let relatedNumber: string | undefined;
+        if (invoice.invoice_type === "credit_note" && invoice.related_invoice_id) {
+          const { data: original } = await supabase
+            .from("invoices")
+            .select("number")
+            .eq("id", invoice.related_invoice_id)
+            .eq("user_id", user.id)
+            .maybeSingle();
+          relatedNumber = original?.number;
+        }
+        const pdfBytes = await generateInvoicePdf(
+          pdfDataFromInvoice(fullProfile, invoice, relatedNumber, logo),
+        );
+        const isCreditNote = invoice.invoice_type === "credit_note";
+        attachments.push({
+          filename: `${isCreditNote ? "avoir" : "facture"}-${invoice.number}.pdf`,
+          content: Buffer.from(pdfBytes),
+          contentType: "application/pdf",
+          contentDisposition: "attachment",
+        });
+      }
+    } catch (err) {
+      console.warn("[messages/new] échec PJ facture:", err);
+    }
+  } else if (body.quoteId) {
+    try {
+      const { bytes, filename } = await generateQuotePdfBytes(
+        supabase,
+        user.id,
+        body.quoteId,
+      );
+      attachments.push({
+        filename,
+        content: Buffer.from(bytes),
+        contentType: "application/pdf",
+        contentDisposition: "attachment",
+      });
+    } catch (err) {
+      console.warn("[messages/new] échec PJ devis:", err);
+    }
+  }
+
   const { data: sent, error: sendErr } = await resend.emails.send({
     from,
     to: [clientEmail],
@@ -153,7 +221,7 @@ export async function POST(req: Request) {
     text,
     html,
     replyTo: fromAddress,
-    attachments: logoAttachment,
+    attachments: attachments.length > 0 ? attachments : undefined,
   });
   if (sendErr) {
     return NextResponse.json(

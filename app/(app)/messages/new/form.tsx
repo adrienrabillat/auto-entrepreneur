@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/feedback";
-import { Send, Loader2, Wand2, Sparkles } from "lucide-react";
+import { Send, Loader2, Wand2, Paperclip } from "lucide-react";
 
 export type ClientOption = { id: string; label: string; email: string };
 export type DocOption = {
@@ -71,11 +71,9 @@ export function NewMessageForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Suggestion IA — l'utilisateur clique "Suggérer", saisit une intention
-  // courte (ex: "relance impayée"), Mistral génère subject + body. Si
-  // subject/body sont déjà remplis, l'IA peut aussi améliorer le draft.
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiIntent, setAiIntent] = useState("");
+  // Améliore le brouillon (objet + corps) via Mistral. On ne propose pas
+  // la génération from scratch : l'AE écrit son intention en français
+  // courant, l'IA reformule pour rendre ça plus pro.
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -104,33 +102,33 @@ export function NewMessageForm({
   }
   const effectiveSubject = subject.trim() || defaultSubjectFor(selectedDoc);
 
-  async function callAiSuggest(aiMode: "generate" | "improve") {
+  async function callAiImprove() {
+    if (!body.trim()) {
+      setAiError("Écris un brouillon d'abord, l'IA le reformulera.");
+      return;
+    }
     setAiBusy(true);
     setAiError(null);
     try {
-      // Récupère le nom du client depuis le bon mode de saisie.
       const clientLabel =
         mode === "existing" ? pickedClient?.label || null : manualName || null;
       const res = await fetch("/api/ai/suggest-message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: aiMode,
+          mode: "improve",
           clientName: clientLabel,
           clientEmail: targetEmail,
           invoiceNumber: selectedDoc?.kind === "invoice" ? selectedDoc.number : undefined,
           quoteNumber: selectedDoc?.kind === "quote" ? selectedDoc.number : undefined,
-          prompt: aiMode === "generate" ? aiIntent : undefined,
-          currentSubject: aiMode === "improve" ? subject : undefined,
-          currentText: aiMode === "improve" ? body : undefined,
+          currentSubject: subject,
+          currentText: body,
         }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
-      setSubject(json.subject || "");
-      setBody(json.text || "");
-      setAiOpen(false);
-      setAiIntent("");
+      if (json.subject) setSubject(json.subject);
+      if (json.text) setBody(json.text);
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "Erreur IA");
     } finally {
@@ -279,67 +277,15 @@ export function NewMessageForm({
               </option>
             ))}
           </select>
+          {selectedDoc ? (
+            <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-brand-700">
+              <Paperclip size={12} />
+              Le PDF du {selectedDoc.kind === "invoice" ? "facture" : "devis"}{" "}
+              {selectedDoc.number} sera joint au mail.
+            </p>
+          ) : null}
         </div>
       ) : null}
-
-      {/* Suggestion IA ─────────────────────────────────────── */}
-      <div className="rounded-2xl border border-brand-200/40 bg-brand-500/5 p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2 text-small text-brand-700">
-            <Sparkles size={14} />
-            <span className="font-medium">Suggestion IA</span>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setAiOpen(!aiOpen);
-                setAiError(null);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white bg-brand-gradient shadow-pop hover:opacity-90 transition"
-              disabled={aiBusy}
-            >
-              <Wand2 size={13} /> Suggérer un message
-            </button>
-            {(subject.trim() || body.trim()) ? (
-              <button
-                type="button"
-                onClick={() => callAiSuggest("improve")}
-                disabled={aiBusy}
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-brand-700 bg-white border border-brand-300 hover:bg-brand-500/10 transition disabled:opacity-40"
-              >
-                {aiBusy ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
-                Améliorer le brouillon
-              </button>
-            ) : null}
-          </div>
-        </div>
-        {aiOpen ? (
-          <div className="space-y-2 pt-1">
-            <Label htmlFor="ai_intent">Que veux-tu dire au client ?</Label>
-            <Input
-              id="ai_intent"
-              value={aiIntent}
-              onChange={(e) => setAiIntent(e.target.value)}
-              placeholder="Ex : relance impayée, envoi du devis, demande de précisions…"
-            />
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                onClick={() => callAiSuggest("generate")}
-                disabled={aiBusy || !aiIntent.trim()}
-              >
-                {aiBusy ? (
-                  <><Loader2 size={13} className="animate-spin" /> Génération…</>
-                ) : (
-                  <><Wand2 size={13} /> Générer</>
-                )}
-              </Button>
-            </div>
-          </div>
-        ) : null}
-        {aiError ? <p className="text-xs text-danger-600">{aiError}</p> : null}
-      </div>
 
       {/* Subject ─────────────────────────────────────────────── */}
       <div>
@@ -354,7 +300,26 @@ export function NewMessageForm({
 
       {/* Body ────────────────────────────────────────────────── */}
       <div>
-        <Label htmlFor="m_body">Message</Label>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <Label htmlFor="m_body">Message</Label>
+          <button
+            type="button"
+            onClick={callAiImprove}
+            disabled={aiBusy || !body.trim()}
+            title={
+              body.trim()
+                ? "Reformule ton brouillon pour le rendre plus pro"
+                : "Écris un brouillon avant d'utiliser l'IA"
+            }
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-brand-700 bg-brand-500/10 border border-brand-300/50 hover:bg-brand-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {aiBusy ? (
+              <><Loader2 size={12} className="animate-spin" /> Reformulation…</>
+            ) : (
+              <><Wand2 size={12} /> Améliorer avec l&apos;IA</>
+            )}
+          </button>
+        </div>
         <Textarea
           id="m_body"
           rows={8}
@@ -362,6 +327,9 @@ export function NewMessageForm({
           onChange={(e) => setBody(e.target.value)}
           placeholder="Bonjour…"
         />
+        {aiError ? (
+          <p className="mt-1 text-xs text-danger-600">{aiError}</p>
+        ) : null}
       </div>
 
       <div className="flex items-center justify-between gap-3 pt-2 border-t border-ink-100">
