@@ -121,7 +121,7 @@ export function Composer({
               </>
             ) : (
               <>
-                <Wand2 size={14} /> Améliorer avec l'IA
+                <Wand2 size={14} /> Améliorer avec l&apos;IA
               </>
             )}
           </Button>
