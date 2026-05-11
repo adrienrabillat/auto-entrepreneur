@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/feedback";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, Wand2, Sparkles } from "lucide-react";
 
 export type ClientOption = { id: string; label: string; email: string };
 export type DocOption = {
@@ -71,6 +71,14 @@ export function NewMessageForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Suggestion IA — l'utilisateur clique "Suggérer", saisit une intention
+  // courte (ex: "relance impayée"), Mistral génère subject + body. Si
+  // subject/body sont déjà remplis, l'IA peut aussi améliorer le draft.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiIntent, setAiIntent] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const pickedClient = clients.find((c) => c.id === pickedClientId) ?? null;
 
   // Filtre les docs : si un client est sélectionné, ne propose que les
@@ -95,6 +103,40 @@ export function NewMessageForm({
       : `Devis ${d.number}`;
   }
   const effectiveSubject = subject.trim() || defaultSubjectFor(selectedDoc);
+
+  async function callAiSuggest(aiMode: "generate" | "improve") {
+    setAiBusy(true);
+    setAiError(null);
+    try {
+      // Récupère le nom du client depuis le bon mode de saisie.
+      const clientLabel =
+        mode === "existing" ? pickedClient?.label || null : manualName || null;
+      const res = await fetch("/api/ai/suggest-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: aiMode,
+          clientName: clientLabel,
+          clientEmail: targetEmail,
+          invoiceNumber: selectedDoc?.kind === "invoice" ? selectedDoc.number : undefined,
+          quoteNumber: selectedDoc?.kind === "quote" ? selectedDoc.number : undefined,
+          prompt: aiMode === "generate" ? aiIntent : undefined,
+          currentSubject: aiMode === "improve" ? subject : undefined,
+          currentText: aiMode === "improve" ? body : undefined,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || `Erreur ${res.status}`);
+      setSubject(json.subject || "");
+      setBody(json.text || "");
+      setAiOpen(false);
+      setAiIntent("");
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "Erreur IA");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   async function handleSubmit() {
     setError(null);
@@ -239,6 +281,65 @@ export function NewMessageForm({
           </select>
         </div>
       ) : null}
+
+      {/* Suggestion IA ─────────────────────────────────────── */}
+      <div className="rounded-2xl border border-brand-200/40 bg-brand-500/5 p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 text-small text-brand-700">
+            <Sparkles size={14} />
+            <span className="font-medium">Suggestion IA</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setAiOpen(!aiOpen);
+                setAiError(null);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white bg-brand-gradient shadow-pop hover:opacity-90 transition"
+              disabled={aiBusy}
+            >
+              <Wand2 size={13} /> Suggérer un message
+            </button>
+            {(subject.trim() || body.trim()) ? (
+              <button
+                type="button"
+                onClick={() => callAiSuggest("improve")}
+                disabled={aiBusy}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-brand-700 bg-white border border-brand-300 hover:bg-brand-500/10 transition disabled:opacity-40"
+              >
+                {aiBusy ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+                Améliorer le brouillon
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {aiOpen ? (
+          <div className="space-y-2 pt-1">
+            <Label htmlFor="ai_intent">Que veux-tu dire au client ?</Label>
+            <Input
+              id="ai_intent"
+              value={aiIntent}
+              onChange={(e) => setAiIntent(e.target.value)}
+              placeholder="Ex : relance impayée, envoi du devis, demande de précisions…"
+            />
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={() => callAiSuggest("generate")}
+                disabled={aiBusy || !aiIntent.trim()}
+              >
+                {aiBusy ? (
+                  <><Loader2 size={13} className="animate-spin" /> Génération…</>
+                ) : (
+                  <><Wand2 size={13} /> Générer</>
+                )}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {aiError ? <p className="text-xs text-danger-600">{aiError}</p> : null}
+      </div>
 
       {/* Subject ─────────────────────────────────────────────── */}
       <div>
