@@ -8,16 +8,16 @@ import {
   FilePen,
   LayoutDashboard,
   MessageSquare,
+  MoreHorizontal,
   Receipt,
   Settings,
   Users,
 } from "lucide-react";
 
-// Items de navigation principaux (sidebar desktop + bottom-nav mobile).
+// Items de navigation desktop (sidebar) — on garde les 7 entrées : la
+// sidebar a la place de tout afficher et chaque entrée pointe vers une
+// destination directe sans regroupement.
 // Ordre : Accueil → Devis → Factures → Messages → Clients → URSSAF → Profil.
-// "Messages" rejoint la nav après l'ajout de la messagerie in-app — on le
-// place après Factures parce que les conversations sont liées aux
-// factures/devis envoyés.
 const items = [
   { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
   { href: "/quotes", label: "Devis", icon: FilePen },
@@ -27,6 +27,48 @@ const items = [
   { href: "/declarations", label: "URSSAF", icon: Receipt },
   { href: "/settings", label: "Profil", icon: Settings },
 ];
+
+// Bottom-nav mobile — on plafonne à 5 onglets (recommandation Apple HIG /
+// Material). Regroupements vs. desktop :
+//  • Clients englobe /messages (un message est toujours rattaché à un
+//    client, sous-onglet Liste/Messages géré sur la page).
+//  • Plus regroupe URSSAF et Profil (consultés moins fréquemment), pointe
+//    sur /more qui présente une grille.
+// On surligne "Clients" si pathname commence par /clients OU /messages,
+// idem "Plus" si pathname commence par /more, /declarations ou /settings.
+type MobileItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  /** Préfixes de routes qui activent visuellement cet onglet. Si absent,
+   *  on retombe sur le href. */
+  activePrefixes?: string[];
+};
+
+const mobileItems: MobileItem[] = [
+  { href: "/dashboard", label: "Accueil", icon: LayoutDashboard },
+  { href: "/quotes", label: "Devis", icon: FilePen },
+  { href: "/invoices", label: "Factures", icon: FileText },
+  {
+    href: "/clients",
+    label: "Clients",
+    icon: Users,
+    activePrefixes: ["/clients", "/messages"],
+  },
+  {
+    href: "/more",
+    label: "Plus",
+    icon: MoreHorizontal,
+    activePrefixes: ["/more", "/declarations", "/settings"],
+  },
+];
+
+function isActive(pathname: string, item: { href: string; activePrefixes?: string[] }) {
+  const prefixes = item.activePrefixes ?? [item.href];
+  return prefixes.some(
+    (p) => pathname === p || pathname.startsWith(p + "/"),
+  );
+}
 
 /**
  * Sidebar desktop (≥ md) — design Revolut épuré :
@@ -97,6 +139,9 @@ export function Sidebar({ displayName, email }: { displayName: string; email: st
 /**
  * Mobile bottom nav — fond surface (blanc/dark), item actif avec pastille
  * bleue remplie type Revolut. Respecte la safe-area iOS.
+ *
+ * 5 onglets max (Apple HIG / Material). Clients et Plus regroupent
+ * plusieurs routes — voir `mobileItems` ci-dessus pour le mapping.
  */
 export function MobileBottomNav() {
   const pathname = usePathname();
@@ -105,9 +150,10 @@ export function MobileBottomNav() {
       className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-surface shadow-card"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="grid grid-cols-7">
-        {items.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
+      <ul className="grid grid-cols-5">
+        {mobileItems.map((item) => {
+          const { href, label, icon: Icon } = item;
+          const active = isActive(pathname, item);
           return (
             <li key={href}>
               <Link

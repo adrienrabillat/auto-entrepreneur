@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/supabase/current-user";
 import { formatDate } from "@/lib/format";
 import { MessageSquare, Mail, ArrowRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ClientsMessagesTabs } from "@/components/ui/clients-messages-tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -43,9 +44,12 @@ export default async function MessagesPage() {
     quote: { id: string; number: string } | null;
   };
   const list = (threads ?? []) as unknown as ThreadRow[];
+  const unreadTotal = list.reduce((acc, t) => acc + (t.unread_count ?? 0), 0);
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 animate-fade-in-up">
+      <ClientsMessagesTabs active="messages" unreadCount={unreadTotal} />
+
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-h1">Messages</h1>

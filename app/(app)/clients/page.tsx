@@ -7,6 +7,7 @@ import { DeleteClientButton } from "./row-delete";
 import { initialsFrom } from "@/lib/initials";
 import { ExportExcelButton } from "@/components/ui/export-excel";
 import { ListRowSkeleton } from "@/components/ui/skeleton";
+import { ClientsMessagesTabs } from "@/components/ui/clients-messages-tabs";
 import { clientDisplayLabel } from "@/lib/display-name";
 
 export const dynamic = "force-dynamic";
@@ -31,9 +32,26 @@ type ClientRow = {
   country: string;
 };
 
-export default function ClientsPage() {
+export default async function ClientsPage() {
+  // On compte les messages non-lus pour le badge du sous-onglet "Messages".
+  // Lookup léger sur message_threads (une ligne par conversation, pas par
+  // message), filtré par la policy RLS "self" — pas besoin d'un .eq sur
+  // user_id côté policy, on le passe quand même par sécurité défensive.
+  const supabase = createClient();
+  const user = await getCurrentUser();
+  const { data: unreadRows } = await supabase
+    .from("message_threads")
+    .select("unread_count")
+    .eq("user_id", user!.id);
+  const unreadTotal = (unreadRows ?? []).reduce(
+    (acc, r) => acc + ((r as { unread_count: number | null }).unread_count ?? 0),
+    0,
+  );
+
   return (
     <div className="space-y-5 animate-fade-in-up">
+      <ClientsMessagesTabs active="list" unreadCount={unreadTotal} />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-h1">Clients</h1>
