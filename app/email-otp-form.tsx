@@ -168,13 +168,8 @@ export function EmailOtpForm({ next }: { next?: string }) {
         </label>
 
         <Button type="submit" size="lg" disabled={loading} className="w-full">
-          {loading ? "Envoi du code…" : "Recevoir un code"}
+          {loading ? "Envoi du code…" : "Continuer avec l'email"}
         </Button>
-
-        <p className="text-xs text-ink-400 text-center pt-1">
-          Pas de mot de passe. On t&apos;envoie un code à 6 chiffres pour te
-          connecter ou créer ton compte.
-        </p>
 
         <ErrorBanner message={error} onDismiss={() => setError(null)} />
       </form>
