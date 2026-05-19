@@ -27,33 +27,30 @@ type Tile = {
   icon: typeof Receipt;
   /** Lien externe : ouvre dans un nouvel onglet. */
   external?: boolean;
-  /** Accentue la tuile (utilisé pour URSSAF qui est l'élément prioritaire
-   *  de la page Plus). */
-  accent?: boolean;
 };
 
-const businessTiles: Tile[] = [
+// Toutes les tuiles dans un seul ensemble, mêmes traitement visuel.
+// Ordre : URSSAF (déclaration = action métier la plus structurante de la
+// page) → Profil (identité de l'AE, utilisée à chaque facture) → Importer
+// (one-shot) → puis ressources légales et aide.
+const tiles: Tile[] = [
   {
     href: "/declarations",
     label: "URSSAF",
     hint: "Déclarations et historique",
     icon: Receipt,
-    accent: true,
+  },
+  {
+    href: "/settings",
+    label: "Profil",
+    hint: "Identité, IBAN, mentions",
+    icon: Settings,
   },
   {
     href: "/import",
     label: "Importer",
     hint: "Factures existantes",
     icon: Upload,
-  },
-];
-
-const accountTiles: Tile[] = [
-  {
-    href: "/settings",
-    label: "Profil",
-    hint: "Identité, IBAN, mentions",
-    icon: Settings,
   },
   {
     href: "/legal",
@@ -81,8 +78,11 @@ export default function MorePage() {
         </p>
       </div>
 
-      <TileSection title="Mon activité" tiles={businessTiles} />
-      <TileSection title="Compte" tiles={accountTiles} />
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        {tiles.map((t) => (
+          <TileLink key={t.href} tile={t} />
+        ))}
+      </div>
 
       {/* Déconnexion en bas, traitée à part car form POST. Visuellement
           séparée pour éviter un clic accidentel depuis la grille. */}
@@ -98,33 +98,12 @@ export default function MorePage() {
   );
 }
 
-function TileSection({ title, tiles }: { title: string; tiles: Tile[] }) {
-  return (
-    <section className="space-y-2.5">
-      <h2 className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
-        {title}
-      </h2>
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-        {tiles.map((t) => (
-          <TileLink key={t.href} tile={t} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function TileLink({ tile }: { tile: Tile }) {
-  const { href, label, hint, icon: Icon, external, accent } = tile;
+  const { href, label, hint, icon: Icon, external } = tile;
 
   const content = (
     <>
-      <div
-        className={
-          accent
-            ? "h-11 w-11 grid place-items-center rounded-2xl bg-brand-500 text-white shadow-pop"
-            : "h-11 w-11 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600"
-        }
-      >
+      <div className="h-11 w-11 grid place-items-center rounded-2xl bg-brand-500/10 text-brand-600">
         <Icon size={20} />
       </div>
       <div className="min-w-0">
