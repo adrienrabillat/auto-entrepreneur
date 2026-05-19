@@ -9,8 +9,9 @@ import type { DeliveryAdapter, DeliveryInput, DeliveryResult } from "./types";
  *  - **Identité unifiée** : tous les utilisateurs envoient depuis
  *    `asthia.fr` → image plus pro qu'un envoi depuis `prenom.nom@gmail.com`.
  *  - **Indépendance** : plus besoin que l'AE ait un compte Google ni
- *    qu'il ait connecté Gmail. Étape obligatoire pour les inscriptions
- *    par email/mot de passe (cas de l'instructrice URSSAF, par exemple).
+ *    qu'il ait connecté Gmail. Indispensable depuis qu'on accepte
+ *    l'inscription par code OTP email sans aucun lien Google
+ *    (cas de l'instructrice URSSAF, par exemple).
  *  - **Deliverability** : SPF/DKIM/DMARC configurés sur `asthia.fr`,
  *    mails signés correctement, suivi des bounces côté Resend.
  *  - **Coût maîtrisé** : free tier Resend = 3 000 mails/mois, ensuite

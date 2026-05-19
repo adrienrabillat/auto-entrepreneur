@@ -260,8 +260,9 @@ export default function Confidentialite() {
           <li>chiffrement au repos par {DB_PROVIDER_NAME} ;</li>
           <li>cloisonnement des données par utilisateur via des politiques
             de sécurité au niveau ligne (Row Level Security) PostgreSQL ;</li>
-          <li>authentification déléguée à Google OAuth (pas de mot de passe
-            stocké côté Asthia) ;</li>
+          <li>authentification par Google OAuth ou par code à usage unique
+            envoyé par email — aucun mot de passe n&apos;est stocké côté
+            Asthia ;</li>
           <li>audits réguliers du code source.</li>
         </ul>
       </Section>
