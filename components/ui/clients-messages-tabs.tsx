@@ -21,7 +21,7 @@ export function ClientsMessagesTabs({
 }) {
   return (
     <div
-      className="md:hidden -mx-1 mb-1 inline-flex w-full max-w-xs items-center gap-1 rounded-full bg-surface-2 p-1"
+      className="md:hidden mb-1 flex w-full items-center gap-1 rounded-full bg-surface-2 p-1"
       role="tablist"
       aria-label="Clients et messages"
     >
