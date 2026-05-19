@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LoginButton } from "./login-button";
-import { EmailLoginForm } from "./email-login-form";
+import { EmailOtpForm } from "./email-otp-form";
 
 export default async function LandingPage({
   searchParams,
@@ -59,17 +59,16 @@ export default async function LandingPage({
           <div className="mt-8 space-y-4">
             <LoginButton next={searchParams.next} />
 
-            {/* Séparateur "ou" entre Google et email/password.
-                Permet aux utilisateurs sans Google (cas de l'instructrice
-                URSSAF par exemple) de créer un compte avec une adresse
-                email classique. */}
+            {/* Séparateur "ou" entre Google et OTP email.
+                Les deux flows convergent sur le même compte si l'adresse
+                email est identique (Supabase déduplique par email). */}
             <div className="flex items-center gap-3 text-xs text-ink-400">
               <span className="flex-1 h-px bg-divider" aria-hidden />
               <span className="uppercase tracking-wider">ou</span>
               <span className="flex-1 h-px bg-divider" aria-hidden />
             </div>
 
-            <EmailLoginForm next={searchParams.next} />
+            <EmailOtpForm next={searchParams.next} />
           </div>
 
           {err ? (
