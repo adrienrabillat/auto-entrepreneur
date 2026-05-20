@@ -1,32 +1,39 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Vidéo hero de la landing (démo produit rendue avec Remotion).
  *
- * Pourquoi un client component plutôt qu'un simple <video autoPlay> ?
- * L'autoplay des navigateurs est capricieux et échoue de façon
- * intermittente :
+ * Deux problèmes d'intégration vidéo sont gérés ici :
  *
- *  - Vidéo servie depuis le cache → elle est prête quasi instantanément,
- *    et le navigateur peut tenter l'autoplay AVANT que la propriété
- *    `muted` soit fiablement posée (l'attribut JSX `muted` de React
- *    n'est pas toujours répercuté à temps sur la propriété DOM). Le
- *    navigateur voit alors une vidéo "non muette" et bloque l'autoplay.
+ * 1. AUTOPLAY peu fiable — vidéo en cache prête trop vite, onglet en
+ *    arrière-plan, etc. → on force `muted`, on appelle play() au
+ *    montage, et on re-tente play() quand l'onglet redevient visible.
  *
- *  - Onglet ouvert en arrière-plan → l'autoplay est différé tant que
- *    l'onglet n'est pas visible, et ne reprend pas toujours tout seul
- *    quand l'utilisateur y revient.
+ * 2. FRAME SOMBRE — la vidéo fait un fondu d'entrée depuis le fond et
+ *    un fondu de sortie ; ses toutes premières et toutes dernières
+ *    frames sont donc très sombres. Au chargement / refresh, le
+ *    navigateur affiche cette frame 0 sombre dès qu'elle est décodée.
+ *    Solution : on garde un POSTER (image figée claire) en fond du
+ *    conteneur, et on ne révèle la <video> que pendant sa "fenêtre
+ *    sûre" — c.-à-d. une fois l'intro passée et avant l'outro. Pendant
+ *    l'intro, l'outro et la couture de boucle, c'est le poster clair
+ *    qui est visible, jamais de noir.
  *
- * On fixe les deux cas en pilotant la lecture en JS : on force la
- * propriété `muted`, on appelle play() au montage, et on re-tente
- * play() à chaque fois que l'onglet redevient visible. Le poster reste
- * comme image de chargement (affiché < 1 s le temps du décodage), mais
- * il ne "colle" plus puisque la vidéo démarre de façon fiable.
+ * Le fix définitif reste de re-rendre la vidéo avec un fond clair de
+ * base (déjà codé dans remotion/src/Hero.tsx) — mais ce composant rend
+ * l'intégration robuste même en attendant ce re-render.
  */
+
+// Marge (en secondes) pendant laquelle on masque la vidéo en début et
+// en fin de lecture — couvre le fondu d'entrée (~0,3 s) et de sortie.
+const INTRO_GUARD = 0.45;
+const OUTRO_GUARD = 0.55;
+
 export function HeroVideo() {
   const ref = useRef<HTMLVideoElement>(null);
+  const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
     const video = ref.current;
@@ -37,44 +44,71 @@ export function HeroVideo() {
 
     const tryPlay = () => {
       const p = video.play();
-      // play() renvoie une promesse ; si l'autoplay est refusé on
-      // l'avale silencieusement (le poster reste affiché en secours).
       if (p && typeof p.catch === "function") {
         p.catch(() => {
-          /* autoplay refusé — on garde le poster, pas d'erreur console */
+          /* autoplay refusé — le poster reste affiché, pas d'erreur */
         });
       }
     };
-
-    // Tentative immédiate au montage.
     tryPlay();
 
-    // Re-tentative quand l'onglet (re)devient visible : couvre le cas
-    // de l'onglet ouvert en arrière-plan et du retour d'onglet.
+    // Révèle la vidéo uniquement dans sa fenêtre "sûre" : après l'intro
+    // et avant l'outro. En dehors (et à chaque retour à 0 lors de la
+    // boucle), c'est le poster clair qui est visible.
+    const updateReveal = () => {
+      const t = video.currentTime;
+      const d = video.duration;
+      const afterIntro = t > INTRO_GUARD;
+      const beforeOutro = Number.isNaN(d) || t < d - OUTRO_GUARD;
+      setRevealed(afterIntro && beforeOutro);
+    };
+    video.addEventListener("timeupdate", updateReveal);
+
+    // Re-tentative de lecture quand l'onglet (re)devient visible :
+    // couvre l'onglet ouvert en arrière-plan et le retour d'onglet.
     const onVisibility = () => {
       if (document.visibilityState === "visible") tryPlay();
     };
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
+      video.removeEventListener("timeupdate", updateReveal);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 
   return (
-    <video
-      ref={ref}
-      autoPlay
-      loop
-      muted
-      playsInline
-      preload="auto"
-      poster="/hero-poster.jpg"
-      aria-label="Démonstration animée d'Asthia : choix de la couleur de l'interface, création d'une facture, aperçu du PDF, envoi au client et déclaration URSSAF automatique."
-      className="block w-full h-auto"
+    <div
+      className="relative w-full bg-surface"
+      style={{
+        // Poster clair en fond — toujours visible derrière la vidéo.
+        // Quand la <video> est masquée (opacity 0), c'est lui qu'on voit.
+        backgroundImage: "url(/hero-poster.jpg)",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
     >
-      <source src="/hero.webm" type="video/webm" />
-      <source src="/hero.mp4" type="video/mp4" />
-    </video>
+      <video
+        ref={ref}
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="auto"
+        aria-label="Démonstration animée d'Asthia : choix de la couleur de l'interface, création d'une facture, aperçu du PDF, envoi au client et déclaration URSSAF automatique."
+        className="block w-full"
+        style={{
+          // aspect-ratio réserve la hauteur dès le départ (avant même
+          // que la vidéo connaisse ses dimensions) → le conteneur ne
+          // s'effondre pas et le poster a toujours une surface.
+          aspectRatio: "1620 / 1800",
+          opacity: revealed ? 1 : 0,
+          transition: "opacity 200ms ease",
+        }}
+      >
+        <source src="/hero.webm" type="video/webm" />
+        <source src="/hero.mp4" type="video/mp4" />
+      </video>
+    </div>
   );
 }
