@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LoginButton } from "./login-button";
 import { EmailOtpForm } from "./email-otp-form";
-import { HeroMockup } from "@/components/landing/hero-mockup";
 
 /**
  * Landing publique — refonte mai 2026 (v2).
@@ -148,13 +147,30 @@ export default async function LandingPage({
             </div>
           </div>
 
-          {/* Colonne droite — mockup animé (caché en mobile).
-              Liseré ULTRA-fin : ring 1 px directement sur le bord du
-              mockup, ombre portée prononcée pour le décollement. La
-              card se démarque par son ombre + son contraste blanc/page
-              gris-clair, pas par un cadre épais. */}
-          <div className="hidden md:block rounded-[24px] ring-1 ring-ink-900/15 shadow-[0_30px_80px_-20px_rgba(11,13,18,0.35)]">
-            <HeroMockup />
+          {/* Colonne droite — vidéo hero rendue avec Remotion (cf.
+              dossier remotion/). Remplace l'ancien mockup CSS animé.
+              Caché en mobile (le hero mobile reste centré sur l'auth).
+
+              <video> : autoPlay + muted + playsInline = autoplay
+              autorisé par les navigateurs ; loop pour boucler les 20 s.
+              Source webm en premier (meilleure compression), mp4 en
+              fallback pour les navigateurs sans support vp9.
+              Le fond blanc (bg-surface) évite un flash noir avant que
+              la vidéo soit décodée — la 1ʳᵉ frame est de toute façon
+              claire. */}
+          <div className="hidden md:block rounded-[24px] overflow-hidden ring-1 ring-ink-900/15 shadow-[0_30px_80px_-20px_rgba(11,13,18,0.35)] bg-surface">
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              aria-label="Démonstration animée d'Asthia : choix de la couleur de l'interface, création d'une facture, aperçu du PDF, envoi au client et déclaration URSSAF automatique."
+              className="block w-full h-auto"
+            >
+              <source src="/hero.webm" type="video/webm" />
+              <source src="/hero.mp4" type="video/mp4" />
+            </video>
           </div>
         </div>
       </section>

@@ -5,13 +5,16 @@
   "description": "Vidéo hero de la landing Asthia, rendue avec Remotion.",
   "scripts": {
     "start": "remotion studio",
-    "build": "remotion render Hero out/hero.mp4",
-    "build:webm": "remotion render Hero out/hero.webm --codec=vp9",
+    "build": "remotion render Bootstrap out/bootstrap.mp4 --x264-preset slow",
+    "build:webm": "remotion render Bootstrap out/bootstrap.webm --codec=vp9",
+    "build:hero": "remotion render Hero out/hero.mp4 --x264-preset slow",
+    "build:hero:webm": "remotion render Hero out/hero.webm --codec=vp9",
     "upgrade": "remotion upgrade"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.0",
     "@remotion/google-fonts": "^4.0.0",
+    "@remotion/transitions": "^4.0.464",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "remotion": "^4.0.0"

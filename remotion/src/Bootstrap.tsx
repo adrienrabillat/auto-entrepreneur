@@ -26,11 +26,14 @@ import {
 import { loadFont } from "@remotion/google-fonts/Inter";
 import { COLORS, rgbLerp } from "./tokens";
 
-// Charge Inter (poids 400, 500, 700, 800) — exécuté une seule fois au
-// chargement du module. Remotion garantit que la police est dispo
-// avant que le composant render, donc pas de FOIT/FOUT dans la vidéo.
+// Charge Inter — uniquement les poids et sous-ensembles dont la
+// scène a besoin, pour éviter les "Too many network requests" en
+// rendu (chaque poids × chaque subset = une requête fetch côté
+// Chromium). Ici : 2 poids (500 pour le HUD, 800 pour le wordmark)
+// et 1 subset (latin pour le français).
 const { fontFamily } = loadFont("normal", {
-  weights: ["400", "500", "700", "800"],
+  weights: ["500", "800"],
+  subsets: ["latin"],
 });
 
 export const Bootstrap = () => {
