@@ -374,6 +374,13 @@ export function HeroMockup() {
                 93%         { clip-path: inset(0 0% 0 0); }
                 99%, 100%   { clip-path: inset(0 100% 0 0); }
               }
+              /* Les classes qui APPLIQUENT les keyframes ci-dessus.
+                 Sans elles, l'inline style clipPath:'inset(0 100% 0 0)'
+                 dans <TypingField> garderait les valeurs invisibles
+                 indéfiniment (cf. bug détecté le 20/05/2026). */
+              .hero-type-client { animation: hero-type-client 12s ease-in-out infinite both; }
+              .hero-type-design { animation: hero-type-design 12s ease-in-out infinite both; }
+              .hero-type-mont   { animation: hero-type-mont   12s ease-in-out infinite both; }
 
               /* ═══ CARETS (visibilité fenêtrée + clignotement) ══════
                  Combinaison de 2 animations sur des propriétés

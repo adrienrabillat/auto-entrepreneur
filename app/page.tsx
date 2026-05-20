@@ -149,11 +149,11 @@ export default async function LandingPage({
           </div>
 
           {/* Colonne droite — mockup animé (caché en mobile).
-              Liseré fin : ring de 2 px (couleur ink-900 80 %) directement
-              sur le bord du mockup, plus une ombre portée prononcée. Pas
-              de wrapper sombre avec padding cette fois — juste un bord
-              net qui démarque la card sans alourdir. */}
-          <div className="hidden md:block rounded-[24px] ring-2 ring-ink-900/80 shadow-[0_30px_80px_-20px_rgba(11,13,18,0.4)]">
+              Liseré ULTRA-fin : ring 1 px directement sur le bord du
+              mockup, ombre portée prononcée pour le décollement. La
+              card se démarque par son ombre + son contraste blanc/page
+              gris-clair, pas par un cadre épais. */}
+          <div className="hidden md:block rounded-[24px] ring-1 ring-ink-900/15 shadow-[0_30px_80px_-20px_rgba(11,13,18,0.35)]">
             <HeroMockup />
           </div>
         </div>
