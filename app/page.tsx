@@ -106,7 +106,7 @@ export default async function LandingPage({
                 la seconde via <br/>. Tailles légèrement réduites par
                 rapport à l'itération précédente pour garantir que la
                 première ligne tienne sur toutes les résolutions. */}
-            <h1 className="text-[2.5rem] md:text-[2.75rem] lg:text-[3.25rem] xl:text-[3.75rem] leading-[1.05] font-extrabold tracking-tight text-ink-900">
+            <h1 className="md:-mt-8 text-[2.5rem] md:text-[2.75rem] lg:text-[3.25rem] xl:text-[3.75rem] leading-[1.05] font-extrabold tracking-tight text-ink-900">
               <span className="whitespace-nowrap">Facture, envoie,</span>
               <br />
               <span className="text-gradient-brand">déclare</span>.
