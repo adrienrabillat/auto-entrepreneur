@@ -1,0 +1,12 @@
+# Deps locales (Remotion télécharge un Chromium ~150 MB, à ne pas commit)
+node_modules/
+
+# Sortie du render (les vidéos finales vont dans /public côté Next, pas ici)
+out/
+
+# Logs et caches
+.remotion/
+*.log
+
+# OS
+.DS_Store
