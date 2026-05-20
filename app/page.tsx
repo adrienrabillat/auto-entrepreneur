@@ -75,18 +75,21 @@ export default async function LandingPage({
       </header>
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
-      {/* min-h-[calc(100dvh-72px)] sur mobile (72px = hauteur header) pour
-          que TOUT le hero (titre + sous-titre + card auth) tienne dans le
-          viewport sans scroll, façon claude.ai. Sur desktop on revient à
-          un padding vertical classique car la grid 2 colonnes a besoin
-          d'un peu d'espace haut/bas pour respirer, et le mockup à droite
-          se cale verticalement.
+      {/* min-h-[calc(100dvh-72px)] sur TOUS les breakpoints (72 px = hauteur
+          du header) : le hero — titre + sous-titre + card auth (et mockup
+          à droite en desktop) — tient pile dans le premier viewport sans
+          scroll, façon claude.ai. La section de pricing apparaît au
+          scroll juste après.
 
           dvh (dynamic viewport) plutôt que vh : sur iOS Safari, vh inclut
           la barre d'adresse à 100 % même quand elle se rétracte, ce qui
-          fait scroller pour rien. dvh suit la taille réelle visible. */}
-      <section className="px-5 md:px-8 max-w-6xl mx-auto w-full min-h-[calc(100dvh-72px)] md:min-h-0 flex flex-col justify-center md:block">
-        <div className="grid md:grid-cols-2 gap-8 md:gap-14 items-center md:py-16">
+          fait scroller pour rien. dvh suit la taille réelle visible.
+
+          On utilise flex+justify-center plutôt qu'un padding vertical :
+          comme ça le contenu reste centré quelle que soit la hauteur de
+          l'écran (gros 27" vs MacBook 13"). */}
+      <section className="px-5 md:px-8 max-w-6xl mx-auto w-full min-h-[calc(100dvh-72px)] flex flex-col justify-center">
+        <div className="grid md:grid-cols-2 gap-8 md:gap-14 items-center">
           {/* Colonne gauche — titre + sous-titre + card auth.
               Mobile : tout centré (text-center, mx-auto).
               Desktop : la card auth reste centrée dans sa colonne mais le
@@ -133,13 +136,16 @@ export default async function LandingPage({
             </div>
           </div>
 
-          {/* Colonne droite — mockup animé.
-              Caché en mobile (cf. demande user 20/05/2026 : "on la retire
-              sur mobile et il faut centrer le tout"). L'animation est
-              décorative ; pas d'impact accessibilité, le hero reste
-              compréhensible sans. */}
+          {/* Colonne droite — mockup animé dans un cadre "vidéo" sombre.
+              Caché en mobile (demande user 20/05/2026). Le cadre sombre
+              (#0B0D12 en light = ink-1 brut, surface-2 brut en dark)
+              encadre le mockup pour signaler visuellement "zone de
+              démo / aperçu produit", façon claude.ai où le widget
+              Progress est dans un bloc noir distinct du fond clair. */}
           <div className="hidden md:block">
-            <HeroMockup />
+            <div className="rounded-[28px] bg-[rgb(11,13,18)] dark:bg-[rgb(27,31,40)] p-5 md:p-6 shadow-[0_20px_60px_-20px_rgba(11,13,18,0.45)]">
+              <HeroMockup />
+            </div>
           </div>
         </div>
       </section>

@@ -26,20 +26,10 @@
  */
 export function HeroMockup() {
   return (
+    // Le halo radial qui détachait le mockup du fond clair a été retiré :
+    // le wrapper sombre du parent (cf. app/page.tsx, bloc "vidéo") joue
+    // maintenant ce rôle de cadre, avec un contraste bien plus fort.
     <div className="relative w-full">
-      {/* Halo radial plus vibrant qu'avant (audit critique : ancien
-          halo en bg-brand-500/[0.06] passait inaperçu). Combine un
-          gradient radial sur deux stops avec un blur, pour vraiment
-          détacher la card du fond. */}
-      <div
-        aria-hidden
-        className="absolute -inset-10 hidden md:block rounded-[40px] blur-3xl opacity-90"
-        style={{
-          background:
-            "radial-gradient(60% 60% at 70% 30%, rgba(47,107,255,0.18) 0%, rgba(47,107,255,0.06) 45%, rgba(47,107,255,0) 75%)",
-        }}
-      />
-
       <div
         role="img"
         aria-label="Aperçu animé d'Asthia : à gauche, un formulaire de facture qui se remplit champ par champ ; à droite, le PDF de la facture qui se dessine en temps réel. Puis la facture est envoyée."
