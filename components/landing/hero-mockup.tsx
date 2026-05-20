@@ -33,7 +33,9 @@ export function HeroMockup() {
       <div
         role="img"
         aria-label="Aperçu animé d'Asthia : à gauche, un formulaire de facture qui se remplit champ par champ ; à droite, le PDF de la facture qui se dessine en temps réel. Puis la facture est envoyée."
-        className="relative surface p-5 md:p-6 overflow-hidden"
+        // Liseré subtil (ring) + ombre douce plus prononcée que shadow-card
+        // pour décoller le mockup du fond clair sans cadre épais.
+        className="relative surface p-6 md:p-8 overflow-hidden ring-1 ring-ink-900/[0.06] shadow-[0_24px_64px_-20px_rgba(11,13,18,0.18)]"
       >
         {/* En-tête mac-window style */}
         <div className="flex items-center justify-between">

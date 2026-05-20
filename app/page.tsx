@@ -88,15 +88,26 @@ export default async function LandingPage({
           On utilise flex+justify-center plutôt qu'un padding vertical :
           comme ça le contenu reste centré quelle que soit la hauteur de
           l'écran (gros 27" vs MacBook 13"). */}
-      <section className="px-5 md:px-8 max-w-6xl mx-auto w-full min-h-[calc(100dvh-72px)] flex flex-col justify-center">
-        <div className="grid md:grid-cols-2 gap-8 md:gap-14 items-center">
+      {/* Le hero peut déborder très légèrement à droite (mockup) ; on
+          clippe horizontalement sur la section pour éviter un scroll
+          horizontal sans casser les focus-rings verticaux. */}
+      <section className="px-5 md:px-8 max-w-7xl mx-auto w-full min-h-[calc(100dvh-72px)] flex flex-col justify-center overflow-x-clip">
+        {/* Grille asymétrique : le mockup prend ~55% de l'espace sur
+            md, ~58% sur lg+, pour vraiment occuper la scène façon
+            claude.ai. La gap diminue légèrement sur grand écran pour
+            que le mockup gagne encore plus d'espace utile. */}
+        <div className="grid md:grid-cols-[1fr_1.2fr] lg:grid-cols-[1fr_1.4fr] gap-8 md:gap-10 lg:gap-12 items-center">
           {/* Colonne gauche — titre + sous-titre + card auth.
               Mobile : tout centré (text-center, mx-auto).
               Desktop : la card auth reste centrée dans sa colonne mais le
               titre s'aligne à gauche pour suivre l'axe du mockup à
               droite (lecture occidentale gauche → droite). */}
           <div className="w-full max-w-md mx-auto text-center md:text-left md:mx-0 md:max-w-none">
-            <h1 className="text-[2.75rem] md:text-display leading-[1.05] font-extrabold tracking-tight text-ink-900">
+            {/* H1 progressivement plus gros aux breakpoints — sur xl on
+                tape les 64 px (text-[4rem]) pour vraiment habiter
+                l'espace, comme Claude qui pousse son H1 très loin.
+                Mobile reste à 2.75rem pour ne pas casser le viewport-fit. */}
+            <h1 className="text-[2.75rem] md:text-[3rem] lg:text-[3.5rem] xl:text-[4rem] leading-[1.05] font-extrabold tracking-tight text-ink-900">
               Facture, envoie,{" "}
               <span className="text-gradient-brand">déclare</span>.
             </h1>
@@ -136,16 +147,16 @@ export default async function LandingPage({
             </div>
           </div>
 
-          {/* Colonne droite — mockup animé dans un cadre "vidéo" sombre.
-              Caché en mobile (demande user 20/05/2026). Le cadre sombre
-              (#0B0D12 en light = ink-1 brut, surface-2 brut en dark)
-              encadre le mockup pour signaler visuellement "zone de
-              démo / aperçu produit", façon claude.ai où le widget
-              Progress est dans un bloc noir distinct du fond clair. */}
-          <div className="hidden md:block">
-            <div className="rounded-[28px] bg-[rgb(11,13,18)] dark:bg-[rgb(27,31,40)] p-5 md:p-6 shadow-[0_20px_60px_-20px_rgba(11,13,18,0.45)]">
-              <HeroMockup />
-            </div>
+          {/* Colonne droite — mockup animé (caché en mobile).
+              Le cadre est volontairement discret : juste un liseré
+              (ring-1) et une ombre portée sur le mockup. Pas de bloc
+              sombre épais — l'objectif est de signaler "zone démo"
+              avec sobriété (cf. demande user 20/05/2026).
+              Le mockup peut déborder légèrement à droite hors de la
+              max-w-7xl (cf. overflow-x-clip sur la section parent) pour
+              gagner en présence visuelle façon Claude. */}
+          <div className="hidden md:block md:-mr-4 lg:-mr-8 xl:-mr-12">
+            <HeroMockup />
           </div>
         </div>
       </section>
