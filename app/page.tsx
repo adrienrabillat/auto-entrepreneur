@@ -72,14 +72,25 @@ export default async function LandingPage({
       </header>
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
-      <section className="px-5 md:px-8 max-w-6xl mx-auto w-full">
-        <div className="grid md:grid-cols-2 gap-10 md:gap-14 items-center py-10 md:py-16">
-          {/* Colonne gauche — titre + auth.
-              Sur mobile (md:hidden côté visuel) : tout est centré (text-center)
-              et le bloc prend toute la largeur disponible (max-w-md mx-auto).
-              Sur desktop : reste aligné à gauche dans la grille 2 colonnes. */}
+      {/* min-h-[calc(100dvh-72px)] sur mobile (72px = hauteur header) pour
+          que TOUT le hero (titre + sous-titre + card auth) tienne dans le
+          viewport sans scroll, façon claude.ai. Sur desktop on revient à
+          un padding vertical classique car la grid 2 colonnes a besoin
+          d'un peu d'espace haut/bas pour respirer, et le mockup à droite
+          se cale verticalement.
+
+          dvh (dynamic viewport) plutôt que vh : sur iOS Safari, vh inclut
+          la barre d'adresse à 100 % même quand elle se rétracte, ce qui
+          fait scroller pour rien. dvh suit la taille réelle visible. */}
+      <section className="px-5 md:px-8 max-w-6xl mx-auto w-full min-h-[calc(100dvh-72px)] md:min-h-0 flex flex-col justify-center md:block">
+        <div className="grid md:grid-cols-2 gap-8 md:gap-14 items-center md:py-16">
+          {/* Colonne gauche — titre + sous-titre + card auth.
+              Mobile : tout centré (text-center, mx-auto).
+              Desktop : la card auth reste centrée dans sa colonne mais le
+              titre s'aligne à gauche pour suivre l'axe du mockup à
+              droite (lecture occidentale gauche → droite). */}
           <div className="w-full max-w-md mx-auto text-center md:text-left md:mx-0 md:max-w-none">
-            <h1 className="text-[2.4rem] md:text-display leading-[1.05] font-extrabold tracking-tight text-ink-900">
+            <h1 className="text-[2.75rem] md:text-display leading-[1.05] font-extrabold tracking-tight text-ink-900">
               Facture, envoie,{" "}
               <span className="text-gradient-brand">déclare</span>.
             </h1>
@@ -88,7 +99,14 @@ export default async function LandingPage({
               ta déclaration URSSAF.
             </p>
 
-            <div className="mt-8 space-y-4">
+            {/* Card "auth" — envelope Google + séparateur + email dans
+                une seule bulle blanche (surface). Pattern Claude :
+                regrouper visuellement tous les modes de connexion pour
+                ne pas donner l'impression de deux CTA distincts.
+                Centrée horizontalement sur les deux breakpoints (mx-auto)
+                avec max-w-md pour qu'elle garde une taille raisonnable
+                même quand la colonne est large. */}
+            <div className="mt-7 surface p-5 md:p-6 w-full max-w-md mx-auto space-y-4 text-left">
               <LoginButton next={searchParams.next} />
 
               {/* Séparateur "ou" entre Google et OTP email. Les deux flows
@@ -101,15 +119,15 @@ export default async function LandingPage({
               </div>
 
               <EmailOtpForm next={searchParams.next} />
-            </div>
 
-            {err ? (
-              <div className="mt-5 rounded-2xl bg-danger-500/10 p-3.5 text-small text-danger-600 text-left">
-                {isPkceError
-                  ? "Connexion interrompue. Clique à nouveau sur « Se connecter » depuis le même appareil et le même navigateur."
-                  : `Connexion interrompue : ${err}`}
-              </div>
-            ) : null}
+              {err ? (
+                <div className="rounded-2xl bg-danger-500/10 p-3.5 text-small text-danger-600">
+                  {isPkceError
+                    ? "Connexion interrompue. Clique à nouveau sur « Se connecter » depuis le même appareil et le même navigateur."
+                    : `Connexion interrompue : ${err}`}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {/* Colonne droite — mockup animé.
