@@ -185,12 +185,17 @@ export default async function LandingPage({
             price="2 €"
             priceSuffix="par mois"
             cta={
+              // Bouton désactivé mais lisible : on conserve le contraste
+              // texte/bouton normal du pill-ghost, on signale juste la
+              // non-cliquabilité via cursor-not-allowed. Le label explicite
+              // (date précise) remplace "Bientôt disponible" qui dévalorisait
+              // sans informer — cf. audit du 20/05/2026.
               <button
                 type="button"
                 disabled
-                className="pill pill-ghost w-full justify-center cursor-not-allowed opacity-70"
+                className="pill pill-ghost w-full justify-center cursor-not-allowed"
               >
-                Bientôt disponible
+                Disponible le 1ᵉʳ janvier 2027
               </button>
             }
           />
@@ -305,9 +310,13 @@ function PlanCard({
     <div
       className={
         "relative surface p-6 md:p-7 flex flex-col " +
+        // On garde la card "future" pleinement contrastée (audit critique :
+        // un opacity-95 donnait une impression de "fonctionnalité bloquée").
+        // La distinction visuelle entre les deux offres passe uniquement
+        // par le ring (brand vibrant vs divider neutre) et le badge.
         (highlight
           ? "ring-2 ring-brand-500/40"
-          : "ring-1 ring-divider/60 opacity-95")
+          : "ring-1 ring-divider/60")
       }
     >
       <span
