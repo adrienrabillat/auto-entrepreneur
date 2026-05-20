@@ -59,9 +59,15 @@ const tiles: Tile[] = [
     icon: FileText,
   },
   {
+    // Lien officiel exigé par le partenariat URSSAF / TDAE — couvre les
+    // informations sur le statut, le caractère obligatoire des cotisations,
+    // leur rôle, et les éléments liés au droit du travail. Auparavant dans
+    // le footer landing, déplacé ici en mai 2026 pour rester proche du
+    // contexte où l'utilisateur déclare (espace authentifié, à côté de
+    // la tuile URSSAF qui ouvre /declarations).
     href: "https://www.autoentrepreneur.urssaf.fr",
-    label: "Aide & statut",
-    hint: "Ressources officielles",
+    label: "L'essentiel du statut",
+    hint: "autoentrepreneur.urssaf.fr",
     icon: HelpCircle,
     external: true,
   },

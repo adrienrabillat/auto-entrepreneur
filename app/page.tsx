@@ -8,22 +8,23 @@ import { EmailOtpForm } from "./email-otp-form";
 import { HeroMockup } from "@/components/landing/hero-mockup";
 
 /**
- * Landing publique — refonte "claude.ai-like" mai 2026.
+ * Landing publique — refonte mai 2026 (v2).
  *
- * Structure :
- *  1. Header minimal (logo seul, pas de nav — minimalisme).
- *  2. Hero deux colonnes :
- *     - colonne gauche : H1 + sous-titre + bloc auth (Google + OTP).
- *     - colonne droite : mockup animé (cf. components/landing/hero-mockup.tsx).
- *  3. Section pricing : 2 cards (Free dispo aujourd'hui, Pro 2 €/mois
- *     "Bientôt — 1er janvier 2027"). CTA Pro désactivé.
- *  4. Footer légal (inchangé — conforme LCEN + partenariat URSSAF).
+ * Mobile : tout centré, pas de mockup (la création de facture animée
+ * encombrerait trop l'écran et pousserait le formulaire d'auth sous la
+ * fold). Desktop : hero deux colonnes (auth à gauche, mockup animé à
+ * droite) façon claude.ai.
  *
- * Pas de FAQ ni de section feature détaillée : l'utilisateur a explicitement
- * demandé du minimalisme — chaque section doit servir à quelque chose.
+ * Pricing : Asthia est en phase de lancement → gratuit jusqu'à fin 2026.
+ * À partir du 1ᵉʳ janvier 2027 : 2 € / mois (1ᵉʳ mois offert). Les deux
+ * forfaits sont fonctionnellement identiques — la liste de features est
+ * affichée une seule fois, sous les deux cards, pour ne pas dupliquer.
  *
- * Le hero stacke en mobile (ordre : titre → auth → mockup en dessous,
- * pour ne pas pousser le formulaire sous la fold).
+ * Footer : ultra-minimaliste (liens légaux uniquement). Le lien URSSAF
+ * "L'essentiel du statut — autoentrepreneur.urssaf.fr" exigé par le
+ * partenariat TDAE a été déplacé dans la page /more de l'espace
+ * authentifié — c'est plus pertinent UX-wise (visible au moment de la
+ * déclaration) et plus propre côté landing.
  */
 export default async function LandingPage({
   searchParams,
@@ -73,8 +74,11 @@ export default async function LandingPage({
       {/* ── Hero ────────────────────────────────────────────────────── */}
       <section className="px-5 md:px-8 max-w-6xl mx-auto w-full">
         <div className="grid md:grid-cols-2 gap-10 md:gap-14 items-center py-10 md:py-16">
-          {/* Colonne gauche — titre + auth */}
-          <div className="w-full max-w-md mx-auto md:mx-0 md:max-w-none">
+          {/* Colonne gauche — titre + auth.
+              Sur mobile (md:hidden côté visuel) : tout est centré (text-center)
+              et le bloc prend toute la largeur disponible (max-w-md mx-auto).
+              Sur desktop : reste aligné à gauche dans la grille 2 colonnes. */}
+          <div className="w-full max-w-md mx-auto text-center md:text-left md:mx-0 md:max-w-none">
             <h1 className="text-[2.4rem] md:text-display leading-[1.05] font-extrabold tracking-tight text-ink-900">
               Facture, envoie,{" "}
               <span className="text-gradient-brand">déclare</span>.
@@ -87,9 +91,9 @@ export default async function LandingPage({
             <div className="mt-8 space-y-4">
               <LoginButton next={searchParams.next} />
 
-              {/* Séparateur "ou" entre Google et OTP email. Les deux
-                  flows convergent sur le même compte si l'adresse email
-                  est identique (Supabase déduplique par email). */}
+              {/* Séparateur "ou" entre Google et OTP email. Les deux flows
+                  convergent sur le même compte si l'email est identique
+                  (Supabase déduplique par email). */}
               <div className="flex items-center gap-3 text-xs text-ink-400">
                 <span className="flex-1 h-px bg-divider" aria-hidden />
                 <span className="uppercase tracking-wider">ou</span>
@@ -100,7 +104,7 @@ export default async function LandingPage({
             </div>
 
             {err ? (
-              <div className="mt-5 rounded-2xl bg-danger-500/10 p-3.5 text-small text-danger-600">
+              <div className="mt-5 rounded-2xl bg-danger-500/10 p-3.5 text-small text-danger-600 text-left">
                 {isPkceError
                   ? "Connexion interrompue. Clique à nouveau sur « Se connecter » depuis le même appareil et le même navigateur."
                   : `Connexion interrompue : ${err}`}
@@ -108,11 +112,12 @@ export default async function LandingPage({
             ) : null}
           </div>
 
-          {/* Colonne droite — mockup animé. Premier en DOM sur mobile
-              serait un anti-pattern (le formulaire doit être au-dessus
-              de la fold), donc on garde l'ordre logique et on s'appuie
-              sur le grid pour le placement md+. */}
-          <div className="order-last md:order-none">
+          {/* Colonne droite — mockup animé.
+              Caché en mobile (cf. demande user 20/05/2026 : "on la retire
+              sur mobile et il faut centrer le tout"). L'animation est
+              décorative ; pas d'impact accessibilité, le hero reste
+              compréhensible sans. */}
+          <div className="hidden md:block">
             <HeroMockup />
           </div>
         </div>
@@ -123,22 +128,28 @@ export default async function LandingPage({
         id="tarifs"
         className="px-5 md:px-8 max-w-6xl mx-auto w-full pb-16 md:pb-24 pt-4 md:pt-8"
       >
-        <div className="text-center mb-10 md:mb-12">
+        <div className="text-center mb-10 md:mb-12 max-w-xl mx-auto">
           <h2 className="text-h1 md:text-display font-bold tracking-tight text-ink-900">
-            Forfaits.
+            Une offre, simple.
           </h2>
           <p className="mt-3 text-body text-ink-500">
-            Gratuit aujourd&apos;hui. Le plan Pro arrive le 1<sup>er</sup>{" "}
-            janvier 2027.
+            Asthia est gratuit pendant la phase de lancement. À partir du
+            1<sup>er</sup> janvier 2027, le service passera à 2 € par
+            mois, avec le premier mois offert.
           </p>
         </div>
 
+        {/* Deux cards côte à côte qui matérialisent la transition
+            "maintenant gratuit → bientôt payant". Le contenu fonctionnel
+            est identique (cf. la liste de features unique en dessous),
+            donc les cards restent volontairement compactes : juste le
+            prix, la période, le CTA. */}
         <div className="grid md:grid-cols-2 gap-5 md:gap-6 max-w-3xl mx-auto">
           <PlanCard
-            name="Free"
-            tagline="Pour démarrer ton activité d'auto-entrepreneur."
+            badge="Maintenant"
+            period="Pendant le lancement"
             price="0 €"
-            priceSuffix="pour toujours"
+            priceSuffix="jusqu'au 31 décembre 2026"
             cta={
               <Link
                 href="#top"
@@ -147,21 +158,14 @@ export default async function LandingPage({
                 Commencer maintenant
               </Link>
             }
-            features={[
-              "Factures illimitées",
-              "Envoi par email intégré",
-              "Suivi des paiements en temps réel",
-              "Déclaration URSSAF automatisée",
-              "Export comptable (Excel / PDF)",
-            ]}
+            highlight
           />
 
           <PlanCard
-            name="Pro"
-            tagline="Pour aller plus loin quand ton activité grandit."
+            badge="À partir du 1ᵉʳ janvier 2027"
+            period="Premier mois offert"
             price="2 €"
             priceSuffix="par mois"
-            badge="Disponible le 1ᵉʳ janvier 2027"
             cta={
               <button
                 type="button"
@@ -171,29 +175,46 @@ export default async function LandingPage({
                 Bientôt disponible
               </button>
             }
-            features={[
-              "Tout ce qui est inclus dans Free",
-              "Devis signés électroniquement",
-              "Relances de paiement automatiques",
-              "Multi-devises et TVA intracom",
-              "Support prioritaire",
-            ]}
-            muted
           />
+        </div>
+
+        {/* Une seule liste de features puisque les deux forfaits sont
+            fonctionnellement identiques — pas la peine de la dupliquer
+            dans les deux cards. */}
+        <div className="mt-10 md:mt-12 max-w-3xl mx-auto">
+          <p className="text-center text-small text-ink-500 mb-5">
+            Dans les deux cas, tu as :
+          </p>
+          <ul className="grid sm:grid-cols-2 gap-x-8 gap-y-2.5 max-w-xl mx-auto">
+            {[
+              "Factures illimitées",
+              "Envoi par email intégré",
+              "Suivi des paiements en temps réel",
+              "Déclaration URSSAF automatisée",
+              "Devis transformables en facture",
+              "Export comptable (Excel / PDF)",
+            ].map((f) => (
+              <li key={f} className="flex items-start gap-2.5">
+                <span className="mt-0.5 grid place-items-center h-5 w-5 rounded-full bg-brand-500/10 shrink-0">
+                  <Check className="h-3 w-3 text-brand-600" strokeWidth={3} />
+                </span>
+                <span className="text-small text-ink-700">{f}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
-      {/* Footer minimaliste — accès aux pages légales avant connexion.
-          Sprint 5 #13 : obligatoire pour conformité LCEN.
-          Le lien "L'essentiel du statut — Autoentrepreneur.urssaf.fr"
-          est requis par l'URSSAF dans le cadre du partenariat API TDAE
-          (Tierce Déclaration Auto-Entrepreneur) — il couvre les
-          informations sur le statut, le caractère obligatoire des
-          cotisations, leur rôle, et les éléments liés au droit du
-          travail. */}
+      {/* Footer minimaliste — uniquement les liens légaux requis avant
+          connexion (LCEN). Le lien URSSAF "L'essentiel du statut" a été
+          déplacé dans l'espace authentifié (page /more) pour rester
+          conforme au partenariat TDAE sans alourdir la landing.
+
+          © + année dynamique : on prend new Date() côté server à chaque
+          render, simple et suffisamment précis pour un footer. */}
       <footer className="px-5 md:px-8 py-6 max-w-6xl mx-auto w-full mt-auto">
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-2">
           <div className="flex items-center justify-center flex-wrap gap-x-4 gap-y-1 text-xs text-ink-400">
             <Link
               href="/legal/mentions-legales"
@@ -202,11 +223,17 @@ export default async function LandingPage({
               Mentions légales
             </Link>
             <span aria-hidden>·</span>
-            <Link href="/legal/cgu" className="hover:text-ink-700 transition-colors">
+            <Link
+              href="/legal/cgu"
+              className="hover:text-ink-700 transition-colors"
+            >
               CGU
             </Link>
             <span aria-hidden>·</span>
-            <Link href="/legal/cgv" className="hover:text-ink-700 transition-colors">
+            <Link
+              href="/legal/cgv"
+              className="hover:text-ink-700 transition-colors"
+            >
               CGV
             </Link>
             <span aria-hidden>·</span>
@@ -224,17 +251,9 @@ export default async function LandingPage({
               Statut auto-entrepreneur
             </Link>
           </div>
-          <a
-            href="https://www.autoentrepreneur.urssaf.fr"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-ink-400 hover:text-ink-700 transition-colors"
-          >
-            L&apos;essentiel du statut —{" "}
-            <span className="underline underline-offset-2">
-              Autoentrepreneur.urssaf.fr
-            </span>
-          </a>
+          <p className="text-xs text-ink-400">
+            © {new Date().getFullYear()} Asthia
+          </p>
         </div>
       </footer>
     </main>
@@ -242,50 +261,47 @@ export default async function LandingPage({
 }
 
 /**
- * Card de forfait — structure verticale unifiée (titre, prix, CTA,
- * features) pour que les deux cards aient exactement la même hauteur.
+ * Card de forfait — version compacte (badge / période / prix / CTA),
+ * sans liste de features (mutualisée en dessous des deux cards).
  *
- * `muted` rend la card un cran plus discrète (utilisé pour le Pro
- * "bientôt") : fond légèrement transparent, badge "Bientôt" visible.
- * Ça évite que le forfait indisponible soit aussi proéminent que celui
- * qui marche aujourd'hui.
+ * `highlight` rend la card courante (offre dispo aujourd'hui) plus
+ * proéminente : ring brand et ombre prononcée. L'autre card reste
+ * neutre pour bien montrer qu'elle est "future".
  */
 function PlanCard({
-  name,
-  tagline,
+  badge,
+  period,
   price,
   priceSuffix,
-  badge,
   cta,
-  features,
-  muted = false,
+  highlight = false,
 }: {
-  name: string;
-  tagline: string;
+  badge: string;
+  period: string;
   price: string;
   priceSuffix: string;
-  badge?: string;
   cta: React.ReactNode;
-  features: string[];
-  muted?: boolean;
+  highlight?: boolean;
 }) {
   return (
     <div
       className={
         "relative surface p-6 md:p-7 flex flex-col " +
-        (muted ? "ring-1 ring-divider/60" : "")
+        (highlight
+          ? "ring-2 ring-brand-500/40"
+          : "ring-1 ring-divider/60 opacity-95")
       }
     >
-      {badge ? (
-        <span className="absolute -top-3 right-6 inline-flex items-center gap-1.5 rounded-full bg-brand-500 text-white text-xs font-medium px-3 py-1.5 shadow-pop">
-          {badge}
-        </span>
-      ) : null}
-
-      <div>
-        <h3 className="text-h2 font-bold text-ink-900">{name}</h3>
-        <p className="mt-1 text-small text-ink-500">{tagline}</p>
-      </div>
+      <span
+        className={
+          "inline-flex self-start items-center rounded-full text-xs font-medium px-3 py-1.5 " +
+          (highlight
+            ? "bg-brand-500 text-white shadow-pop"
+            : "bg-surface-2 text-ink-700")
+        }
+      >
+        {badge}
+      </span>
 
       <div className="mt-5 flex items-baseline gap-2">
         <span className="text-display font-bold tracking-tight text-ink-900 tabular-nums">
@@ -293,19 +309,9 @@ function PlanCard({
         </span>
         <span className="text-small text-ink-500">{priceSuffix}</span>
       </div>
+      <p className="mt-1 text-xs text-ink-400">{period}</p>
 
-      <div className="mt-5">{cta}</div>
-
-      <ul className="mt-6 space-y-2.5">
-        {features.map((f) => (
-          <li key={f} className="flex items-start gap-2.5">
-            <span className="mt-0.5 grid place-items-center h-5 w-5 rounded-full bg-brand-500/10 shrink-0">
-              <Check className="h-3 w-3 text-brand-600" strokeWidth={3} />
-            </span>
-            <span className="text-small text-ink-700">{f}</span>
-          </li>
-        ))}
-      </ul>
+      <div className="mt-6">{cta}</div>
     </div>
   );
 }
