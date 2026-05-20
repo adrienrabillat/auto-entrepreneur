@@ -8,6 +8,13 @@ import { useEffect, useRef } from "react";
  * Objectif : la vidéo DOIT jouer et boucler en permanence. Jamais
  * d'image figée.
  *
+ * IMPORTANT — les fichiers vidéo (`hero-v2.*`) n'ont AUCUNE piste
+ * audio (strippée avec ffmpeg). Une vidéo sans piste audio n'est PAS
+ * soumise à la policy d'autoplay des navigateurs : elle se lance
+ * toujours, quel que soit le cache, le navigateur ou l'état de la
+ * propriété `muted`. C'est la correction de fond du "la vidéo ne se
+ * lance pas". La cascade JS ci-dessous reste comme filet de sécurité.
+ *
  * L'autoplay des navigateurs échoue de façon intermittente (vidéo en
  * cache prête trop vite, onglet en arrière-plan, course d'hydratation
  * React, propriété `muted` pas encore posée…). On ne se repose donc
@@ -110,8 +117,15 @@ export function HeroVideo() {
         aspectRatio: "1620 / 1800",
       }}
     >
-      <source src="/hero.webm" type="video/webm" />
-      <source src="/hero.mp4" type="video/mp4" />
+      {/* mp4 (h264) en premier : codec universellement et fiablement
+          supporté, notamment par Safari dont le support webm est
+          historiquement fragile. webm en fallback (un poil plus léger
+          pour Chrome/Firefox s'ils le préfèrent). Suffixe -v2 = cache
+          bust : garantit que les navigateurs/le CDN ne resservent pas
+          l'ancienne vidéo (celle avec piste audio qui ne s'autoplay
+          pas). */}
+      <source src="/hero-v2.mp4" type="video/mp4" />
+      <source src="/hero-v2.webm" type="video/webm" />
     </video>
   );
 }
