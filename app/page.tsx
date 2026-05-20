@@ -165,6 +165,7 @@ export default async function LandingPage({
               muted
               playsInline
               preload="auto"
+              poster="/hero-poster.jpg"
               aria-label="Démonstration animée d'Asthia : choix de la couleur de l'interface, création d'une facture, aperçu du PDF, envoi au client et déclaration URSSAF automatique."
               className="block w-full h-auto"
             >

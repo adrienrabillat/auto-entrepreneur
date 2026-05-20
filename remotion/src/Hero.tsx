@@ -24,10 +24,11 @@
  * fade-out vers blanc — ces deux-là forment la couture de la boucle.
  */
 import React from "react";
-import { Easing } from "remotion";
+import { AbsoluteFill, Easing } from "remotion";
 import { TransitionSeries, linearTiming } from "@remotion/transitions";
 import { slide } from "@remotion/transitions/slide";
 import { fade } from "@remotion/transitions/fade";
+import { COLORS } from "./tokens";
 import { ColorStory } from "./scenes/ColorStory";
 import { CreateInvoice } from "./scenes/CreateInvoice";
 import { PreviewPdf } from "./scenes/PreviewPdf";
@@ -69,7 +70,14 @@ const transitionEase = Easing.bezier(0.22, 1, 0.36, 1);
 
 export const Hero: React.FC = () => {
   return (
-    <TransitionSeries>
+    // Fond clair de base DERRIÈRE toutes les scènes. Indispensable :
+    // ColorStory démarre à opacity 0 (fade-in) et Features finit à
+    // opacity 0 (fade-out). Sans ce calque, ces frames laisseraient
+    // voir le fond par défaut de Remotion = NOIR → flash noir à la
+    // frame 0, à la couture de la boucle, et pendant le chargement
+    // de la vidéo. Avec ce calque pageBg, aucune frame n'est noire.
+    <AbsoluteFill style={{ backgroundColor: COLORS.pageBg }}>
+      <TransitionSeries>
       <TransitionSeries.Sequence durationInFrames={SCENE_DURATIONS.colorStory}>
         <ColorStory />
       </TransitionSeries.Sequence>
@@ -126,6 +134,7 @@ export const Hero: React.FC = () => {
       <TransitionSeries.Sequence durationInFrames={SCENE_DURATIONS.features}>
         <Features />
       </TransitionSeries.Sequence>
-    </TransitionSeries>
+      </TransitionSeries>
+    </AbsoluteFill>
   );
 };
