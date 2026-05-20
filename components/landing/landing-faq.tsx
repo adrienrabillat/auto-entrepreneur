@@ -6,8 +6,8 @@ import { Plus } from "lucide-react";
 /**
  * FAQ landing — accordéon façon claude.ai : titre centré, liste de
  * questions séparées par des traits, clic sur une question pour dérouler
- * sa réponse. Une seule question ouverte à la fois (la première l'est
- * par défaut, comme sur claude.ai).
+ * sa réponse. Une seule question ouverte à la fois ; au chargement,
+ * toutes sont fermées.
  *
  * Volontairement 3 questions seulement — celles qui lèvent les 3 plus
  * gros freins avant inscription :
@@ -35,9 +35,9 @@ const FAQ_ITEMS: { q: string; a: string }[] = [
 ];
 
 export function LandingFaq() {
-  // null = tout fermé. On ouvre la 1ʳᵉ question par défaut (index 0)
-  // pour amorcer la lecture, comme sur claude.ai.
-  const [open, setOpen] = useState<number | null>(0);
+  // null = tout fermé. Au chargement, toutes les questions sont fermées :
+  // le visiteur ouvre uniquement ce qui l'intéresse.
+  const [open, setOpen] = useState<number | null>(null);
 
   return (
     <section
