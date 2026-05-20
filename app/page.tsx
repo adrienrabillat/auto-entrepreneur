@@ -55,17 +55,20 @@ export default async function LandingPage({
   return (
     <main className="min-h-dvh flex flex-col bg-page-aurora">
       {/* ── Header ──────────────────────────────────────────────────── */}
+      {/* Logo + wordmark légèrement plus gros qu'avant (28→36 px sur le
+          logo, taille de corps→16 px sur le mot) pour donner plus de
+          présence au brand sans tomber dans le lourd. */}
       <header className="px-5 md:px-8 py-5 max-w-6xl mx-auto w-full">
-        <Link href="/" className="inline-flex items-center gap-2.5">
+        <Link href="/" className="inline-flex items-center gap-3">
           <Image
             src="/logo.webp"
             alt="Asthia"
-            width={28}
-            height={28}
+            width={36}
+            height={36}
             priority
-            className="h-7 w-7 rounded-md"
+            className="h-9 w-9 rounded-lg"
           />
-          <span className="font-extrabold tracking-tight text-ink-900">
+          <span className="text-h3 font-extrabold tracking-tight text-ink-900">
             Asthia
           </span>
         </Link>
