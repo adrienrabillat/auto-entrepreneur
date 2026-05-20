@@ -88,23 +88,24 @@ export default async function LandingPage({
           comme ça le contenu reste centré quelle que soit la hauteur de
           l'écran (gros 27" vs MacBook 13"). */}
       <section className="px-5 md:px-8 max-w-7xl mx-auto w-full min-h-[calc(100dvh-88px)] flex flex-col justify-center">
-        {/* Grille asymétrique avec un VRAI espace entre les deux colonnes
-            (gap-12 → gap-20). Le mockup prend ~55% de la largeur sur md,
-            ~58% sur lg+. Sa hauteur est dictée par le workflow plus
-            riche (stats + facture + activité). */}
-        <div className="grid md:grid-cols-[1fr_1.2fr] lg:grid-cols-[1fr_1.4fr] gap-12 md:gap-16 lg:gap-20 items-center">
+        {/* Grille asymétrique vraiment marquée : le mockup occupe ~58% en
+            md et ~62% en lg+. Le gap est volontairement large pour bien
+            séparer visuellement la zone "login" (gauche) de la zone
+            "démo produit" (droite) — comme sur claude.ai. */}
+        <div className="grid md:grid-cols-[1fr_1.3fr] lg:grid-cols-[1fr_1.6fr] gap-16 md:gap-20 lg:gap-28 items-center">
           {/* Colonne gauche — titre + sous-titre + card auth.
               Mobile : tout centré (text-center, mx-auto).
               Desktop : la card auth reste centrée dans sa colonne mais le
               titre s'aligne à gauche pour suivre l'axe du mockup à
               droite (lecture occidentale gauche → droite). */}
           <div className="w-full max-w-md mx-auto text-center md:text-left md:mx-0 md:max-w-none">
-            {/* H1 progressivement plus gros aux breakpoints — sur xl on
-                tape les 64 px (text-[4rem]) pour vraiment habiter
-                l'espace, comme Claude qui pousse son H1 très loin.
-                Mobile reste à 2.75rem pour ne pas casser le viewport-fit. */}
+            {/* H1 progressivement plus gros aux breakpoints. Forcé sur
+                2 lignes pour rythmer la lecture : "Facture, envoie,"
+                puis "déclare." en accent. <br/> contrôle la cassure
+                indépendamment de la largeur du conteneur. */}
             <h1 className="text-[2.75rem] md:text-[3rem] lg:text-[3.5rem] xl:text-[4rem] leading-[1.05] font-extrabold tracking-tight text-ink-900">
-              Facture, envoie,{" "}
+              Facture, envoie,
+              <br />
               <span className="text-gradient-brand">déclare</span>.
             </h1>
             <p className="mt-3 text-body text-ink-500">
@@ -144,10 +145,11 @@ export default async function LandingPage({
           </div>
 
           {/* Colonne droite — mockup animé (caché en mobile).
-              Cadre volontairement discret : juste un liseré (ring-1) et
-              une ombre portée sur le mockup. Les arrondis sont visibles
-              sur les 4 côtés (plus de débordement à droite). */}
-          <div className="hidden md:block">
+              Cadre sombre fin (p-2 = 8 px) qui démarque CLAIREMENT la
+              zone "démo produit" du reste de la page, façon claude.ai
+              où le fond dark contraste avec la card blanche. Pas
+              épais comme avant : juste un liseré bezel + ombre douce. */}
+          <div className="hidden md:block rounded-[32px] bg-[rgb(11,13,18)] dark:bg-[rgb(27,31,40)] p-2 md:p-2.5 shadow-[0_24px_64px_-20px_rgba(11,13,18,0.45)]">
             <HeroMockup />
           </div>
         </div>
