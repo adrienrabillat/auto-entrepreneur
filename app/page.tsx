@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { LoginButton } from "./login-button";
 import { EmailOtpForm } from "./email-otp-form";
+import { HeroVideo } from "@/components/landing/hero-video";
 
 /**
  * Landing publique — refonte mai 2026 (v2).
@@ -159,19 +160,7 @@ export default async function LandingPage({
               la vidéo soit décodée — la 1ʳᵉ frame est de toute façon
               claire. */}
           <div className="hidden md:block rounded-[24px] overflow-hidden ring-1 ring-ink-900/15 shadow-[0_30px_80px_-20px_rgba(11,13,18,0.35)] bg-surface">
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              preload="auto"
-              poster="/hero-poster.jpg"
-              aria-label="Démonstration animée d'Asthia : choix de la couleur de l'interface, création d'une facture, aperçu du PDF, envoi au client et déclaration URSSAF automatique."
-              className="block w-full h-auto"
-            >
-              <source src="/hero.webm" type="video/webm" />
-              <source src="/hero.mp4" type="video/mp4" />
-            </video>
+            <HeroVideo />
           </div>
         </div>
       </section>
