@@ -55,20 +55,19 @@ export default async function LandingPage({
   return (
     <main className="min-h-dvh flex flex-col bg-page-aurora">
       {/* ── Header ──────────────────────────────────────────────────── */}
-      {/* Logo + wordmark légèrement plus gros qu'avant (28→36 px sur le
-          logo, taille de corps→16 px sur le mot) pour donner plus de
-          présence au brand sans tomber dans le lourd. */}
-      <header className="px-5 md:px-8 py-5 max-w-6xl mx-auto w-full">
+      {/* Brand bien présent : logo 44 px + wordmark text-h2 (20 px) en
+          extrabold. Calé sur max-w-7xl pour s'aligner avec le hero. */}
+      <header className="px-5 md:px-8 py-5 max-w-7xl mx-auto w-full">
         <Link href="/" className="inline-flex items-center gap-3">
           <Image
             src="/logo.webp"
             alt="Asthia"
-            width={36}
-            height={36}
+            width={44}
+            height={44}
             priority
-            className="h-9 w-9 rounded-lg"
+            className="h-11 w-11 rounded-xl"
           />
-          <span className="text-h3 font-extrabold tracking-tight text-ink-900">
+          <span className="text-h2 font-extrabold tracking-tight text-ink-900">
             Asthia
           </span>
         </Link>
@@ -88,15 +87,12 @@ export default async function LandingPage({
           On utilise flex+justify-center plutôt qu'un padding vertical :
           comme ça le contenu reste centré quelle que soit la hauteur de
           l'écran (gros 27" vs MacBook 13"). */}
-      {/* Le hero peut déborder très légèrement à droite (mockup) ; on
-          clippe horizontalement sur la section pour éviter un scroll
-          horizontal sans casser les focus-rings verticaux. */}
-      <section className="px-5 md:px-8 max-w-7xl mx-auto w-full min-h-[calc(100dvh-72px)] flex flex-col justify-center overflow-x-clip">
-        {/* Grille asymétrique : le mockup prend ~55% de l'espace sur
-            md, ~58% sur lg+, pour vraiment occuper la scène façon
-            claude.ai. La gap diminue légèrement sur grand écran pour
-            que le mockup gagne encore plus d'espace utile. */}
-        <div className="grid md:grid-cols-[1fr_1.2fr] lg:grid-cols-[1fr_1.4fr] gap-8 md:gap-10 lg:gap-12 items-center">
+      <section className="px-5 md:px-8 max-w-7xl mx-auto w-full min-h-[calc(100dvh-88px)] flex flex-col justify-center">
+        {/* Grille asymétrique avec un VRAI espace entre les deux colonnes
+            (gap-12 → gap-20). Le mockup prend ~55% de la largeur sur md,
+            ~58% sur lg+. Sa hauteur est dictée par le workflow plus
+            riche (stats + facture + activité). */}
+        <div className="grid md:grid-cols-[1fr_1.2fr] lg:grid-cols-[1fr_1.4fr] gap-12 md:gap-16 lg:gap-20 items-center">
           {/* Colonne gauche — titre + sous-titre + card auth.
               Mobile : tout centré (text-center, mx-auto).
               Desktop : la card auth reste centrée dans sa colonne mais le
@@ -148,14 +144,10 @@ export default async function LandingPage({
           </div>
 
           {/* Colonne droite — mockup animé (caché en mobile).
-              Le cadre est volontairement discret : juste un liseré
-              (ring-1) et une ombre portée sur le mockup. Pas de bloc
-              sombre épais — l'objectif est de signaler "zone démo"
-              avec sobriété (cf. demande user 20/05/2026).
-              Le mockup peut déborder légèrement à droite hors de la
-              max-w-7xl (cf. overflow-x-clip sur la section parent) pour
-              gagner en présence visuelle façon Claude. */}
-          <div className="hidden md:block md:-mr-4 lg:-mr-8 xl:-mr-12">
+              Cadre volontairement discret : juste un liseré (ring-1) et
+              une ombre portée sur le mockup. Les arrondis sont visibles
+              sur les 4 côtés (plus de débordement à droite). */}
+          <div className="hidden md:block">
             <HeroMockup />
           </div>
         </div>
