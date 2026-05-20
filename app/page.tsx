@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { LoginButton } from "./login-button";
 import { EmailOtpForm } from "./email-otp-form";
 import { HeroVideo } from "@/components/landing/hero-video";
+import { LandingFaq } from "@/components/landing/landing-faq";
 
 /**
  * Landing publique — refonte mai 2026 (v2).
@@ -251,6 +252,13 @@ export default async function LandingPage({
           </ul>
         </div>
       </section>
+
+      {/* ── FAQ ─────────────────────────────────────────────────────── */}
+      {/* Accordéon façon claude.ai, placé juste après le pricing et avant
+          le footer (même emplacement que sur claude.ai). 3 questions qui
+          lèvent les principaux freins avant inscription. Composant client
+          isolé (interaction au clic) — cf. components/landing/landing-faq. */}
+      <LandingFaq />
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
       {/* Footer minimaliste — uniquement les liens légaux requis avant
