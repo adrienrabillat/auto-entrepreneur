@@ -1,153 +1,100 @@
-# auto-entrepreneur
+# Asthia
 
-Une app web minimaliste pour auto-entrepreneurs. Trois personnes (toi, ta mère, ton frère) l'utilisent depuis n'importe où. Design inspiré de Notion.
+Invoicing and automated tax declarations for French freelancers.
 
-Ce qu'elle fait :
+**Live app:** https://asthia.fr
 
-- **Login** via Google (ta propre boîte Gmail).
-- **Créer une facture** en 10 secondes : description, montant, email du client.
-- **Envoyer la facture** depuis *ta propre* boîte Gmail (le client reçoit un vrai mail de toi, avec le PDF en pièce jointe, et toi tu reçois une copie).
-- **Suivi des paiements** : clic pour marquer une facture comme payée.
-- **Déclaration URSSAF automatique** le jour du mois que tu choisis (3 par défaut). Si tu n'as rien encaissé, elle déclare 0 €. Si tu as encaissé 200 €, elle déclare 200 €.
-- **Zéro saisie double** : le chiffre d'affaires se calcule tout seul à partir des factures marquées comme payées.
+Asthia is a web application that lets a self-employed worker in France issue an invoice, send it by email, track whether it has been paid, and have the corresponding revenue declared to URSSAF automatically at the end of the month. In France, freelancers registered under the *auto-entrepreneur* status must report their income to URSSAF, the national social security collection agency, on a fixed schedule. Most of them do it by hand: they reopen their invoices, add up the ones that were actually paid during the period, and retype the total into a government form. Asthia removes that step.
 
-Stack : Next.js 14 (App Router) + Supabase (auth + Postgres + Storage) + Gmail API + Tailwind CSS.
+I designed and built the whole application myself, from the data model to the production deployment.
 
----
+## Features
 
-## Mise en route
+- **Google sign-in.** Authentication through Google OAuth, so there is no password to manage.
+- **Invoice creation.** Build an invoice, save it as a draft, and send it to the client directly from the app.
+- **Email delivery through Gmail.** Invoices are sent from the user's own Gmail account using the Gmail API, so the client receives the invoice from a real address rather than a no-reply relay.
+- **Payment tracking.** Each invoice moves through three states: draft, sent, paid. Only the user marks an invoice as paid.
+- **Automated URSSAF declarations.** A scheduled job runs at the end of each period, sums the invoices marked as paid during that calendar month, and prepares the declaration. Revenue is derived from the invoices themselves, so there is no double entry and no spreadsheet to keep in sync.
 
-Trois comptes à créer. Compte ~45 minutes la première fois. Ensuite c'est déployé une bonne fois pour toutes.
+## Tech stack
 
-### 1. Cloner le projet
+| Layer | Choice |
+| --- | --- |
+| Framework | Next.js 14 (App Router), TypeScript |
+| Styling | Tailwind CSS |
+| Database and auth | Supabase (PostgreSQL, Row Level Security, Google OAuth) |
+| Email | Gmail API |
+| Scheduled jobs | Vercel Cron |
+| Hosting | Vercel |
+
+## How it works
+
+**Invoice lifecycle.** An invoice is created as a draft. Sending it moves it to the sent state and triggers a Gmail API call that delivers it to the client. The user marks it as paid when the money arrives. Only paid invoices count toward a declaration, which matches how URSSAF works: what is declared is cash actually received during the period, not what was invoiced.
+
+**Declarations.** A cron job runs on a schedule and, for each user, sums the invoices marked as paid within the calendar month and produces the declaration for that period. Because the amount is computed from invoice records rather than entered by hand, the declared revenue and the invoice history can never drift apart.
+
+**Data isolation.** Every table is protected by PostgreSQL Row Level Security policies in Supabase. A user's queries can only ever return that user's own rows, which is enforced by the database rather than by the application code.
+
+**Secrets.** Gmail refresh tokens are stored and used server side only and are never exposed to the browser. The cron endpoint is not public: it rejects any request that does not carry either the shared `CRON_SECRET` or the header Vercel attaches to its own scheduled invocations.
+
+## Running it locally
+
+You need Node.js, a Supabase project, and a Google Cloud project.
+
+**1. Clone and install**
 
 ```bash
-cd auto-entrepreneur
-cp .env.example .env.local
+git clone https://github.com/adrienrabillat/asthia.git
+cd asthia
 npm install
 ```
 
-### 2. Créer le projet Supabase
+**2. Set up Supabase**
 
-1. Va sur [supabase.com](https://supabase.com), clique **New Project** (gratuit).
-2. Note quelque part :
-   - `Project URL` → dans `.env.local` comme `NEXT_PUBLIC_SUPABASE_URL`
-   - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role` key (Settings → API) → `SUPABASE_SERVICE_ROLE_KEY` — **ne partage jamais cette clé, elle bypasse la sécurité**.
-3. Ouvre le SQL Editor, copie-colle le contenu de `supabase/schema.sql`, exécute.
-4. Active le provider Google : Authentication → Providers → Google → *Enable*. On revient remplir le *Client ID / Secret* à l'étape 3.
-5. Dans Authentication → URL Configuration, ajoute l'URL de redirection de ton app (ex : `http://localhost:3000/auth/callback` en dev, et ton URL Vercel en prod).
+Create a new Supabase project, run the SQL schema from the `supabase` folder against it, and enable Google as an authentication provider.
 
-### 3. Créer le projet Google Cloud (pour Gmail + login)
+**3. Set up Google Cloud**
 
-1. Va sur [console.cloud.google.com](https://console.cloud.google.com), crée un projet (nom au pif : "auto-entrepreneur").
-2. **APIs & Services → Library** → active **Gmail API**.
-3. **APIs & Services → OAuth consent screen** :
-   - Type : *External*.
-   - App name : "auto-entrepreneur", email support : toi.
-   - Scopes : ajoute `.../auth/userinfo.email`, `.../auth/userinfo.profile`, **`.../auth/gmail.send`**.
-   - Test users : ajoute les 3 emails Gmail (maman, frangin, toi). Tant que l'app est en *Testing*, seuls ces comptes peuvent se connecter — parfait pour un usage familial, pas besoin de passer la vérification Google.
-4. **APIs & Services → Credentials** → **Create Credentials → OAuth client ID** :
-   - Type : *Web application*.
-   - Authorized redirect URIs : ajoute
-     - `https://<ton-projet>.supabase.co/auth/v1/callback` ← **le callback Supabase**, pas le tien
-     - (facultatif pour tests directs) `http://localhost:3000/auth/callback`
-   - Note le *Client ID* et *Client secret*.
-5. Colle le Client ID / Secret :
-   - dans `.env.local` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
-   - **et** dans Supabase → Authentication → Providers → Google (sinon le login échoue).
+Create a project in the Google Cloud console, enable the Gmail API, and create OAuth credentials with the scopes needed to send mail on the user's behalf. Add your local and production callback URLs to the authorised redirect URIs.
 
-### 4. Lancer en local
+**4. Configure the environment**
+
+Copy `.env.example` to `.env.local` and fill in the values from the two consoles above.
+
+```bash
+cp .env.example .env.local
+```
+
+**5. Run**
 
 ```bash
 npm run dev
-# http://localhost:3000
 ```
 
-Première connexion : Google te demandera d'autoriser l'envoi d'emails Gmail → accepte. Puis tu remplis ton profil (SIRET, adresse…) → dashboard.
+The app is served at http://localhost:3000.
 
-### 5. Déployer sur Vercel
+**6. Deploy**
 
-1. Push le repo sur GitHub.
-2. [vercel.com](https://vercel.com) → *Import Project* → ton repo.
-3. Dans *Environment Variables*, recopie tout ce qui est dans `.env.local` (en remplaçant `localhost:3000` par ton URL Vercel dans `NEXT_PUBLIC_APP_URL` et `GOOGLE_REDIRECT_URI`).
-4. Génère un `CRON_SECRET` au hasard (ex: `openssl rand -hex 32`) et mets-le dans les env vars Vercel.
-5. Déploie.
-6. Reviens dans Google Cloud → OAuth client → ajoute `https://<ton-projet>.supabase.co/auth/v1/callback` si ce n'est pas déjà fait (c'est la même URL en dev et prod, car Supabase route ensuite vers ton app).
-7. Vercel exécute `/api/cron/declarations` tous les jours à 8h UTC. Rien à faire.
+The project is built for Vercel. Import the repository, add the same environment variables to the project settings, and deploy. The cron schedule is declared in `vercel.json` and starts running once the project is live.
 
-### 6. Passer l'URSSAF en live (quand tu auras les credentials)
-
-Quand l'URSSAF te donnera ton `client_id` / `client_secret` pour l'API tiers-déclarant :
-
-1. Remplis `URSSAF_API_BASE_URL`, `URSSAF_CLIENT_ID`, `URSSAF_CLIENT_SECRET` dans Vercel.
-2. Passe `URSSAF_LIVE=true`.
-3. Implémente `submitDeclarationLive` dans `lib/urssaf.ts` (le squelette est déjà là, il ne reste qu'à faire l'appel HTTP selon leur doc).
-4. Redéploie.
-
-Rien d'autre ne change — toute la chaîne (cron, historique, UI) continue à fonctionner.
-
----
-
-## Test manuel du cron
-
-Tu peux lancer le cron à la main n'importe quand :
-
-```bash
-# Ta propre déclaration du mois précédent :
-curl -X POST https://<ton-domaine>/api/declarations/run-mine \
-  -H "Cookie: <ton cookie supabase>"
-
-# Ou déclencher le cron global :
-curl -X POST https://<ton-domaine>/api/cron/declarations \
-  -H "Authorization: Bearer $CRON_SECRET"
-```
-
-Paramètres utiles en query string (pour `/api/cron/declarations`) :
-
-- `?day=3` — force "on est le 3 du mois" (sinon : aujourd'hui)
-- `?year=2026&month=3` — déclarer mars 2026
-- `?userId=<uuid>` — ne traiter qu'un seul utilisateur
-
----
-
-## Architecture en 2 lignes
-
-- **Une facture** passe par : *draft* (créée) → *sent* (envoyée par email, date enregistrée) → *paid* (clic "marquer payée", date enregistrée).
-- **La déclaration URSSAF** du mois N additionne toutes les factures dont `paid_at` est dans le mois N. Rien d'autre ne compte (pas les envoyées non payées).
-
-Les seules infos qui ne se calculent pas toutes seules : le `paid_at` (date d'encaissement réel — tu cliques quand tu reçois le virement) et les infos de ton profil.
-
----
-
-## Sécurité
-
-- Row-Level Security Postgres : chaque utilisateur ne voit que *ses* lignes.
-- Refresh token Gmail stocké côté serveur uniquement (jamais exposé au navigateur).
-- Service role key utilisée uniquement par le cron et quelques routes serveur.
-- Cron protégé par `CRON_SECRET` (header `Authorization: Bearer …`) ou par le header `x-vercel-cron` que seul Vercel peut injecter.
-
-## Fichiers importants
+## Project structure
 
 ```
-app/                     Next.js App Router
-  page.tsx               Landing + login
-  onboarding/            1re connexion : profil
-  (app)/dashboard        Stats + dernières factures
-  (app)/invoices         Liste + création + détail
-  (app)/declarations     Historique URSSAF
-  (app)/settings         Modifier profil
-  auth/callback          OAuth callback — stocke le refresh token Gmail
-  api/invoices           Create / send / mark-paid / pdf
-  api/cron/declarations  Cron quotidien
-  api/declarations/run-mine  Déclaration à la demande
-lib/
-  supabase/              Clients (browser / server / admin)
-  gmail.ts               Envoi de mail via Gmail API + refresh token
-  pdf.ts                 Génération PDF (pdf-lib)
-  urssaf.ts              Adapter URSSAF (mock + live)
-  invoice-service.ts     Orchestration création/envoi facture
-  declaration-service.ts Orchestration cron URSSAF
-supabase/schema.sql      Tables + RLS + triggers + bucket
-vercel.json              Cron daily 8:00 UTC
+app/         Next.js App Router routes, pages and API handlers
+components/  React components
+lib/         Supabase client, Gmail integration, business logic
+supabase/    Database schema and policies
+types/       Shared TypeScript types
+docs/        Setup and operating notes
+middleware.ts  Route protection
+vercel.json    Cron schedule
 ```
+
+## Status
+
+Asthia is running in production and in real use. It is a personal project, built and maintained by one person, and it is not affiliated with URSSAF or with any French public administration.
+
+## Author
+
+Adrien Rabillat, engineering student at ESILV, Paris.
+GitHub: https://github.com/adrienrabillat
